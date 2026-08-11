@@ -2,19 +2,21 @@
 
 import { useState } from "react";
 import {
+  AnimatePresence,
   motion,
   useMotionValue,
   useTransform,
   type PanInfo,
 } from "framer-motion";
-import { useLocale, useTranslations } from "next-intl";
 import PosterArt from "./PosterArt";
 import { ArrowUpIcon, HeartIcon, InfoIcon, StarIcon, ThumbsDownIcon } from "./ui/Icons";
 import { genreLabel } from "@/lib/genres";
+import { EASE_SWEEP, SPRING_SETTLE, SPRING_SNAPPY } from "@/lib/motion";
+import { locale, t } from "@/lib/i18n";
 import type { SwipeAction, Title } from "@/lib/types";
 
-export const SWIPE_X_THRESHOLD = 110;
-export const SWIPE_UP_THRESHOLD = 130;
+export const SWIPE_X_THRESHOLD = 100;
+export const SWIPE_UP_THRESHOLD = 120;
 
 export interface SwipeCardProps {
   title: Title;
@@ -26,24 +28,27 @@ export interface SwipeCardProps {
 }
 
 export default function SwipeCard({ title, index, onSwipe, forcedExit }: SwipeCardProps) {
-  const locale = useLocale() as "ar" | "en";
-  const t = useTranslations();
   const [showDetails, setShowDetails] = useState(false);
   const [exiting, setExiting] = useState<SwipeAction | null>(null);
 
   const x = useMotionValue(0);
   const y = useMotionValue(0);
-  const rotate = useTransform(x, [-250, 250], [-14, 14]);
-  const likeOpacity = useTransform(x, [30, SWIPE_X_THRESHOLD], [0, 1]);
-  const nopeOpacity = useTransform(x, [-SWIPE_X_THRESHOLD, -30], [1, 0]);
-  const skipOpacity = useTransform(y, [-SWIPE_UP_THRESHOLD, -40], [1, 0]);
+
+  /* live drag feedback: tilt, stamp opacity, and a subtle scale/lift */
+  const rotate = useTransform(x, [-260, 0, 260], [-16, 0, 16]);
+  const likeOpacity = useTransform(x, [24, SWIPE_X_THRESHOLD], [0, 1]);
+  const likeScale = useTransform(x, [24, SWIPE_X_THRESHOLD], [0.7, 1]);
+  const nopeOpacity = useTransform(x, [-SWIPE_X_THRESHOLD, -24], [1, 0]);
+  const nopeScale = useTransform(x, [-SWIPE_X_THRESHOLD, -24], [1, 0.7]);
+  const skipOpacity = useTransform(y, [-SWIPE_UP_THRESHOLD, -36], [1, 0]);
+  const skipScale = useTransform(y, [-SWIPE_UP_THRESHOLD, -36], [1, 0.7]);
 
   const isTop = index === 0;
   const activeExit = isTop ? (exiting ?? forcedExit) : null;
 
   function handleDragEnd(_: unknown, info: PanInfo) {
-    const px = info.offset.x + info.velocity.x / 8;
-    const py = info.offset.y + info.velocity.y / 8;
+    const px = info.offset.x + info.velocity.x / 7;
+    const py = info.offset.y + info.velocity.y / 7;
     if (py < -SWIPE_UP_THRESHOLD && Math.abs(py) > Math.abs(px)) {
       setExiting("not_seen");
     } else if (px > SWIPE_X_THRESHOLD) {
@@ -53,46 +58,50 @@ export default function SwipeCard({ title, index, onSwipe, forcedExit }: SwipeCa
     }
   }
 
+  /* flies off along an arc, tilting and fading as it goes */
   const exitTarget =
     activeExit === "liked"
-      ? { x: 600, y: -40, rotate: 18, opacity: 0 }
+      ? { x: 640, y: -90, rotate: 24, opacity: 0, scale: 0.92 }
       : activeExit === "disliked"
-        ? { x: -600, y: -40, rotate: -18, opacity: 0 }
+        ? { x: -640, y: -90, rotate: -24, opacity: 0, scale: 0.92 }
         : activeExit === "not_seen"
-          ? { x: 0, y: -700, rotate: 0, opacity: 0 }
+          ? { x: 0, y: -780, rotate: 0, opacity: 0, scale: 0.9 }
           : null;
+
+  /* resting pose in the stack — springs whenever the index changes */
+  const restingPose = {
+    x: 0,
+    y: index * 12,
+    scale: 1 - index * 0.05,
+    opacity: index > 2 ? 0 : 1,
+    filter: index === 0 ? "brightness(1)" : "brightness(0.93)",
+  };
 
   return (
     <motion.div
-      className="absolute inset-0 touch-none select-none"
-      style={{
-        x,
-        y,
-        rotate,
-        zIndex: 30 - index,
-        pointerEvents: isTop ? "auto" : "none",
+      className="absolute inset-0 touch-none select-none will-change-transform"
+      style={{ x, y, rotate, zIndex: 30 - index, pointerEvents: isTop ? "auto" : "none" }}
+      /* a card joining the back of the stack grows in instead of popping */
+      initial={{
+        y: index * 12 + 26,
+        scale: 1 - index * 0.05 - 0.06,
+        opacity: 0,
+        filter: "brightness(0.93)",
       }}
-      initial={{ scale: 1 - index * 0.045, y: index * 14, opacity: index > 2 ? 0 : 1 }}
-      animate={
-        exitTarget ?? {
-          x: 0,
-          scale: 1 - index * 0.045,
-          y: index * 14,
-          opacity: index > 2 ? 0 : 1,
-        }
-      }
+      animate={exitTarget ?? restingPose}
       transition={
         exitTarget
-          ? { duration: 0.45, ease: [0.32, 0.72, 0, 1] }
-          : { type: "spring", stiffness: 260, damping: 26 }
+          ? { duration: 0.52, ease: EASE_SWEEP }
+          : { ...SPRING_SETTLE, opacity: { duration: 0.35 }, filter: { duration: 0.35 } }
       }
       onAnimationComplete={() => {
         if (activeExit) onSwipe(activeExit);
       }}
       drag={isTop && !activeExit}
-      dragElastic={0.9}
+      dragElastic={0.55}
+      dragTransition={{ bounceStiffness: 260, bounceDamping: 26 }}
       onDragEnd={handleDragEnd}
-      whileDrag={{ scale: 1.02 }}
+      whileDrag={{ scale: 1.03, cursor: "grabbing" }}
     >
       <div className="soft-card relative h-full w-full overflow-hidden">
         <PosterArt title={title} />
@@ -100,101 +109,100 @@ export default function SwipeCard({ title, index, onSwipe, forcedExit }: SwipeCa
         {/* bottom info gradient */}
         <div className="card-sheen absolute inset-0" />
 
-        {/* direction stamps — icons instead of words */}
+        {/* direction stamps — scale up as the gesture commits */}
         <motion.div
-          style={{ opacity: likeOpacity }}
-          className="absolute start-5 top-6 rotate-[-8deg] rounded-2xl border-4 border-accent bg-white/85 p-3 text-accent backdrop-blur"
+          style={{ opacity: likeOpacity, scale: likeScale }}
+          className="absolute start-4 top-5 rotate-[-8deg] rounded-2xl border-[3px] border-accent bg-white/85 p-2.5 text-accent backdrop-blur"
           aria-label={t("swipe.liked")}
         >
-          <HeartIcon size={40} filled />
+          <HeartIcon size={34} filled />
         </motion.div>
         <motion.div
-          style={{ opacity: nopeOpacity }}
-          className="absolute end-5 top-6 rotate-[8deg] rounded-2xl border-4 border-white/90 bg-black/30 p-3 text-white backdrop-blur"
+          style={{ opacity: nopeOpacity, scale: nopeScale }}
+          className="absolute end-4 top-5 rotate-[8deg] rounded-2xl border-[3px] border-white/90 bg-black/30 p-2.5 text-white backdrop-blur"
           aria-label={t("swipe.disliked")}
         >
-          <ThumbsDownIcon size={40} filled />
+          <ThumbsDownIcon size={34} filled />
         </motion.div>
         <motion.div
-          style={{ opacity: skipOpacity }}
-          className="absolute inset-x-0 bottom-24 mx-auto w-fit rounded-2xl border-4 border-white/90 bg-black/30 p-3 text-white backdrop-blur"
+          style={{ opacity: skipOpacity, scale: skipScale }}
+          className="absolute inset-x-0 bottom-20 mx-auto w-fit rounded-2xl border-[3px] border-white/90 bg-black/30 p-2.5 text-white backdrop-blur"
           aria-label={t("swipe.notSeen")}
         >
-          <ArrowUpIcon size={40} strokeWidth={2.6} />
+          <ArrowUpIcon size={34} strokeWidth={2.6} />
         </motion.div>
 
         {/* info block */}
-        <div className="absolute inset-x-0 bottom-0 p-5">
+        <div className="absolute inset-x-0 bottom-0 p-4">
           <div className="flex items-end justify-between gap-3">
             <div className="min-w-0">
               <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-                <span className="rounded-md bg-white/12 px-2 py-0.5 text-[11px] font-bold text-white/90 backdrop-blur">
+                <span className="rounded-md bg-white/15 px-2 py-0.5 text-[10px] font-bold text-white/95 backdrop-blur">
                   {title.type === "movie" ? t("card.movie") : t("card.tv")}
                 </span>
-                <span className="rounded-md bg-white/12 px-2 py-0.5 text-[11px] font-semibold text-white/90 backdrop-blur">
+                <span className="rounded-md bg-white/15 px-2 py-0.5 text-[10px] font-semibold text-white/95 backdrop-blur">
                   {title.year}
                 </span>
-                <span className="flex items-center gap-1 rounded-md bg-white/12 px-2 py-0.5 text-[11px] font-semibold text-white/90 backdrop-blur">
-                  <StarIcon size={11} filled className="text-accent" />
+                <span className="flex items-center gap-1 rounded-md bg-white/15 px-2 py-0.5 text-[10px] font-semibold text-white/95 backdrop-blur">
+                  <StarIcon size={10} filled className="text-accent" />
                   {title.rating.toFixed(1)}
                 </span>
               </div>
-              <h2 className="truncate text-2xl font-bold text-white drop-shadow">
+              <h2 className="truncate text-xl font-bold text-white drop-shadow">
                 {title.title[locale]}
               </h2>
-              <div className="mt-1 flex flex-wrap gap-x-2.5 gap-y-0.5">
+              <div className="mt-0.5 flex flex-wrap gap-x-2.5">
                 {title.genres.slice(0, 3).map((g) => (
-                  <span key={g} className="text-xs font-medium text-white/55">
+                  <span key={g} className="text-[11px] font-medium text-white/60">
                     {genreLabel(g, locale)}
                   </span>
                 ))}
               </div>
             </div>
-            <button
+            <motion.button
               onClick={() => setShowDetails((v) => !v)}
               aria-label={t("swipe.details")}
-              className="shrink-0 rounded-full bg-white/12 p-2.5 text-white/90 backdrop-blur transition hover:bg-white/25"
+              whileTap={{ scale: 0.88 }}
+              animate={{ rotate: showDetails ? 180 : 0 }}
+              transition={SPRING_SNAPPY}
+              className="shrink-0 rounded-full bg-white/15 p-2 text-white/95 backdrop-blur transition-colors duration-300 hover:bg-white/30"
             >
-              <InfoIcon size={20} />
-            </button>
+              <InfoIcon size={18} />
+            </motion.button>
           </div>
 
-          {showDetails && (
-            <motion.div
-              initial={{ opacity: 0, y: 14, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ type: "spring", stiffness: 320, damping: 28 }}
-              className="mt-3 rounded-2xl bg-black/60 p-4 backdrop-blur-md"
-            >
-              <p className="text-sm leading-relaxed text-white/85">
-                {title.overview[locale]}
-              </p>
-              {title.people.director && (
-                <p className="mt-2 text-xs text-white/60">
-                  <span className="font-semibold text-white/80">
-                    {title.type === "movie" ? t("card.director") : t("card.creator")}:
-                  </span>{" "}
-                  {title.people.director}
-                </p>
-              )}
-              {title.people.cast.length > 0 && (
-                <p className="mt-1 text-xs text-white/60">
-                  <span className="font-semibold text-white/80">{t("card.cast")}:</span>{" "}
-                  {title.people.cast.slice(0, 3).join("، ")}
-                </p>
-              )}
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {title.keywords.slice(0, 5).map((k) => (
-                  <span
-                    key={k}
-                    className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-white/60"
-                  >
-                    {k}
-                  </span>
-                ))}
-              </div>
-            </motion.div>
-          )}
+          <AnimatePresence initial={false}>
+            {showDetails && (
+              <motion.div
+                key="details"
+                initial={{ opacity: 0, height: 0, y: 10 }}
+                animate={{ opacity: 1, height: "auto", y: 0 }}
+                exit={{ opacity: 0, height: 0, y: 6 }}
+                transition={{ duration: 0.38, ease: EASE_SWEEP }}
+                className="overflow-hidden"
+              >
+                <div className="mt-3 rounded-2xl bg-black/60 p-3.5 backdrop-blur-md">
+                  <p className="text-[13px] leading-relaxed text-white/85">
+                    {title.overview[locale]}
+                  </p>
+                  {title.people.director && (
+                    <p className="mt-2 text-[11px] text-white/60">
+                      <span className="font-semibold text-white/80">
+                        {title.type === "movie" ? t("card.director") : t("card.creator")}:
+                      </span>{" "}
+                      {title.people.director}
+                    </p>
+                  )}
+                  {title.people.cast.length > 0 && (
+                    <p className="mt-1 text-[11px] text-white/60">
+                      <span className="font-semibold text-white/80">{t("card.cast")}:</span>{" "}
+                      {title.people.cast.slice(0, 3).join(", ")}
+                    </p>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
     </motion.div>

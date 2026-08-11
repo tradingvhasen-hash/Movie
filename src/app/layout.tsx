@@ -24,6 +24,7 @@ export async function generateMetadata(): Promise<Metadata> {
     title: { default: `${t("name")} — ${t("tagline")}`, template: `%s · ${t("name")}` },
     description: t("tagline"),
     manifest: `${BASE_PATH}/manifest.webmanifest`,
+    icons: { icon: `${BASE_PATH}/icon.svg` },
   };
 }
 

@@ -1,12 +1,17 @@
 "use client";
 
-import { useLocale } from "next-intl";
+import { AnimatePresence, motion } from "framer-motion";
 import PosterArt from "./PosterArt";
 import { StarIcon } from "./ui/Icons";
+import { POP_IN, SPRING_SOFT, TILE } from "@/lib/motion";
+import { locale } from "@/lib/i18n";
 import type { Title } from "@/lib/types";
 
-/** Apple-style tile: white card, generous radius, one soft shadow,
- *  gentle lift on hover, clean typography. */
+/**
+ * Apple-style tile. Motion is part of the component: it rises in, lifts
+ * on hover, compresses on press and shrinks away when removed (needs an
+ * AnimatePresence ancestor for the exit to play).
+ */
 export default function TitleTile({
   title,
   badge,
@@ -21,18 +26,44 @@ export default function TitleTile({
   overlay?: React.ReactNode;
   onClick?: () => void;
 }) {
-  const locale = useLocale() as "ar" | "en";
   return (
-    <div
-      className={`group relative overflow-hidden rounded-[20px] bg-surface shadow-[0_4px_14px_rgba(29,41,61,0.07)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_12px_28px_rgba(29,41,61,0.13)] ${
+    <motion.div
+      layout
+      variants={TILE}
+      initial="hidden"
+      animate="show"
+      exit="exit"
+      whileHover={{ y: -5, transition: SPRING_SOFT }}
+      whileTap={onClick ? { scale: 0.96, transition: { duration: 0.12 } } : undefined}
+      onClick={onClick}
+      className={`group relative overflow-hidden rounded-[20px] bg-surface shadow-[0_4px_14px_rgba(29,41,61,0.07)] transition-shadow duration-500 hover:shadow-[0_14px_30px_rgba(29,41,61,0.14)] ${
         onClick ? "cursor-pointer" : ""
       }`}
-      onClick={onClick}
     >
       <div className="aspect-[10/14] w-full overflow-hidden">
-        <PosterArt title={title} sizes="200px" />
+        <motion.div
+          className="h-full w-full"
+          whileHover={{ scale: 1.05, transition: { duration: 0.6, ease: "easeOut" } }}
+        >
+          <PosterArt title={title} sizes="200px" />
+        </motion.div>
       </div>
-      {badge && <div className="absolute end-2.5 top-2.5 z-10">{badge}</div>}
+
+      <AnimatePresence>
+        {badge && (
+          <motion.div
+            key="badge"
+            variants={POP_IN}
+            initial="hidden"
+            animate="show"
+            exit="exit"
+            className="absolute end-2.5 top-2.5 z-10"
+          >
+            {badge}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="px-3 pb-3 pt-2.5">
         <div className="truncate text-[13.5px] font-semibold tracking-tight">
           {title.title[locale]}
@@ -46,6 +77,6 @@ export default function TitleTile({
         {footer}
       </div>
       {overlay}
-    </div>
+    </motion.div>
   );
 }

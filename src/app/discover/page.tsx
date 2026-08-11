@@ -2,8 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
-import { useLocale, useTranslations } from "next-intl";
+import { AnimatePresence, motion } from "framer-motion";
 import TitleTile from "@/components/TitleTile";
 import { HeartButton, NeuButton, RichTooltip } from "@/components/ui";
 import {
@@ -15,12 +14,12 @@ import {
 } from "@/components/ui/Icons";
 import { getLocalCatalog, getLocalTitle, vectorOf } from "@/lib/catalog";
 import { recommend } from "@/lib/engine/recommend";
+import { FADE_UP, SECTION, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
 import { useDhawq } from "@/lib/store";
+import { locale, t } from "@/lib/i18n";
 import type { Recommendation } from "@/lib/types";
 
 export default function DiscoverPage() {
-  const t = useTranslations();
-  const locale = useLocale() as "ar" | "en";
   const swipes = useDhawq((s) => s.swipes);
   const profile = useDhawq((s) => s.profile);
   const doSwipe = useDhawq((s) => s.swipe);
@@ -68,134 +67,180 @@ export default function DiscoverPage() {
   }, [query]);
 
   const ratedCount = profile.ratedSwipes;
+  const view = query.trim() ? "search" : ratedCount === 0 ? "empty" : "recs";
 
   return (
-    <div className="px-5 pb-24 pt-6">
-      <div className="flex items-center gap-2">
+    <motion.div
+      variants={staggerContainer(0.06)}
+      initial="hidden"
+      animate="show"
+      className="px-5 pb-24 pt-6"
+    >
+      <motion.div variants={FADE_UP} className="flex items-center gap-2">
         <h1 className="text-2xl font-bold tracking-tight">{t("discover.title")}</h1>
         <RichTooltip
           title={t("discover.howTitle")}
           trigger={
-            <button
-              className="mt-1 text-ink-faint transition hover:text-ink"
+            <motion.button
+              whileHover={{ scale: 1.15, rotate: 8 }}
+              whileTap={{ scale: 0.9 }}
+              transition={SPRING_SNAPPY}
+              className="mt-1 text-ink-faint transition-colors duration-300 hover:text-accent"
               aria-label={t("discover.howTitle")}
             >
               <InfoIcon size={17} />
-            </button>
+            </motion.button>
           }
         >
           {t("discover.howBody")}
         </RichTooltip>
-      </div>
+      </motion.div>
 
       {/* live search — no button */}
-      <div className="relative mt-4">
-        <span className="pointer-events-none absolute inset-y-0 start-4 flex items-center text-ink-faint">
+      <motion.div variants={FADE_UP} className="relative mt-4">
+        <span className="pointer-events-none absolute inset-y-0 start-4 z-10 flex items-center text-ink-faint">
           <SearchIcon size={17} />
         </span>
-        <input
+        <motion.input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={t("discover.searchAll")}
+          whileFocus={{ scale: 1.01 }}
+          transition={SPRING_SNAPPY}
           className="neu-input ps-11 text-sm"
         />
-      </div>
+      </motion.div>
 
-      {query.trim() ? (
-        <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-          {searchResults.map((title) => {
-            const existing = swipes[title.id];
-            return (
-              <TitleTile
-                key={title.id}
-                title={title}
-                badge={
-                  existing && existing.action !== "not_seen" ? (
-                    <span
-                      className={`flex h-6 w-6 items-center justify-center rounded-full shadow-sm ${
-                        existing.action === "liked"
-                          ? "bg-accent text-white"
-                          : "bg-white/90 text-ink-dim"
-                      }`}
-                    >
-                      {existing.action === "liked" ? (
-                        <HeartIcon size={13} filled />
-                      ) : (
-                        <ThumbsDownIcon size={12} filled />
-                      )}
-                    </span>
-                  ) : undefined
-                }
-                footer={
-                  <div className="mt-1.5 flex items-center justify-center gap-2" dir="ltr">
-                    <NeuButton
-                      round
-                      aria-label={t("swipe.disliked")}
-                      title={t("swipe.disliked")}
-                      onClick={() => doSwipe(title, "disliked")}
-                      className="h-9 w-9 text-ink-dim"
-                    >
-                      <ThumbsDownIcon size={15} strokeWidth={2.2} />
-                    </NeuButton>
-                    <HeartButton
-                      onLike={() => doSwipe(title, "liked")}
-                      size={38}
-                      title={t("swipe.liked")}
-                    />
-                  </div>
-                }
-              />
-            );
-          })}
-        </div>
-      ) : ratedCount === 0 ? (
-        <div className="mt-12 flex flex-col items-center text-center">
-          <SparklesIcon size={44} strokeWidth={1.6} className="text-ink-faint" />
-          <p className="mt-4 text-ink-dim">{t("discover.empty")}</p>
-          <Link href="/" className="mt-5">
-            <span className="glow-btn inline-block">
-              <span>{t("library.startSwiping")}</span>
-            </span>
-          </Link>
-        </div>
-      ) : (
-        <>
-          {ratedCount < 12 && (
-            <p className="soft-inset mt-4 px-4 py-2.5 text-xs font-medium text-accent">
-              {t("discover.needMore")}
-            </p>
-          )}
-          <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-            {recs.map((rec, i) => {
-              const because = rec.becauseOf ? getLocalTitle(rec.becauseOf) : null;
-              return (
-                <motion.div
-                  key={rec.title.id}
-                  initial={{ opacity: 0, y: 16, scale: 0.97 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  transition={{ duration: 0.4, delay: Math.min(i * 0.04, 0.5), ease: [0.22, 1, 0.36, 1] }}
-                >
-                <TitleTile
-                  title={rec.title}
-                  badge={
-                    <span className="rounded-full bg-accent/95 px-2.5 py-1 text-[10px] font-bold text-white shadow-sm">
-                      {t("discover.match", { percent: Math.round(rec.score * 100) })}
-                    </span>
-                  }
-                  footer={
-                    because ? (
-                      <div className="mt-1 truncate text-[10px] text-ink-faint">
-                        {t("discover.becauseYouLiked")}: {because.title[locale]}
+      <AnimatePresence mode="wait" initial={false}>
+        {view === "search" ? (
+          <motion.div
+            key="search"
+            variants={staggerContainer(0.04)}
+            initial="hidden"
+            animate="show"
+            exit="exit"
+            className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4"
+          >
+            <AnimatePresence mode="popLayout">
+              {searchResults.map((title) => {
+                const existing = swipes[title.id];
+                return (
+                  <TitleTile
+                    key={title.id}
+                    title={title}
+                    badge={
+                      existing && existing.action !== "not_seen" ? (
+                        <span
+                          className={`flex h-6 w-6 items-center justify-center rounded-full shadow-sm ${
+                            existing.action === "liked"
+                              ? "bg-accent text-white"
+                              : "bg-white/90 text-ink-dim"
+                          }`}
+                        >
+                          {existing.action === "liked" ? (
+                            <HeartIcon size={13} filled />
+                          ) : (
+                            <ThumbsDownIcon size={12} filled />
+                          )}
+                        </span>
+                      ) : undefined
+                    }
+                    footer={
+                      <div className="mt-1.5 flex items-center justify-center gap-2" dir="ltr">
+                        <motion.div whileTap={{ scale: 0.86 }} transition={SPRING_SNAPPY}>
+                          <NeuButton
+                            round
+                            aria-label={t("swipe.disliked")}
+                            title={t("swipe.disliked")}
+                            onClick={() => doSwipe(title, "disliked")}
+                            className="h-9 w-9 text-ink-dim"
+                          >
+                            <ThumbsDownIcon size={15} strokeWidth={2.2} />
+                          </NeuButton>
+                        </motion.div>
+                        <HeartButton
+                          onLike={() => doSwipe(title, "liked")}
+                          size={38}
+                          title={t("swipe.liked")}
+                        />
                       </div>
-                    ) : undefined
-                  }
-                />
-                </motion.div>
-              );
-            })}
-          </div>
-        </>
-      )}
-    </div>
+                    }
+                  />
+                );
+              })}
+            </AnimatePresence>
+          </motion.div>
+        ) : view === "empty" ? (
+          <motion.div
+            key="empty"
+            variants={SECTION}
+            initial="hidden"
+            animate="show"
+            exit="exit"
+            className="mt-12 flex flex-col items-center text-center"
+          >
+            <SparklesIcon size={44} strokeWidth={1.6} className="text-ink-faint" />
+            <p className="mt-4 text-ink-dim">{t("discover.empty")}</p>
+            <Link href="/" className="mt-5">
+              <motion.span
+                whileHover={{ y: -2 }}
+                whileTap={{ scale: 0.96 }}
+                transition={SPRING_SNAPPY}
+                className="glow-btn inline-block"
+              >
+                <span>{t("library.startSwiping")}</span>
+              </motion.span>
+            </Link>
+          </motion.div>
+        ) : (
+          <motion.div key="recs" variants={SECTION} initial="hidden" animate="show" exit="exit">
+            <AnimatePresence>
+              {ratedCount < 12 && (
+                <motion.p
+                  key="hint"
+                  initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                  animate={{ opacity: 1, height: "auto", marginTop: 16 }}
+                  exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                  transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                  className="soft-inset overflow-hidden px-4 py-2.5 text-xs font-medium text-accent"
+                >
+                  {t("discover.needMore")}
+                </motion.p>
+              )}
+            </AnimatePresence>
+            <motion.div
+              variants={staggerContainer(0.04)}
+              initial="hidden"
+              animate="show"
+              className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4"
+            >
+              <AnimatePresence mode="popLayout">
+                {recs.map((rec) => {
+                  const because = rec.becauseOf ? getLocalTitle(rec.becauseOf) : null;
+                  return (
+                    <TitleTile
+                      key={rec.title.id}
+                      title={rec.title}
+                      badge={
+                        <span className="rounded-full bg-accent/95 px-2.5 py-1 text-[10px] font-bold text-white shadow-sm">
+                          {t("discover.match", { percent: Math.round(rec.score * 100) })}
+                        </span>
+                      }
+                      footer={
+                        because ? (
+                          <div className="mt-1 truncate text-[10px] text-ink-faint">
+                            {t("discover.becauseYouLiked")}: {because.title[locale]}
+                          </div>
+                        ) : undefined
+                      }
+                    />
+                  );
+                })}
+              </AnimatePresence>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }

@@ -25,6 +25,7 @@
 html {
   background: var(--color-bg);
   color-scheme: light;
+  scroll-behavior: smooth;
 }
 
 body {
@@ -34,6 +35,34 @@ body {
   overscroll-behavior-y: none;
   /* no double-tap / gesture zoom */
   touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Baseline: nothing changes appearance instantly. Anything interactive
+   eases its colors, shadows and transforms unless it opts out. */
+a,
+button,
+input,
+label,
+svg,
+[role="button"] {
+  transition:
+    color 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 ::selection {
@@ -45,6 +74,21 @@ body {
 }
 .no-scrollbar {
   scrollbar-width: none;
+}
+
+/* staggered entrance for server-rendered grids (share pages) */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.rise-in {
+  animation: rise-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 /* poster bottom fade */
@@ -443,8 +487,10 @@ body {
   transition: all 0.3s;
 }
 .neu-input:focus {
-  border-color: rgba(14, 165, 233, 0.5);
-  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.12);
+  border-color: rgba(14, 165, 233, 0.55);
+  box-shadow:
+    0 0 0 4px rgba(14, 165, 233, 0.14),
+    0 6px 18px rgba(14, 165, 233, 0.12);
 }
 .neu-input::placeholder {
   color: var(--color-ink-faint);

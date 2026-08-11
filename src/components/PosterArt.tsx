@@ -1,7 +1,8 @@
 "use client";
 
-import { useLocale } from "next-intl";
+import { useState } from "react";
 import { ClapperIcon, TvIcon } from "./ui/Icons";
+import { locale } from "@/lib/i18n";
 import type { Title } from "@/lib/types";
 
 /**
@@ -23,16 +24,23 @@ export default function PosterArt({
   className?: string;
   sizes?: string;
 }) {
-  const locale = useLocale() as "ar" | "en";
+  const [loaded, setLoaded] = useState(false);
 
   if (title.posterPath) {
     return (
+      // posters fade + settle in rather than snapping into place
       // eslint-disable-next-line @next/next/no-img-element
       <img
         src={`https://image.tmdb.org/t/p/w500${title.posterPath}`}
         alt={title.title[locale]}
         sizes={sizes}
-        className={`h-full w-full object-cover ${className}`}
+        onLoad={() => setLoaded(true)}
+        style={{
+          opacity: loaded ? 1 : 0,
+          transform: loaded ? "scale(1)" : "scale(1.04)",
+          transition: "opacity 0.6s cubic-bezier(0.22,1,0.36,1), transform 0.7s cubic-bezier(0.22,1,0.36,1)",
+        }}
+        className={`h-full w-full bg-surface-2 object-cover ${className}`}
         draggable={false}
       />
     );

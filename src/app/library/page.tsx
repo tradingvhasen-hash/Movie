@@ -2,19 +2,27 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { AnimatePresence, motion } from "framer-motion";
-import { useTranslations } from "next-intl";
+import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
 import TitleTile from "@/components/TitleTile";
-import { DeleteButton, NeuButton } from "@/components/ui";
+import { DeleteButton } from "@/components/ui";
 import { FilmIcon, HeartIcon, ThumbsDownIcon } from "@/components/ui/Icons";
 import { getLocalTitle } from "@/lib/catalog";
+import {
+  FADE_UP,
+  OVERLAY,
+  POP_IN,
+  SECTION,
+  SPRING_SNAPPY,
+  staggerContainer,
+} from "@/lib/motion";
 import { useDhawq } from "@/lib/store";
+import { t } from "@/lib/i18n";
 import type { Swipe } from "@/lib/types";
 
 type Filter = "all" | "liked" | "disliked";
+const FILTERS: Filter[] = ["all", "liked", "disliked"];
 
 export default function LibraryPage() {
-  const t = useTranslations();
   const swipes = useDhawq((s) => s.swipes);
   const removeSwipe = useDhawq((s) => s.removeSwipe);
 
@@ -48,68 +56,113 @@ export default function LibraryPage() {
   }, [watched, filter, query]);
 
   return (
-    <div className="px-5 pb-24 pt-6">
-      <h1 className="text-2xl font-bold tracking-tight">{t("library.title")}</h1>
-      <p className="mt-1 text-sm text-ink-dim">{t("library.subtitle")}</p>
+    <motion.div
+      variants={staggerContainer(0.06)}
+      initial="hidden"
+      animate="show"
+      className="px-5 pb-24 pt-6"
+    >
+      <motion.h1 variants={FADE_UP} className="text-2xl font-bold tracking-tight">
+        {t("library.title")}
+      </motion.h1>
+      <motion.p variants={FADE_UP} className="mt-1 text-sm text-ink-dim">
+        {t("library.subtitle")}
+      </motion.p>
 
-      {/* filters — push buttons (ke1221), inset when active */}
-      <div className="mt-5 flex items-center gap-3">
-        {(["all", "liked", "disliked"] as Filter[]).map((f) => (
-          <NeuButton
-            key={f}
-            pressed={filter === f}
-            onClick={() => setFilter(f)}
-            className="px-3.5 py-1.5 text-sm"
-          >
-            {t(`library.${f}`)}
-          </NeuButton>
-        ))}
-      </div>
+      {/* filters — the active pill slides between options */}
+      <LayoutGroup id="library-filters">
+        <motion.div variants={FADE_UP} className="mt-5 flex items-center gap-3">
+          {FILTERS.map((f) => {
+            const active = filter === f;
+            return (
+              <motion.button
+                key={f}
+                onClick={() => setFilter(f)}
+                whileTap={{ scale: 0.93 }}
+                transition={SPRING_SNAPPY}
+                className={`relative rounded-[0.6em] border px-3.5 py-1.5 text-sm font-semibold transition-colors duration-300 ${
+                  active
+                    ? "border-transparent text-white"
+                    : "border-line bg-surface text-ink-dim shadow-[0_4px_12px_rgba(29,41,61,0.08)] hover:text-ink"
+                }`}
+              >
+                {active && (
+                  <motion.span
+                    layoutId="filter-pill"
+                    className="absolute inset-0 rounded-[0.6em] bg-gradient-to-br from-accent to-accent-soft shadow-[0_6px_16px_rgba(14,165,233,0.35)]"
+                    transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                  />
+                )}
+                <span className="relative">{t(`library.${f}`)}</span>
+              </motion.button>
+            );
+          })}
+        </motion.div>
+      </LayoutGroup>
 
-      <input
+      <motion.input
+        variants={FADE_UP}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder={t("library.search")}
+        whileFocus={{ scale: 1.01 }}
+        transition={SPRING_SNAPPY}
         className="neu-input mt-4 text-sm"
       />
 
-      {filtered.length === 0 ? (
-        <div className="mt-12 flex flex-col items-center text-center">
-          <FilmIcon size={44} strokeWidth={1.6} className="text-ink-faint" />
-          <p className="mt-4 text-ink-dim">{t("library.empty")}</p>
-          <Link href="/" className="mt-5">
-            <span className="glow-btn inline-block">
-              <span>{t("library.startSwiping")}</span>
-            </span>
-          </Link>
-        </div>
-      ) : (
-        <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-          {filtered.map((sw, i) => (
-            <motion.div
-              key={sw.titleId}
-              layout
-              initial={{ opacity: 0, y: 16, scale: 0.97 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.92 }}
-              transition={{ duration: 0.4, delay: Math.min(i * 0.04, 0.4), ease: [0.22, 1, 0.36, 1] }}
-            >
-              <LibraryTile
-                swipe={sw}
-                selected={selectedId === sw.titleId}
-                onSelect={() =>
-                  setSelectedId(selectedId === sw.titleId ? null : sw.titleId)
-                }
-                onRemove={() => {
-                  removeSwipe(sw.titleId);
-                  setSelectedId(null);
-                }}
-              />
-            </motion.div>
-          ))}
-        </div>
-      )}
-    </div>
+      <AnimatePresence mode="wait" initial={false}>
+        {filtered.length === 0 ? (
+          <motion.div
+            key={`empty-${filter}-${query.trim() ? "q" : ""}`}
+            variants={SECTION}
+            initial="hidden"
+            animate="show"
+            exit="exit"
+            className="mt-12 flex flex-col items-center text-center"
+          >
+            <FilmIcon size={44} strokeWidth={1.6} className="text-ink-faint" />
+            <p className="mt-4 text-ink-dim">{t("library.empty")}</p>
+            <Link href="/" className="mt-5">
+              <motion.span
+                whileHover={{ y: -2 }}
+                whileTap={{ scale: 0.96 }}
+                transition={SPRING_SNAPPY}
+                className="glow-btn inline-block"
+              >
+                <span>{t("library.startSwiping")}</span>
+              </motion.span>
+            </Link>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="grid"
+            variants={staggerContainer(0.045)}
+            initial="hidden"
+            animate="show"
+            exit="exit"
+            className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4"
+          >
+            {/* popLayout lets removed tiles shrink away while the rest reflow */}
+            <AnimatePresence mode="popLayout">
+              {filtered.map((sw) => (
+                <LibraryTile
+                  key={sw.titleId}
+                  swipe={sw}
+                  selected={selectedId === sw.titleId}
+                  onSelect={() =>
+                    setSelectedId(selectedId === sw.titleId ? null : sw.titleId)
+                  }
+                  onRemove={() => {
+                    setSelectedId(null);
+                    removeSwipe(sw.titleId);
+                  }}
+                />
+              ))}
+            </AnimatePresence>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }
 
@@ -124,7 +177,6 @@ function LibraryTile({
   onSelect: () => void;
   onRemove: () => void;
 }) {
-  const t = useTranslations();
   const title = swipe.title ?? getLocalTitle(swipe.titleId);
   if (!title) return null;
 
@@ -149,10 +201,11 @@ function LibraryTile({
         <AnimatePresence>
           {selected && (
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.28, ease: "easeOut" }}
+              key="actions"
+              variants={OVERLAY}
+              initial="hidden"
+              animate="show"
+              exit="exit"
               className="absolute inset-0 z-20 flex items-center justify-center rounded-[20px] bg-slate-800/25 backdrop-blur-[3px]"
               onClick={(e) => {
                 e.stopPropagation();
@@ -160,10 +213,7 @@ function LibraryTile({
               }}
             >
               <motion.div
-                initial={{ scale: 0.4, opacity: 0, y: 10 }}
-                animate={{ scale: 1, opacity: 1, y: 0 }}
-                exit={{ scale: 0.5, opacity: 0 }}
-                transition={{ type: "spring", stiffness: 380, damping: 24 }}
+                variants={POP_IN}
                 onClick={(e) => e.stopPropagation()}
               >
                 {/* expanding delete — Uiverse.io by vinodjangid07 */}

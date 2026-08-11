@@ -90,6 +90,7 @@ body {
 .neu-btn:active,
 .neu-btn[data-pressed="true"] {
   color: var(--color-ink-faint);
+  transform: scale(0.94);
   box-shadow:
     inset 3px 3px 8px rgba(29, 41, 61, 0.12),
     inset -3px -3px 8px rgba(255, 255, 255, 0.9);

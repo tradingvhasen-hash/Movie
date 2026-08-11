@@ -40,7 +40,7 @@ export default async function SharedListPage({ params }: PageProps<"/l/[slug]">)
   const ownerName = (profileRow as { display_name?: string } | null)?.display_name ?? "—";
 
   return (
-    <div className="px-5">
+    <div className="px-5 pb-16 pt-8">
       <p className="text-sm text-ink-dim">{t("share.listBy", { name: ownerName })}</p>
       <h1 className="mt-1 text-3xl font-bold">{list.name}</h1>
       <ShareGrid titles={titles} />

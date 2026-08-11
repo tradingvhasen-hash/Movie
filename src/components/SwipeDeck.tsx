@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import { useTranslations } from "next-intl";
 import SwipeCard from "./SwipeCard";
 import SwipeBurst from "./SwipeBurst";
@@ -11,18 +11,14 @@ import { GlowButton, HeartButton, NeuButton } from "./ui";
 import { ArrowUpIcon, ClapperIcon, PopcornIcon, ThumbsDownIcon, UndoIcon } from "./ui/Icons";
 import type { SwipeAction } from "@/lib/types";
 
+const fadeUp = {
+  hidden: { opacity: 0, y: 14 },
+  show: { opacity: 1, y: 0 },
+};
+
 export default function SwipeDeck() {
   const t = useTranslations();
-  const {
-    queue,
-    hydrated,
-    swipeTop,
-    undo,
-    canUndo,
-    calibrating,
-    calibrationProgress,
-    refill,
-  } = useDeck();
+  const { queue, hydrated, swipeTop, undo, canUndo, refill } = useDeck();
   const onboardingSeen = useDhawq((s) => s.onboardingSeen);
   const setOnboardingSeen = useDhawq((s) => s.setOnboardingSeen);
   const resetAll = useDhawq((s) => s.resetAll);
@@ -50,7 +46,7 @@ export default function SwipeDeck() {
     [queue.length, forcedExit]
   );
 
-  // keyboard shortcuts (physical directions, independent of RTL)
+  // keyboard shortcuts (physical directions)
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -77,16 +73,35 @@ export default function SwipeDeck() {
     const hints = [t("swipe.hintRight"), t("swipe.hintLeft"), t("swipe.hintUp")];
     return (
       <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="mx-auto flex max-w-md flex-col items-center px-6 pt-12 text-center"
+        initial="hidden"
+        animate="show"
+        transition={{ staggerChildren: 0.09, delayChildren: 0.1 }}
+        className="mx-auto flex max-w-md flex-col items-center px-6 pb-28 pt-12 text-center"
       >
-        <ClapperIcon size={56} strokeWidth={1.6} className="text-accent" />
-        <h1 className="mt-5 text-3xl font-bold">{t("onboarding.welcomeTitle")}</h1>
-        <p className="mt-4 leading-relaxed text-ink-dim">{t("onboarding.welcomeBody")}</p>
+        <motion.div variants={fadeUp} transition={{ duration: 0.5, ease: "easeOut" }}>
+          <ClapperIcon size={52} strokeWidth={1.6} className="text-accent" />
+        </motion.div>
+        <motion.h1
+          variants={fadeUp}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          className="mt-5 text-3xl font-bold tracking-tight"
+        >
+          {t("onboarding.welcomeTitle")}
+        </motion.h1>
+        <motion.p
+          variants={fadeUp}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          className="mt-4 leading-relaxed text-ink-dim"
+        >
+          {t("onboarding.welcomeBody")}
+        </motion.p>
 
         {/* swipe hints as animated checklist — Uiverse.io by JkHuger */}
-        <div className="checklist mt-6 w-full text-start" dir="auto">
+        <motion.div
+          variants={fadeUp}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          className="checklist mt-6 w-full text-start"
+        >
           {hints.map((hint, i) => (
             <HintRow
               key={i}
@@ -98,92 +113,77 @@ export default function SwipeDeck() {
               label={hint}
             />
           ))}
-        </div>
+        </motion.div>
 
-        <GlowButton onClick={setOnboardingSeen} className="mt-8 w-full text-lg">
-          {t("onboarding.start")}
-        </GlowButton>
+        <motion.div
+          variants={fadeUp}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          className="mt-8 w-full"
+        >
+          <GlowButton onClick={setOnboardingSeen} className="w-full text-lg">
+            {t("onboarding.start")}
+          </GlowButton>
+        </motion.div>
       </motion.div>
     );
   }
 
+  /* everything fits the viewport — no scrolling on the swipe screen */
   return (
-    <div className="mx-auto flex w-full max-w-md flex-col px-4">
-      {/* calibration progress */}
-      <AnimatePresence>
-        {calibrating && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="overflow-hidden"
-          >
-            <div className="soft-card-sm mb-3 p-3">
-              <div className="mb-1.5 flex items-center justify-between text-xs">
-                <span className="font-semibold text-accent">
-                  {t("onboarding.progress")}
-                </span>
-                <span className="text-ink-dim">
-                  {t("onboarding.calibrating", {
-                    count: calibrationProgress.current,
-                    total: calibrationProgress.total,
-                  })}
-                </span>
-              </div>
-              <div className="soft-inset h-2.5 overflow-hidden rounded-full">
-                <motion.div
-                  className="h-full rounded-full bg-gradient-to-r from-accent to-accent-soft"
-                  animate={{
-                    width: `${(calibrationProgress.current / calibrationProgress.total) * 100}%`,
+    <div
+      className="mx-auto flex w-full max-w-md flex-col items-center overflow-hidden px-4 pt-3"
+      style={{ height: "calc(100dvh - 78px - env(safe-area-inset-bottom))" }}
+    >
+      {/* card stack — sized by available height */}
+      <div className="relative min-h-0 w-full flex-1">
+        <div className="relative mx-auto h-full w-fit">
+          <div className="relative h-full max-w-[85vw]" style={{ aspectRatio: "10 / 14.2" }}>
+            <SwipeBurst burst={burst} />
+            {queue.length === 0 ? (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.96 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.4, ease: "easeOut" }}
+                className="soft-card flex h-full flex-col items-center justify-center p-8 text-center"
+              >
+                <PopcornIcon size={44} strokeWidth={1.6} className="text-ink-faint" />
+                <h3 className="mt-4 text-lg font-bold">{t("swipe.emptyTitle")}</h3>
+                <p className="mt-2 text-sm text-ink-dim">{t("swipe.emptyBody")}</p>
+                <NeuButton
+                  onClick={() => {
+                    resetAll();
+                    setTimeout(refill, 50);
                   }}
+                  className="mt-6 text-sm"
+                >
+                  {t("swipe.reset")}
+                </NeuButton>
+              </motion.div>
+            ) : (
+              queue.slice(0, 3).map((title, i) => (
+                <SwipeCard
+                  key={title.id}
+                  title={title}
+                  index={i}
+                  onSwipe={handleSwipe}
+                  forcedExit={i === 0 ? forcedExit : null}
                 />
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* card stack */}
-      <div className="relative mx-auto aspect-[10/15] w-full max-w-sm">
-        <SwipeBurst burst={burst} />
-        {queue.length === 0 ? (
-          <div className="soft-card flex h-full flex-col items-center justify-center p-8 text-center">
-            <PopcornIcon size={48} strokeWidth={1.6} className="text-ink-faint" />
-            <h3 className="mt-4 text-xl font-bold">{t("swipe.emptyTitle")}</h3>
-            <p className="mt-2 text-sm text-ink-dim">{t("swipe.emptyBody")}</p>
-            <NeuButton
-              onClick={() => {
-                resetAll();
-                setTimeout(refill, 50);
-              }}
-              className="mt-6 text-sm"
-            >
-              {t("swipe.reset")}
-            </NeuButton>
+              ))
+            )}
           </div>
-        ) : (
-          queue.slice(0, 3).map((title, i) => (
-            <SwipeCard
-              key={title.id}
-              title={title}
-              index={i}
-              onSwipe={handleSwipe}
-              forcedExit={i === 0 ? forcedExit : null}
-            />
-          ))
-        )}
+        </div>
       </div>
 
-      {/* action buttons: neu buttons (ke1221) + bursting heart (catraco) */}
-      <div className="mt-6 flex items-center justify-center gap-5" dir="ltr">
+      {/* action buttons */}
+      <div className="flex shrink-0 items-center justify-center gap-4 py-3" dir="ltr">
         <NeuButton
           round
           aria-label={t("swipe.disliked")}
           title={t("swipe.disliked")}
           onClick={() => trigger("disliked")}
-          className="h-16 w-16 text-ink"
+          className="h-14 w-14 text-ink"
         >
-          <ThumbsDownIcon size={26} strokeWidth={2.2} />
+          <ThumbsDownIcon size={23} strokeWidth={2.2} />
         </NeuButton>
         <NeuButton
           round
@@ -191,31 +191,23 @@ export default function SwipeDeck() {
           title={t("swipe.undo")}
           disabled={!canUndo}
           onClick={undo}
-          className="h-12 w-12"
+          className="h-11 w-11"
         >
-          <UndoIcon size={19} />
+          <UndoIcon size={17} />
         </NeuButton>
         <NeuButton
           round
           aria-label={t("swipe.notSeen")}
           title={t("swipe.notSeen")}
           onClick={() => trigger("not_seen")}
-          className="h-12 w-12"
+          className="h-11 w-11"
         >
-          <ArrowUpIcon size={19} />
+          <ArrowUpIcon size={17} />
         </NeuButton>
-        <div className="neu-btn neu-btn-round h-16 w-16">
-          <HeartButton
-            onLike={() => trigger("liked")}
-            size={56}
-            title={t("swipe.liked")}
-          />
+        <div className="neu-btn neu-btn-round h-14 w-14">
+          <HeartButton onLike={() => trigger("liked")} size={50} title={t("swipe.liked")} />
         </div>
       </div>
-
-      <p className="mt-4 hidden text-center text-xs text-ink-faint sm:block">
-        {t("swipe.keyboard")}
-      </p>
     </div>
   );
 }

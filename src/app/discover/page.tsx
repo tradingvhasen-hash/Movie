@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { motion } from "framer-motion";
 import { useLocale, useTranslations } from "next-intl";
 import TitleTile from "@/components/TitleTile";
 import { HeartButton, NeuButton, RichTooltip } from "@/components/ui";
@@ -69,7 +70,7 @@ export default function DiscoverPage() {
   const ratedCount = profile.ratedSwipes;
 
   return (
-    <div className="px-5">
+    <div className="px-5 pb-24 pt-6">
       <div className="flex items-center gap-2">
         <h1 className="text-2xl font-bold tracking-tight">{t("discover.title")}</h1>
         <RichTooltip
@@ -165,11 +166,16 @@ export default function DiscoverPage() {
             </p>
           )}
           <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-            {recs.map((rec) => {
+            {recs.map((rec, i) => {
               const because = rec.becauseOf ? getLocalTitle(rec.becauseOf) : null;
               return (
-                <TitleTile
+                <motion.div
                   key={rec.title.id}
+                  initial={{ opacity: 0, y: 16, scale: 0.97 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ duration: 0.4, delay: Math.min(i * 0.04, 0.5), ease: [0.22, 1, 0.36, 1] }}
+                >
+                <TitleTile
                   title={rec.title}
                   badge={
                     <span className="rounded-full bg-accent/95 px-2.5 py-1 text-[10px] font-bold text-white shadow-sm">
@@ -184,6 +190,7 @@ export default function DiscoverPage() {
                     ) : undefined
                   }
                 />
+                </motion.div>
               );
             })}
           </div>

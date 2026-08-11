@@ -42,7 +42,7 @@ export function GlowButton({
 }
 
 /* ── expanding delete button (Uiverse.io by vinodjangid07) ──
-   touch devices: first tap arms it (expands), second tap confirms */
+   deletes immediately on tap/click; hover expansion stays on desktop */
 export function DeleteButton({
   label,
   onDelete,
@@ -52,29 +52,12 @@ export function DeleteButton({
   onDelete: () => void;
   className?: string;
 }) {
-  const [armed, setArmed] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
-
-  function handleClick() {
-    const isHoverable = window.matchMedia("(hover: hover)").matches;
-    if (isHoverable || armed) {
-      setArmed(false);
-      onDelete();
-      return;
-    }
-    setArmed(true);
-    timer.current = setTimeout(() => setArmed(false), 2500);
-  }
-
   return (
     <button
       type="button"
       aria-label={label}
       data-label={label}
-      data-armed={armed || undefined}
-      onClick={handleClick}
+      onClick={onDelete}
       className={`delete-btn ${className}`}
     >
       <svg viewBox="0 0 448 512" className="delete-svg">

@@ -83,8 +83,8 @@ export default function SwipeCard({ title, index, onSwipe, forcedExit }: SwipeCa
       }
       transition={
         exitTarget
-          ? { duration: 0.35, ease: "easeOut" }
-          : { type: "spring", stiffness: 300, damping: 28 }
+          ? { duration: 0.45, ease: [0.32, 0.72, 0, 1] }
+          : { type: "spring", stiffness: 260, damping: 26 }
       }
       onAnimationComplete={() => {
         if (activeExit) onSwipe(activeExit);
@@ -161,8 +161,9 @@ export default function SwipeCard({ title, index, onSwipe, forcedExit }: SwipeCa
 
           {showDetails && (
             <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
+              initial={{ opacity: 0, y: 14, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ type: "spring", stiffness: 320, damping: 28 }}
               className="mt-3 rounded-2xl bg-black/60 p-4 backdrop-blur-md"
             >
               <p className="text-sm leading-relaxed text-white/85">

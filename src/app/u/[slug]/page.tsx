@@ -40,7 +40,7 @@ export default async function PublicProfilePage({ params }: PageProps<"/u/[slug]
     .filter((x): x is SharedTitle => Boolean(x));
 
   return (
-    <div className="px-5">
+    <div className="px-5 pb-16 pt-8">
       <h1 className="text-3xl font-bold">
         {t("share.libraryOf", { name: profile.display_name ?? "—" })}
       </h1>

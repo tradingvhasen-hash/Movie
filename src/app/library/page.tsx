@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { AnimatePresence, motion } from "framer-motion";
 import { useTranslations } from "next-intl";
 import TitleTile from "@/components/TitleTile";
 import { DeleteButton, NeuButton } from "@/components/ui";
@@ -47,7 +48,7 @@ export default function LibraryPage() {
   }, [watched, filter, query]);
 
   return (
-    <div className="px-5">
+    <div className="px-5 pb-24 pt-6">
       <h1 className="text-2xl font-bold tracking-tight">{t("library.title")}</h1>
       <p className="mt-1 text-sm text-ink-dim">{t("library.subtitle")}</p>
 
@@ -84,19 +85,27 @@ export default function LibraryPage() {
         </div>
       ) : (
         <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-          {filtered.map((sw) => (
-            <LibraryTile
+          {filtered.map((sw, i) => (
+            <motion.div
               key={sw.titleId}
-              swipe={sw}
-              selected={selectedId === sw.titleId}
-              onSelect={() =>
-                setSelectedId(selectedId === sw.titleId ? null : sw.titleId)
-              }
-              onRemove={() => {
-                removeSwipe(sw.titleId);
-                setSelectedId(null);
-              }}
-            />
+              layout
+              initial={{ opacity: 0, y: 16, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.92 }}
+              transition={{ duration: 0.4, delay: Math.min(i * 0.04, 0.4), ease: [0.22, 1, 0.36, 1] }}
+            >
+              <LibraryTile
+                swipe={sw}
+                selected={selectedId === sw.titleId}
+                onSelect={() =>
+                  setSelectedId(selectedId === sw.titleId ? null : sw.titleId)
+                }
+                onRemove={() => {
+                  removeSwipe(sw.titleId);
+                  setSelectedId(null);
+                }}
+              />
+            </motion.div>
           ))}
         </div>
       )}
@@ -137,26 +146,32 @@ function LibraryTile({
         </span>
       }
       overlay={
-        selected ? (
-          <div
-            className="absolute inset-0 z-20 flex items-center justify-center rounded-[20px] bg-white/70 backdrop-blur-[2px]"
-            onClick={(e) => {
-              e.stopPropagation();
-              onSelect();
-            }}
-          >
-            <div
-              className="rich-tooltip-panel flex flex-col items-center gap-2 !p-3"
-              onClick={(e) => e.stopPropagation()}
+        <AnimatePresence>
+          {selected && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.28, ease: "easeOut" }}
+              className="absolute inset-0 z-20 flex items-center justify-center rounded-[20px] bg-slate-800/25 backdrop-blur-[3px]"
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelect();
+              }}
             >
-              <span className="text-xs font-semibold text-ink-dim">
-                {t("library.removeSwipe")}
-              </span>
-              {/* expanding delete — Uiverse.io by vinodjangid07 */}
-              <DeleteButton label={t("common.delete")} onDelete={onRemove} />
-            </div>
-          </div>
-        ) : undefined
+              <motion.div
+                initial={{ scale: 0.4, opacity: 0, y: 10 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.5, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 380, damping: 24 }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* expanding delete — Uiverse.io by vinodjangid07 */}
+                <DeleteButton label={t("common.delete")} onDelete={onRemove} />
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       }
     />
   );

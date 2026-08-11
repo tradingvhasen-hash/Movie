@@ -88,6 +88,7 @@ export async function POST(req: Request) {
     excludeIds: new Set(exclude),
     count,
     coOccurrenceBonus: coBonus,
+    vectorFor: featurize,
   });
 
   return NextResponse.json({

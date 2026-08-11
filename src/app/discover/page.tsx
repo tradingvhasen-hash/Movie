@@ -22,6 +22,7 @@ import type { Recommendation } from "@/lib/types";
 export default function DiscoverPage() {
   const swipes = useDhawq((s) => s.swipes);
   const profile = useDhawq((s) => s.profile);
+  const seed = useDhawq((s) => s.seed);
   const doSwipe = useDhawq((s) => s.swipe);
 
   const [hydrated, setHydrated] = useState(false);
@@ -57,9 +58,10 @@ export default function DiscoverPage() {
       excludeIds: exclude,
       count: 24,
       likedItems,
-      seed: 42,
+      seed,
+      vectorFor: vectorOf,
     });
-  }, [hydrated, swipes, profile]);
+  }, [hydrated, swipes, profile, seed]);
 
   const searchResults = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -115,7 +117,7 @@ export default function DiscoverPage() {
           placeholder={t("discover.searchAll")}
           whileFocus={{ scale: 1.01 }}
           transition={SPRING_SNAPPY}
-          className="neu-input ps-11 text-sm"
+          className="neu-input neu-input-search text-sm"
         />
       </motion.div>
 
@@ -225,19 +227,31 @@ export default function DiscoverPage() {
               <AnimatePresence mode="popLayout">
                 {recs.map((rec) => {
                   const because = rec.becauseOf ? getLocalTitle(rec.becauseOf) : null;
+                  // the values that actually produced the score, so the
+                  // percentage is answerable rather than mysterious
+                  const why = rec.reasons.map((r) => r.label).join(" · ");
                   return (
                     <TitleTile
                       key={rec.title.id}
                       title={rec.title}
                       badge={
                         <span className="rounded-full bg-accent/95 px-2.5 py-1 text-[10px] font-bold text-white shadow-sm">
-                          {t("discover.match", { percent: Math.round(rec.score * 100) })}
+                          {t("discover.match", { percent: rec.match })}
                         </span>
                       }
                       footer={
-                        because ? (
-                          <div className="mt-1 truncate text-[10px] text-ink-faint">
-                            {t("discover.becauseYouLiked")}: {because.title[locale]}
+                        why || because ? (
+                          <div className="mt-1 space-y-0.5">
+                            {why && (
+                              <div className="truncate text-[10px] capitalize text-ink-dim">
+                                {why}
+                              </div>
+                            )}
+                            {because && (
+                              <div className="truncate text-[10px] text-ink-faint">
+                                {t("discover.becauseYouLiked")}: {because.title[locale]}
+                              </div>
+                            )}
                           </div>
                         ) : undefined
                       }

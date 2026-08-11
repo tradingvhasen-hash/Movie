@@ -1,51 +1,61 @@
 import { DIM } from "./features";
-import type { SwipeAction } from "../types";
+import {
+  applyFacets,
+  emptyFacets,
+  emptyFacetWeights,
+  emptyStreaks,
+  facetScore,
+  pruneFacets,
+  revertFacets,
+  signalFor,
+  titleTokens,
+  trackStreak,
+  updateFacetWeights,
+  type FacetTables,
+  type FacetWeights,
+  type StreakState,
+} from "./facets";
+import type { SwipeAction, Title } from "../types";
 
 /**
- * The user's fingerprint, built purely from swipe signals. Two independent
- * models are tracked:
+ * The user's fingerprint, built purely from swipe signals.
  *
- *  - taste       — what they enjoy: likes pull, dislikes push
- *  - familiarity — what they are likely to have heard of: everything they
- *                  have seen (liked *or* disliked) pulls, everything they
- *                  swiped "not seen" pushes
+ * The facet tables are the model. Everything a swipe teaches — themes,
+ * genres, actors, directors, decade, language — lands in them by name, so
+ * evidence accumulates per value rather than being smeared across 384 shared
+ * hash buckets. That is what lets the deck converge in tens of swipes rather
+ * than hundreds.
  *
- * Keeping them apart matters: disliking a film still proves you know that
- * corner of cinema, and skipping ten anime proves you don't — a distinction
- * a single taste vector cannot express.
+ * The blended vector alongside them is not used for ranking. It is kept
+ * because it costs one pass per swipe (not per candidate) and it is what the
+ * pgvector cloud path queries with once Supabase is switched on.
  *
- * Serializable to plain arrays so it can live in localStorage or Postgres.
+ * Serializable to plain JSON so it can live in localStorage or Postgres.
  */
 export interface TasteProfile {
-  /** blended taste direction (likes pull, dislikes push) */
+  /** per-value evidence: the model that actually drives ranking */
+  facets: FacetTables;
+  /** how much each facet matters to *this* user, learned from their swipes */
+  facetWeights: FacetWeights;
+  /** consecutive-skip runs and the values they have benched */
+  streaks: StreakState;
+
+  /** blended taste direction — cloud pgvector queries only */
   taste: number[];
-  /** centroid sum of liked titles */
+  /** centroid sum of liked titles (diversity + "because you liked") */
   likedSum: number[];
   likedCount: number;
-  /** centroid sum of disliked titles */
   dislikedSum: number[];
   dislikedCount: number;
-  /** centroid sum of everything the user has actually watched */
-  seenSum: number[];
-  seenCount: number;
-  /** centroid sum of everything the user swiped away as unwatched */
-  unseenSum: number[];
-  unseenCount: number;
+
   /** likes + dislikes (taste evidence) */
   ratedSwipes: number;
-  /** every swipe including "not seen" (familiarity evidence) */
+  /** every swipe including "not seen" — also the clock streak cooldowns use */
   totalSwipes: number;
-
-  /**
-   * Original-language counts across everything the user has watched.
-   * The feature vector devotes only a sliver of its dimensions to language,
-   * so a Mexican comedy can out-score an English one on keywords alone —
-   * this tracks the preference explicitly instead.
-   */
-  langSeen: Record<string, number>;
-  /** sum/count of release years of liked titles → era centre of gravity */
-  likedYearSum: number;
-  likedYearCount: number;
+  /** titles the user has actually watched */
+  seenCount: number;
+  /** titles swiped away as unwatched */
+  unseenCount: number;
 }
 
 export const LIKE_WEIGHT = 1.0;
@@ -55,207 +65,182 @@ export const RECENCY_DECAY = 0.995;
 
 export function emptyProfile(): TasteProfile {
   return {
+    facets: emptyFacets(),
+    facetWeights: emptyFacetWeights(),
+    streaks: emptyStreaks(),
     taste: new Array(DIM).fill(0),
     likedSum: new Array(DIM).fill(0),
     likedCount: 0,
     dislikedSum: new Array(DIM).fill(0),
     dislikedCount: 0,
-    seenSum: new Array(DIM).fill(0),
-    seenCount: 0,
-    unseenSum: new Array(DIM).fill(0),
-    unseenCount: 0,
     ratedSwipes: 0,
     totalSwipes: 0,
-    langSeen: {},
-    likedYearSum: 0,
-    likedYearCount: 0,
+    seenCount: 0,
+    unseenCount: 0,
   };
 }
 
-/** tolerate profiles persisted before the familiarity model existed */
+/** tolerate profiles persisted by any earlier build */
 export function normalizeProfile(p: Partial<TasteProfile> | undefined): TasteProfile {
   const base = emptyProfile();
-  if (!p || !Array.isArray(p.taste) || p.taste.length !== DIM) return base;
+  if (!p) return base;
+  const vec = (v: unknown, fallback: number[]) =>
+    Array.isArray(v) && v.length === DIM ? (v as number[]) : fallback;
   return {
     ...base,
     ...p,
-    seenSum: Array.isArray(p.seenSum) && p.seenSum.length === DIM ? p.seenSum : base.seenSum,
-    unseenSum:
-      Array.isArray(p.unseenSum) && p.unseenSum.length === DIM ? p.unseenSum : base.unseenSum,
+    facets: p.facets && typeof p.facets === "object" ? { ...base.facets, ...p.facets } : base.facets,
+    facetWeights:
+      p.facetWeights && typeof p.facetWeights === "object"
+        ? { ...base.facetWeights, ...p.facetWeights }
+        : base.facetWeights,
+    streaks:
+      p.streaks && typeof p.streaks === "object"
+        ? { runs: p.streaks.runs ?? {}, cooldown: p.streaks.cooldown ?? {} }
+        : base.streaks,
+    taste: vec(p.taste, base.taste),
+    likedSum: vec(p.likedSum, base.likedSum),
+    dislikedSum: vec(p.dislikedSum, base.dislikedSum),
+    likedCount: p.likedCount ?? 0,
+    dislikedCount: p.dislikedCount ?? 0,
+    ratedSwipes: p.ratedSwipes ?? 0,
+    totalSwipes: p.totalSwipes ?? p.ratedSwipes ?? 0,
     seenCount: p.seenCount ?? 0,
     unseenCount: p.unseenCount ?? 0,
-    totalSwipes: p.totalSwipes ?? p.ratedSwipes ?? 0,
-    langSeen: p.langSeen && typeof p.langSeen === "object" ? p.langSeen : {},
-    likedYearSum: p.likedYearSum ?? 0,
-    likedYearCount: p.likedYearCount ?? 0,
-  } as TasteProfile;
+  };
 }
 
 /**
- * How strongly to favour a language, in roughly [-1, 1]. Languages the user
- * actually watches score positive; ones absent from their history score
- * negative — but only once there is enough history to justify it, so a
- * single Korean film never locks the catalog to Korean.
+ * Fold one swipe into the fingerprint.
+ *
+ * Every action teaches something now. A "not seen" swipe used to touch only
+ * a familiarity centroid and leave taste untouched, which is why skipping
+ * thirty superhero films changed nothing about what came next; it now writes
+ * negative evidence into the same tables the ranking reads, and feeds the
+ * streak detector that benches a theme outright after three in a row.
  */
-export function languageAffinity(profile: TasteProfile, language: string): number {
-  const total = profile.seenCount;
-  if (total < 3) return 0;
-  const seen = profile.langSeen[language] ?? 0;
-  const share = seen / total;
-  const evidence = Math.min(1, total / 12);
-  // share of 0 → -1, share of ~0.25+ → +1
-  const raw = seen === 0 ? -1 : Math.min(1, share / 0.25);
-  return raw * evidence;
-}
-
-/** Mean release year of liked titles, or null when there aren't any yet */
-export function likedEra(profile: TasteProfile): number | null {
-  if (profile.likedYearCount === 0) return null;
-  return profile.likedYearSum / profile.likedYearCount;
-}
-
-/**
- * Era closeness in [0, 1]: same decade ≈ 1, four decades apart ≈ 0.
- * Deliberately gentle — it nudges a 2020s viewer away from 1950s films
- * without burying a classic they would genuinely enjoy.
- */
-export function eraAffinity(profile: TasteProfile, year: number): number {
-  const era = likedEra(profile);
-  if (era === null) return 0;
-  const gap = Math.abs(year - era);
-  const evidence = Math.min(1, profile.likedYearCount / 5);
-  return Math.max(0, 1 - gap / 40) * evidence;
-}
-
-/** side metadata the vector under-represents but users care about */
-export interface SwipeMeta {
-  language?: string;
-  year?: number;
-}
-
 export function applySwipe(
   profile: TasteProfile,
+  title: Title,
   vector: Float32Array | number[],
-  action: SwipeAction,
-  meta: SwipeMeta = {}
+  action: SwipeAction
 ): TasteProfile {
+  const tokens = titleTokens(title);
+  const signal = signalFor(action);
+
+  // measured before the update, so a facet cannot "predict" the very example
+  // it is about to learn
+  const before = facetScore(profile.facets, profile.facetWeights, tokens);
+
+  const streak = trackStreak(profile.streaks, tokens, action, profile.totalSwipes);
+
   const next: TasteProfile = {
     ...profile,
-    taste: [...profile.taste],
-    likedSum: [...profile.likedSum],
-    dislikedSum: [...profile.dislikedSum],
-    seenSum: [...profile.seenSum],
-    unseenSum: [...profile.unseenSum],
-    langSeen: { ...profile.langSeen },
+    facets: pruneFacets(applyFacets(profile.facets, tokens, signal)),
+    facetWeights: updateFacetWeights(
+      profile.facetWeights,
+      before.perKind,
+      action,
+      profile.ratedSwipes
+    ),
+    streaks: streak.state,
     totalSwipes: profile.totalSwipes + 1,
   };
 
   if (action === "not_seen") {
-    // no taste signal, but strong evidence about what the user doesn't know
-    for (let i = 0; i < DIM; i++) next.unseenSum[i] += vector[i] ?? 0;
-    next.unseenCount += 1;
+    next.unseenCount = profile.unseenCount + 1;
     return next;
   }
+
+  next.taste = [...profile.taste];
+  next.likedSum = [...profile.likedSum];
+  next.dislikedSum = [...profile.dislikedSum];
 
   const w = action === "liked" ? LIKE_WEIGHT : DISLIKE_WEIGHT;
   for (let i = 0; i < DIM; i++) {
     next.taste[i] = next.taste[i] * RECENCY_DECAY + w * (vector[i] ?? 0);
-    next.seenSum[i] += vector[i] ?? 0;
   }
-  next.seenCount += 1;
-  // watching it at all — liked or not — proves the language is accessible
-  if (meta.language) {
-    next.langSeen[meta.language] = (next.langSeen[meta.language] ?? 0) + 1;
-  }
+  next.seenCount = profile.seenCount + 1;
 
   if (action === "liked") {
     for (let i = 0; i < DIM; i++) next.likedSum[i] += vector[i] ?? 0;
-    next.likedCount += 1;
-    if (meta.year) {
-      next.likedYearSum += meta.year;
-      next.likedYearCount += 1;
-    }
+    next.likedCount = profile.likedCount + 1;
   } else {
     for (let i = 0; i < DIM; i++) next.dislikedSum[i] += vector[i] ?? 0;
-    next.dislikedCount += 1;
+    next.dislikedCount = profile.dislikedCount + 1;
   }
-  next.ratedSwipes += 1;
+  next.ratedSwipes = profile.ratedSwipes + 1;
   return next;
 }
 
-/** Exact inverse of applySwipe for undo support */
+/**
+ * Inverse of applySwipe, for undo. The counters revert exactly; the learned
+ * facet importances do not (a perceptron update has no clean inverse) — they
+ * move by at most ~9% per swipe and are renormalised, so an undone swipe
+ * leaves no visible trace.
+ */
 export function revertSwipe(
   profile: TasteProfile,
+  title: Title,
   vector: Float32Array | number[],
-  action: SwipeAction,
-  meta: SwipeMeta = {}
+  action: SwipeAction
 ): TasteProfile {
+  const tokens = titleTokens(title);
+  const signal = signalFor(action);
+
   const next: TasteProfile = {
     ...profile,
-    taste: [...profile.taste],
-    likedSum: [...profile.likedSum],
-    dislikedSum: [...profile.dislikedSum],
-    seenSum: [...profile.seenSum],
-    unseenSum: [...profile.unseenSum],
-    langSeen: { ...profile.langSeen },
+    facets: revertFacets(profile.facets, tokens, signal),
+    // an undone swipe should not keep a theme benched
+    streaks: { runs: {}, cooldown: profile.streaks.cooldown },
     totalSwipes: Math.max(0, profile.totalSwipes - 1),
   };
 
   if (action === "not_seen") {
-    for (let i = 0; i < DIM; i++) next.unseenSum[i] -= vector[i] ?? 0;
-    next.unseenCount = Math.max(0, next.unseenCount - 1);
+    next.unseenCount = Math.max(0, profile.unseenCount - 1);
     return next;
   }
+
+  next.taste = [...profile.taste];
+  next.likedSum = [...profile.likedSum];
+  next.dislikedSum = [...profile.dislikedSum];
 
   const w = action === "liked" ? LIKE_WEIGHT : DISLIKE_WEIGHT;
   for (let i = 0; i < DIM; i++) {
     next.taste[i] = (next.taste[i] - w * (vector[i] ?? 0)) / RECENCY_DECAY;
-    next.seenSum[i] -= vector[i] ?? 0;
   }
-  next.seenCount = Math.max(0, next.seenCount - 1);
-  if (meta.language && next.langSeen[meta.language]) {
-    const left = next.langSeen[meta.language] - 1;
-    if (left > 0) next.langSeen[meta.language] = left;
-    else delete next.langSeen[meta.language];
-  }
+  next.seenCount = Math.max(0, profile.seenCount - 1);
 
   if (action === "liked") {
     for (let i = 0; i < DIM; i++) next.likedSum[i] -= vector[i] ?? 0;
-    next.likedCount = Math.max(0, next.likedCount - 1);
-    if (meta.year && next.likedYearCount > 0) {
-      next.likedYearSum -= meta.year;
-      next.likedYearCount -= 1;
-    }
+    next.likedCount = Math.max(0, profile.likedCount - 1);
   } else {
     for (let i = 0; i < DIM; i++) next.dislikedSum[i] -= vector[i] ?? 0;
-    next.dislikedCount = Math.max(0, next.dislikedCount - 1);
+    next.dislikedCount = Math.max(0, profile.dislikedCount - 1);
   }
-  next.ratedSwipes = Math.max(0, next.ratedSwipes - 1);
+  next.ratedSwipes = Math.max(0, profile.ratedSwipes - 1);
   return next;
 }
 
-/** Rated swipes needed before the taste model is trusted at full weight */
-export const TASTE_CONFIDENCE_K = 7;
+/**
+ * Rated swipes before the model is trusted at full weight. Lower than the
+ * vector era's value: named counters need far fewer examples than hash
+ * buckets to say something real.
+ */
+export const TASTE_CONFIDENCE_K = 4;
 
 /**
- * How much to trust the taste vector, 0..1. With one or two likes the
- * fingerprint is nearly meaningless — leaning on it fully is what makes a
- * single animated film flood the deck with cartoons — so its weight ramps
- * up as evidence accumulates and the popularity/quality prior fills the gap.
+ * How far to trust the facet tables, 0..1.
+ *
+ * Skips count toward this, discounted the same way their signal is. Keying
+ * confidence off rated swipes alone meant a user who skipped ten superhero
+ * films in a row had a model that knew it perfectly well and a confidence of
+ * zero to multiply it by — the tables said "not this" and the ranking ignored
+ * them.
  */
 export function tasteConfidence(profile: TasteProfile): number {
-  return profile.ratedSwipes / (profile.ratedSwipes + TASTE_CONFIDENCE_K);
-}
-
-/** Familiarity is a coarser signal, so it firms up with less evidence */
-const FAMILIARITY_K = 4;
-
-export function seenConfidence(profile: TasteProfile): number {
-  return profile.seenCount / (profile.seenCount + FAMILIARITY_K);
-}
-
-export function unseenConfidence(profile: TasteProfile): number {
-  return profile.unseenCount / (profile.unseenCount + FAMILIARITY_K);
+  const evidence = profile.ratedSwipes + 0.45 * profile.unseenCount;
+  return evidence / (evidence + TASTE_CONFIDENCE_K);
 }
 
 /** Calibration ends once taste evidence exists, or enough cards were seen */

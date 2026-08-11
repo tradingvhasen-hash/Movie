@@ -8,9 +8,13 @@ import type { Title } from "@/lib/types";
  * Catalog access.
  *
  * The full TMDB catalog ships as a static asset (public/catalog.json) and is
- * fetched once, then kept in memory. Feature vectors are derived here rather
- * than shipped: featurize is deterministic, so computing ~5k vectors locally
- * costs a fraction of a second and keeps the download several times smaller.
+ * fetched once, then kept in memory.
+ *
+ * Feature vectors are neither shipped nor precomputed. Ranking runs on the
+ * facet tables, which read a title's metadata directly; vectors are only
+ * needed by the final diversity pass, for a few dozen titles at a time. So
+ * they are built on first use and cached — building all ~5,500 up front cost
+ * a visible pause on load and ~8 MB of memory to serve ~60 of them.
  *
  * The small bundled sample set is the fallback before the fetch resolves (and
  * if it ever fails), so the app is never empty.
@@ -20,7 +24,7 @@ let byId = new Map<string, CandidateItem>();
 let loadPromise: Promise<CandidateItem[]> | null = null;
 
 function build(titles: Title[]): CandidateItem[] {
-  const built = titles.map((title) => ({ title, vector: featurize(title) }));
+  const built: CandidateItem[] = titles.map((title) => ({ title }));
   items = built;
   byId = new Map(built.map((c) => [c.title.id, c]));
   return built;
@@ -70,13 +74,16 @@ export function getLocalTitle(id: string): Title | undefined {
 /**
  * Vectors are a pure function of a title's metadata (same math on client,
  * server and build script), so any Title snapshot can be vectorized on demand.
+ * Built lazily and memoised, both here and on the catalog entry itself.
  */
 const vectorCache = new Map<string, Float32Array>();
 
 export function vectorOf(title: Title): Float32Array {
   let v = vectorCache.get(title.id);
   if (!v) {
-    v = getLocalItem(title.id)?.vector ?? featurize(title);
+    const item = getLocalItem(title.id);
+    v = item?.vector ?? featurize(title);
+    if (item) item.vector = v;
     vectorCache.set(title.id, v);
   }
   return v;

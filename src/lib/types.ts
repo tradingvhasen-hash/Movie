@@ -43,8 +43,16 @@ export interface UserList {
 
 export interface Recommendation {
   title: Title;
-  /** 0..1 blended match score */
+  /** raw blended score — ordering only, not meaningful on its own */
   score: number;
+  /**
+   * Stable 0..100 match. Derived from the absolute facet score, so the same
+   * title reports the same number in every batch (the old percentage divided
+   * by the batch maximum, which made the top card always 100%).
+   */
+  match: number;
+  /** the concrete values behind the match: "same director", "thriller", … */
+  reasons: { kind: string; label: string }[];
   /** id of the liked title that most explains this rec, if any */
   becauseOf?: string;
 }

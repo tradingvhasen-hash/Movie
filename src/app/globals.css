@@ -26,6 +26,18 @@ html {
   background: var(--color-bg);
   color-scheme: light;
   scroll-behavior: smooth;
+  /* pull-to-refresh and rubber-banding both steal upward swipes */
+  overscroll-behavior: none;
+}
+
+/* The swipe stage owns every gesture inside it. `touch-action: none` on the
+   card alone was not enough: a drag beginning in the padding around it, or
+   continuing past its edge, was still handed to the page, so swiping "not
+   seen" scrolled the document instead of moving the card. */
+.swipe-stage,
+.swipe-stage * {
+  touch-action: none;
+  overscroll-behavior: none;
 }
 
 body {
@@ -494,6 +506,12 @@ svg,
 }
 .neu-input::placeholder {
   color: var(--color-ink-faint);
+}
+/* room for a leading icon. A Tailwind `ps-*` utility cannot do this: the
+   shorthand `padding` above is unlayered and so wins over the utility layer,
+   which left the icon sitting on top of the placeholder text. */
+.neu-input-search {
+  padding-inline-start: 44px;
 }
 
 /* ── glow CTA button — Uiverse.io by themrsami (sky blue) ── */

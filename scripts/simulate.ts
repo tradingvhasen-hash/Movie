@@ -1,0 +1,233 @@
+/**
+ * Engine simulation harness.
+ *
+ * Recommendation quality is not something you can eyeball from a few cards —
+ * every regression in this app so far was found by measuring, not by looking.
+ * This runs synthetic users with known tastes against the real catalog and
+ * the real engine, and prints the numbers the v8 work is judged on.
+ *
+ *   npx tsx scripts/simulate.ts
+ */
+import { readFileSync } from "node:fs";
+import { decodeCatalog, type EncodedCatalog } from "../src/lib/data/catalog-codec";
+import { featurize } from "../src/lib/engine/features";
+import { recommend, fameTierSize, type CandidateItem } from "../src/lib/engine/recommend";
+import { applySwipe, emptyProfile, type TasteProfile } from "../src/lib/engine/taste";
+import type { SwipeAction, Title } from "../src/lib/types";
+
+const catalog = decodeCatalog(
+  JSON.parse(readFileSync("public/catalog.json", "utf8")) as EncodedCatalog
+);
+const pool: CandidateItem[] = catalog.map((title) => ({ title }));
+
+const vecCache = new Map<string, Float32Array>();
+const vectorFor = (t: Title) => {
+  let v = vecCache.get(t.id);
+  if (!v) {
+    v = featurize(t);
+    vecCache.set(t.id, v);
+  }
+  return v;
+};
+
+const hasGenre = (t: Title, g: string) =>
+  t.genres.some((x) => x.toLowerCase() === g.toLowerCase());
+const hasKeyword = (t: Title, k: string) =>
+  t.keywords.some((x) => x.toLowerCase().includes(k.toLowerCase()));
+
+/** A synthetic viewer: decides an action for any title */
+type Persona = (t: Title) => SwipeAction;
+
+function runSession(
+  persona: Persona,
+  swipeCount: number,
+  seed = 12345
+): { profile: TasteProfile; shown: Title[]; timings: number[] } {
+  let profile = emptyProfile();
+  const shown: Title[] = [];
+  const excludeIds = new Set<string>();
+  const timings: number[] = [];
+
+  while (shown.length < swipeCount) {
+    const t0 = performance.now();
+    const batch = recommend(pool, profile, {
+      excludeIds,
+      count: 10,
+      seed,
+      vectorFor,
+    });
+    timings.push(performance.now() - t0);
+    if (batch.length === 0) break;
+
+    for (const rec of batch) {
+      if (shown.length >= swipeCount) break;
+      const action = persona(rec.title);
+      shown.push(rec.title);
+      excludeIds.add(rec.title.id);
+      profile = applySwipe(profile, rec.title, vectorFor(rec.title), action);
+    }
+  }
+  return { profile, shown, timings };
+}
+
+/** the next N cards the engine would serve, without swiping them */
+function peek(profile: TasteProfile, shown: Title[], n: number, seed = 12345): Title[] {
+  return recommend(pool, profile, {
+    excludeIds: new Set(shown.map((t) => t.id)),
+    count: n,
+    seed,
+    vectorFor,
+  }).map((r) => r.title);
+}
+
+const pct = (x: number) => `${(x * 100).toFixed(0)}%`;
+const results: { name: string; pass: boolean; detail: string }[] = [];
+function check(name: string, pass: boolean, detail: string) {
+  results.push({ name, pass, detail });
+  console.log(`${pass ? "PASS" : "FAIL"}  ${name}\n      ${detail}`);
+}
+
+console.log(`catalog: ${catalog.length} titles\n`);
+
+/* ── 1. skip learning: the superhero complaint, exactly ───────────────── */
+{
+  const isSuper = (t: Title) =>
+    hasKeyword(t, "superhero") || hasKeyword(t, "marvel") || hasKeyword(t, "dc comics");
+  let profile = emptyProfile();
+  const shown: Title[] = [];
+
+  // force-feed ten superhero films and skip every one
+  const supers = [...pool]
+    .filter((c) => isSuper(c.title))
+    .sort((a, b) => b.title.voteCount - a.title.voteCount)
+    .slice(0, 10);
+  for (const c of supers) {
+    profile = applySwipe(profile, c.title, vectorFor(c.title), "not_seen");
+    shown.push(c.title);
+  }
+
+  const next = peek(profile, shown, 20);
+  const leaked = next.filter(isSuper).length;
+  check(
+    "skip learning — 10 superhero skips",
+    leaked === 0,
+    `${leaked}/20 superhero titles in the next 20 cards (target 0)`
+  );
+}
+
+/* ── 2. convergence speed: does 40 swipes find a known taste? ─────────── */
+{
+  // a viewer who likes crime/thriller dramas and dislikes animation/family
+  const likes = (t: Title) =>
+    (hasGenre(t, "thriller") || hasGenre(t, "crime") || hasGenre(t, "mystery")) &&
+    !hasGenre(t, "animation");
+  const persona: Persona = (t) => {
+    if (likes(t)) return "liked";
+    if (hasGenre(t, "animation") || hasGenre(t, "family")) return "disliked";
+    return "not_seen";
+  };
+
+  for (const n of [20, 40, 80]) {
+    const { profile, shown } = runSession(persona, n);
+    const next = peek(profile, shown, 20);
+    const hit = next.filter(likes).length / next.length;
+    check(
+      `convergence after ${n} swipes`,
+      n < 40 ? true : hit >= 0.7,
+      `${pct(hit)} of the next 20 cards match the persona${n >= 40 ? " (target ≥70%)" : ""}`
+    );
+  }
+}
+
+/* ── 3. tunnel vision: one action like must not lock the deck ─────────── */
+{
+  let profile = emptyProfile();
+  const action = [...pool]
+    .filter((c) => hasGenre(c.title, "action"))
+    .sort((a, b) => b.title.voteCount - a.title.voteCount)[0];
+  profile = applySwipe(profile, action.title, vectorFor(action.title), "liked");
+
+  const next = peek(profile, [action.title], 20);
+  const share = next.filter((t) => hasGenre(t, "action")).length / next.length;
+  check(
+    "no tunnel vision — 1 action like",
+    share <= 0.4,
+    `${pct(share)} of the next 20 cards are action (target ≤40%)`
+  );
+}
+
+/* ── 4. fame: the opening deck must be titles people have heard of ────── */
+{
+  const { shown } = runSession(() => "not_seen", 40);
+  const minVotes = Math.min(...shown.map((t) => t.voteCount));
+  const tier = fameTierSize(emptyProfile());
+  check(
+    "fame gate — first 40 cards",
+    minVotes >= 5000,
+    `lowest vote count shown: ${minVotes.toLocaleString()} (tier = top ${tier}, target ≥5,000)`
+  );
+}
+
+/* ── 5. two users must not get the same deck ──────────────────────────── */
+{
+  const a = runSession(() => "not_seen", 20, 111).shown.map((t) => t.id);
+  const b = runSession(() => "not_seen", 20, 999).shown.map((t) => t.id);
+  const overlap = a.filter((id) => b.includes(id)).length / a.length;
+  check(
+    "session variety — two seeds",
+    overlap < 0.95,
+    `${pct(overlap)} of the first 20 cards are shared between two users`
+  );
+}
+
+/* ── 6. performance: a re-rank must not be felt ───────────────────────── */
+{
+  const { timings } = runSession(
+    (t) => (hasGenre(t, "drama") ? "liked" : "not_seen"),
+    120
+  );
+  const sorted = [...timings].sort((x, y) => x - y);
+  const p50 = sorted[Math.floor(sorted.length * 0.5)];
+  const worst = sorted[sorted.length - 1];
+  check(
+    "re-rank cost",
+    worst < 15,
+    `median ${p50.toFixed(1)}ms, worst ${worst.toFixed(1)}ms over ${timings.length} rebuilds (target <15ms)`
+  );
+}
+
+/* ── 7. facet attribution: liking one director's films must be noticed ── */
+{
+  let profile = emptyProfile();
+  const shown: Title[] = [];
+  // pick a director with several titles in the catalog
+  const counts = new Map<string, Title[]>();
+  for (const c of pool) {
+    const d = c.title.people.director;
+    if (!d) continue;
+    counts.set(d, [...(counts.get(d) ?? []), c.title]);
+  }
+  const [director, films] = [...counts.entries()]
+    .filter(([, f]) => f.length >= 5)
+    .sort((a, b) => b[1].reduce((s, t) => s + t.voteCount, 0) - a[1].reduce((s, t) => s + t.voteCount, 0))[0];
+
+  for (const t of films.slice(0, 4)) {
+    profile = applySwipe(profile, t, vectorFor(t), "liked");
+    shown.push(t);
+  }
+  const next = peek(profile, shown, 20);
+  const found = next.some((t) => t.people.director === director);
+  check(
+    "facet attribution — 4 likes from one director",
+    found,
+    `${director}: ${found ? "another of their films surfaced" : "no further film surfaced"} in the next 20`
+  );
+}
+
+/* ── summary ──────────────────────────────────────────────────────────── */
+const failed = results.filter((r) => !r.pass);
+console.log(
+  `\n${results.length - failed.length}/${results.length} checks passed` +
+    (failed.length ? `\nfailing: ${failed.map((f) => f.name).join(", ")}` : "")
+);
+process.exit(failed.length > 0 ? 1 : 0);

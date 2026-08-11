@@ -40,6 +40,17 @@ export default function SwipeDeck() {
     [queue.length, forcedExit]
   );
 
+  /* the swipe page is exactly one viewport tall, so nothing should ever
+     scroll behind it — belt and braces with the CSS, which some mobile
+     browsers apply inconsistently to the document element */
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -144,7 +155,7 @@ export default function SwipeDeck() {
   /* ── deck: fits the viewport, never scrolls ── */
   return (
     <div
-      className="mx-auto flex w-full max-w-md flex-col items-center overflow-hidden px-4 pt-4"
+      className="swipe-stage mx-auto flex w-full max-w-md flex-col items-center overflow-hidden px-4 pt-4"
       style={{ height: "calc(100dvh - 74px - env(safe-area-inset-bottom))" }}
     >
       <motion.h1

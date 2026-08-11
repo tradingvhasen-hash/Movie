@@ -38,42 +38,43 @@ async function fetchRemoteBatch(count: number): Promise<Title[] | null> {
   }
 }
 
-/** local/demo mode: run the engine over the bundled catalog */
+/** local mode: run the engine over the bundled catalog */
 function computeLocalBatch(excludeExtra: string[] = []): Title[] {
   const pool = getLocalCatalog();
   const state = useDhawq.getState();
   const exclude = new Set<string>([...Object.keys(state.swipes), ...excludeExtra]);
 
-  const likedItems = Object.values(state.swipes)
-    .filter((s) => s.action === "liked")
-    .map((s) => {
-      const title = s.title ?? getLocalItem(s.titleId)?.title;
-      return title ? { title, vector: vectorOf(title) } : null;
-    })
-    .filter((x): x is NonNullable<typeof x> => Boolean(x));
   return recommend(pool, state.profile, {
     excludeIds: exclude,
     count: BATCH,
-    likedItems,
-    anchorRatio: anchorRatioFor(state.profile),
+    seed: state.seed,
+    vectorFor: vectorOf,
   }).map((r) => r.title);
 }
 
-/**
- * Breadth needed right now: heavy while the profile is blank, gone once
- * there is real taste evidence. Replaces the old all-or-nothing calibration
- * mode, which ignored the fingerprint entirely for the first several swipes
- * and made likes look like they did nothing.
- */
-function anchorRatioFor(profile: { ratedSwipes: number }): number {
-  const RAMP = 8;
-  return Math.max(0, 0.6 * (1 - profile.ratedSwipes / RAMP));
+/** run work when the browser is idle, with a short deadline as a fallback */
+function whenIdle(fn: () => void): () => void {
+  if (typeof window === "undefined") {
+    fn();
+    return () => {};
+  }
+  const ric = window.requestIdleCallback;
+  if (typeof ric === "function") {
+    const id = ric(() => fn(), { timeout: 120 });
+    return () => window.cancelIdleCallback?.(id);
+  }
+  const id = window.setTimeout(fn, 32);
+  return () => window.clearTimeout(id);
 }
 
 /**
- * The swipe queue. Always ranked by the engine — breadth comes from the
- * anchor share above, never from bypassing the fingerprint — and rebuilt
- * after every swipe so the newest signal is visible on the next card.
+ * The swipe queue.
+ *
+ * The queue is rebuilt from the current fingerprint after every swipe — a
+ * batch computed ten swipes ago is exactly what makes the deck feel like it
+ * isn't listening. That rebuild used to run synchronously inside the swipe
+ * handler; it now runs on an idle callback and consecutive swipes collapse
+ * into a single rebuild, so flicking through cards never waits on it.
  */
 export function useDeck() {
   const swipes = useDhawq((s) => s.swipes);
@@ -85,19 +86,16 @@ export function useDeck() {
   const [hydrated, setHydrated] = useState(false);
   const queueRef = useRef<Title[]>([]);
   queueRef.current = queue;
+  const cancelPending = useRef<(() => void) | null>(null);
 
   const calibrating = isCalibrating(profile);
   const ratedSwipes = profile.ratedSwipes;
 
   /**
-   * Rebuild the upcoming cards from the current fingerprint.
-   *
-   * Every swipe changes what should come next, so the queue is regenerated
-   * from scratch rather than topped up: a stale batch computed ten swipes
-   * ago is exactly what makes the deck feel unresponsive. The card on screen
-   * is preserved so it doesn't swap out from under the user's finger.
+   * Rebuild the upcoming cards from the current fingerprint. The card on
+   * screen is preserved so it never swaps out from under the user's finger.
    */
-  const refill = useCallback(() => {
+  const rebuild = useCallback(() => {
     const keepTop = queueRef.current.slice(0, 1);
     const keepIds = keepTop.map((t) => t.id);
 
@@ -115,29 +113,40 @@ export function useDeck() {
     install(computeLocalBatch(keepIds));
   }, []);
 
+  /** coalescing wrapper: many swipes in a row cost one rebuild */
+  const refill = useCallback(() => {
+    cancelPending.current?.();
+    cancelPending.current = whenIdle(() => {
+      cancelPending.current = null;
+      rebuild();
+    });
+  }, [rebuild]);
+
   // wait for the catalog fetch and the persisted store before the first fill
   useEffect(() => {
     let cancelled = false;
     void loadCatalog().then(() => {
       if (cancelled) return;
       setHydrated(true);
-      refill();
+      rebuild();
     });
     return () => {
       cancelled = true;
+      cancelPending.current?.();
     };
-  }, [refill]);
+  }, [rebuild]);
 
   const swipeTop = useCallback(
     (action: SwipeAction) => {
       const top = queueRef.current[0];
       if (!top) return;
       doSwipe(top, action);
+      // advance immediately — the next card is already queued, so the
+      // re-rank behind it is invisible
       const rest = queueRef.current.slice(1);
       setQueue(rest);
       queueRef.current = rest;
-      // re-rank immediately against the updated fingerprint
-      setTimeout(refill, 0);
+      refill();
     },
     [doSwipe, refill]
   );
@@ -165,7 +174,7 @@ export function useDeck() {
 
   const undoWithRerank = useCallback(() => {
     undo();
-    setTimeout(refill, 0);
+    refill();
   }, [undo, refill]);
 
   return {
@@ -177,6 +186,6 @@ export function useDeck() {
     calibrating,
     calibrationProgress,
     swipeCount: Object.keys(swipes).length,
-    refill,
+    refill: rebuild,
   };
 }

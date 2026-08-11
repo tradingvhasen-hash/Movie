@@ -1,22 +1,85 @@
 "use client";
 
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
 import type { Swipe, SwipeAction, Title, UserList } from "@/lib/types";
 import {
   applySwipe,
   emptyProfile,
   normalizeProfile,
   revertSwipe,
-  type SwipeMeta,
   type TasteProfile,
 } from "@/lib/engine/taste";
 import { getLocalTitle, vectorOf } from "@/lib/catalog";
+
+/**
+ * A stable per-user number mixed into every ranking tie-break and every
+ * exploration draw. Without it the engine is fully deterministic, so the same
+ * catalog produced the same opening deck in every browser, for everyone.
+ */
+function makeSeed(): number {
+  return (Math.floor(Math.random() * 0xffffffff) ^ Date.now()) >>> 0;
+}
+
+/**
+ * localStorage, written on a trailing edge instead of on every keystroke of
+ * state.
+ *
+ * Serialising the whole library and writing it synchronously is one of the
+ * two things that made rapid swiping stutter — by a few hundred swipes it is
+ * hundreds of kilobytes re-encoded on the main thread per card. Swipes are
+ * bursty and only the final state matters, so writes collapse into one.
+ * A pending write is flushed the moment the page is hidden or unloaded, so
+ * nothing is ever lost.
+ */
+const WRITE_DELAY_MS = 400;
+let pendingWrite: { key: string; value: string } | null = null;
+let writeTimer: ReturnType<typeof setTimeout> | null = null;
+
+function flushWrite() {
+  if (writeTimer) {
+    clearTimeout(writeTimer);
+    writeTimer = null;
+  }
+  if (!pendingWrite) return;
+  try {
+    localStorage.setItem(pendingWrite.key, pendingWrite.value);
+  } catch {
+    // quota exceeded or storage disabled — the in-memory store still works
+  }
+  pendingWrite = null;
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("pagehide", flushWrite);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushWrite();
+  });
+}
+
+const deferredStorage: StateStorage = {
+  getItem: (name) => {
+    if (typeof localStorage === "undefined") return null;
+    if (pendingWrite?.key === name) return pendingWrite.value;
+    return localStorage.getItem(name);
+  },
+  setItem: (name, value) => {
+    pendingWrite = { key: name, value };
+    if (writeTimer) clearTimeout(writeTimer);
+    writeTimer = setTimeout(flushWrite, WRITE_DELAY_MS);
+  },
+  removeItem: (name) => {
+    pendingWrite = null;
+    if (writeTimer) clearTimeout(writeTimer);
+    if (typeof localStorage !== "undefined") localStorage.removeItem(name);
+  },
+};
 
 interface DhawqState {
   swipes: Record<string, Swipe>;
   swipeOrder: string[]; // titleIds in swipe order (for undo + recency)
   profile: TasteProfile;
+  seed: number;
   lists: UserList[];
   onboardingSeen: boolean;
 
@@ -33,18 +96,8 @@ interface DhawqState {
   setListPublic: (listId: string, isPublic: boolean) => void;
 }
 
-function vectorFor(swipe: Swipe): Float32Array | null {
-  const title = swipe.title ?? getLocalTitle(swipe.titleId);
-  return title ? vectorOf(title) : null;
-}
-
-/** language + year, which the feature vector barely encodes */
-function metaOf(title: Title | undefined): SwipeMeta {
-  return title ? { language: title.originalLanguage, year: title.year } : {};
-}
-
-function metaFor(swipe: Swipe): SwipeMeta {
-  return metaOf(swipe.title ?? getLocalTitle(swipe.titleId));
+function titleFor(swipe: Swipe): Title | undefined {
+  return swipe.title ?? getLocalTitle(swipe.titleId);
 }
 
 export const useDhawq = create<DhawqState>()(
@@ -53,6 +106,7 @@ export const useDhawq = create<DhawqState>()(
       swipes: {},
       swipeOrder: [],
       profile: emptyProfile(),
+      seed: makeSeed(),
       lists: [],
       onboardingSeen: false,
 
@@ -62,11 +116,11 @@ export const useDhawq = create<DhawqState>()(
           const existed = s.swipes[title.id];
           // re-swiping an existing title first reverts its old contribution
           let profile = s.profile;
-          if (existed) {
-            const oldV = vectorFor(existed);
-            if (oldV) profile = revertSwipe(profile, oldV, existed.action, metaFor(existed));
+          const oldTitle = existed ? titleFor(existed) : undefined;
+          if (existed && oldTitle) {
+            profile = revertSwipe(profile, oldTitle, vectorOf(oldTitle), existed.action);
           }
-          profile = applySwipe(profile, v, action, metaOf(title));
+          profile = applySwipe(profile, title, v, action);
           return {
             swipes: {
               ...s.swipes,
@@ -83,7 +137,7 @@ export const useDhawq = create<DhawqState>()(
         const lastId = s.swipeOrder[s.swipeOrder.length - 1];
         if (!lastId) return null;
         const last = s.swipes[lastId];
-        const v = last ? vectorFor(last) : null;
+        const title = last ? titleFor(last) : undefined;
         set((st) => {
           const swipes = { ...st.swipes };
           delete swipes[lastId];
@@ -91,7 +145,9 @@ export const useDhawq = create<DhawqState>()(
             swipes,
             swipeOrder: st.swipeOrder.slice(0, -1),
             profile:
-              v && last ? revertSwipe(st.profile, v, last.action, metaFor(last)) : st.profile,
+              title && last
+                ? revertSwipe(st.profile, title, vectorOf(title), last.action)
+                : st.profile,
           };
         });
         return lastId;
@@ -101,20 +157,22 @@ export const useDhawq = create<DhawqState>()(
         const s = get();
         const sw = s.swipes[titleId];
         if (!sw) return;
-        const v = vectorFor(sw);
+        const title = titleFor(sw);
         set((st) => {
           const swipes = { ...st.swipes };
           delete swipes[titleId];
           return {
             swipes,
             swipeOrder: st.swipeOrder.filter((id) => id !== titleId),
-            profile: v ? revertSwipe(st.profile, v, sw.action, metaFor(sw)) : st.profile,
+            profile: title
+              ? revertSwipe(st.profile, title, vectorOf(title), sw.action)
+              : st.profile,
           };
         });
       },
 
       resetAll: () =>
-        set({ swipes: {}, swipeOrder: [], profile: emptyProfile() }),
+        set({ swipes: {}, swipeOrder: [], profile: emptyProfile(), seed: makeSeed() }),
 
       setOnboardingSeen: () => set({ onboardingSeen: true }),
 
@@ -158,12 +216,16 @@ export const useDhawq = create<DhawqState>()(
     }),
     {
       name: "dhawq-store",
-      version: 3,
+      version: 4,
+      storage: createJSONStorage(() => deferredStorage),
       /**
-       * v2 added the familiarity model, v3 the language and era signals.
-       * Rather than dropping existing
-       * libraries, the fingerprint is rebuilt from the stored swipes —
-       * every swipe carries a title snapshot, so it can be replayed.
+       * v4 replaced the hashed taste vector with named facet counters.
+       *
+       * No library is ever dropped on an upgrade: every swipe carries a
+       * snapshot of the title it was made on, so the whole history is simply
+       * replayed through the new model. A user who swiped for an hour keeps
+       * every bit of that hour — and gets it back interpreted by an engine
+       * that needs far fewer examples to act on it.
        */
       migrate: (persisted: unknown) => {
         const state = persisted as Partial<DhawqState> | undefined;
@@ -174,11 +236,9 @@ export const useDhawq = create<DhawqState>()(
         for (const id of order) {
           const sw = swipes[id];
           const title = sw?.title ?? getLocalTitle(id);
-          if (sw && title) {
-            profile = applySwipe(profile, vectorOf(title), sw.action, metaOf(title));
-          }
+          if (sw && title) profile = applySwipe(profile, title, vectorOf(title), sw.action);
         }
-        return { ...state, profile } as DhawqState;
+        return { ...state, profile, seed: state.seed ?? makeSeed() } as DhawqState;
       },
       /** guard against partially-shaped profiles from any older build */
       merge: (persisted, current) => {
@@ -186,6 +246,7 @@ export const useDhawq = create<DhawqState>()(
         return {
           ...current,
           ...state,
+          seed: state.seed ?? current.seed,
           profile: normalizeProfile(state.profile),
         };
       },

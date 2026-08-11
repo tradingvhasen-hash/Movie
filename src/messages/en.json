@@ -108,6 +108,7 @@
     "swipes": "swipes"
   },
   "common": {
+    "delete": "Delete",
     "cancel": "Cancel",
     "save": "Save",
     "close": "Close",

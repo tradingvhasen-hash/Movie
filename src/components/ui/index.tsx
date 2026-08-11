@@ -1,12 +1,12 @@
 "use client";
 
 /**
- * Thin React wrappers over the Uiverse element CSS classes in globals.css.
- * Each component keeps its source element's structure and animation intact.
+ * Thin React wrappers over the element CSS classes in globals.css.
+ * Interactive elements keep their Uiverse source animations.
  */
 import { useEffect, useRef, useState } from "react";
 
-/* ── neumorphic push button (Uiverse.io by ke1221) ── */
+/* ── push button (Uiverse.io by ke1221) ── */
 export function NeuButton({
   children,
   round = false,
@@ -133,172 +133,6 @@ export function HeartButton({
           <polygon points="90,50 80,50"></polygon>
           <polygon points="80,80 70,70"></polygon>
         </svg>
-      </div>
-    </div>
-  );
-}
-
-/* ── input + glowing action button (Uiverse.io by Smit-Prajapati) ── */
-export function ComboInput({
-  buttonLabel,
-  onAction,
-  className = "",
-  ...inputProps
-}: React.InputHTMLAttributes<HTMLInputElement> & {
-  buttonLabel: React.ReactNode;
-  onAction: () => void;
-  className?: string;
-}) {
-  return (
-    <div className={`combo-input ${className}`}>
-      <input
-        {...inputProps}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") onAction();
-          inputProps.onKeyDown?.(e);
-        }}
-      />
-      <button type="button" className="combo-btn" onClick={onAction}>
-        {buttonLabel}
-      </button>
-    </div>
-  );
-}
-
-/* ── floating-label input (Uiverse.io by alexruix) ── */
-export function FloatInput({
-  label,
-  className = "",
-  ...inputProps
-}: React.InputHTMLAttributes<HTMLInputElement> & { label: string }) {
-  return (
-    <div className={`float-group ${className}`}>
-      <input required autoComplete="off" {...inputProps} className="float-input" />
-      <label className="float-label">{label}</label>
-    </div>
-  );
-}
-
-/* ── neumorphic toggle (Uiverse.io by mobinkakei) ── */
-export function NeuToggle({
-  checked,
-  onChange,
-  label,
-}: {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  label?: string;
-}) {
-  return (
-    <label className="neu-toggle-label" title={label}>
-      <div className="neu-toggle">
-        <input
-          className="neu-toggle-state"
-          type="checkbox"
-          checked={checked}
-          onChange={(e) => onChange(e.target.checked)}
-          aria-label={label}
-        />
-        <div className="neu-toggle-indicator"></div>
-      </div>
-    </label>
-  );
-}
-
-/* ── burger ↔ X (Uiverse.io by Cevorob) ── */
-export function Burger({
-  open,
-  onToggle,
-  label,
-}: {
-  open: boolean;
-  onToggle: (v: boolean) => void;
-  label?: string;
-}) {
-  return (
-    <label className="burger" aria-label={label}>
-      <input type="checkbox" checked={open} onChange={(e) => onToggle(e.target.checked)} />
-      <span></span>
-      <span></span>
-      <span></span>
-    </label>
-  );
-}
-
-/* ── animated checkbox (Uiverse.io by MattiaCode-IT) ── */
-export function FancyCheckbox({
-  id,
-  checked,
-  onChange,
-  children,
-}: {
-  id: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="select-none">
-      <input
-        type="checkbox"
-        id={id}
-        className="fancy-check-input"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-      />
-      <label htmlFor={id} className="fancy-check-label">
-        <div className="fancy-check-box">
-          <div className="fancy-check-fill"></div>
-          <div className="fancy-check-mark">
-            <svg viewBox="0 0 24 24" className="fancy-check-icon">
-              <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"></path>
-            </svg>
-          </div>
-          <div className="fancy-check-ripple"></div>
-        </div>
-        <span>{children}</span>
-      </label>
-    </div>
-  );
-}
-
-/* ── three-dots menu (part of Uiverse.io stat-card by code-town3) ── */
-export function DotsMenu({
-  id,
-  items,
-}: {
-  id: string;
-  items: { label: string; onClick: () => void; danger?: boolean }[];
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="menu-wrapper">
-      <input
-        className="menu-toggle"
-        id={id}
-        type="checkbox"
-        checked={open}
-        onChange={(e) => setOpen(e.target.checked)}
-      />
-      <label className="menu-dots" htmlFor={id}>
-        <span></span>
-        <span></span>
-        <span></span>
-      </label>
-      <div className="menu-select">
-        {items.map((item) => (
-          <button
-            key={item.label}
-            type="button"
-            className={item.danger ? "menu-danger" : ""}
-            onClick={() => {
-              setOpen(false);
-              item.onClick();
-            }}
-          >
-            {item.label}
-          </button>
-        ))}
       </div>
     </div>
   );

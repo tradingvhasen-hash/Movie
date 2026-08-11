@@ -1,21 +1,13 @@
 import { getRequestConfig } from "next-intl/server";
-import { cookies } from "next/headers";
 
 export const LOCALES = ["ar", "en"] as const;
 export type Locale = (typeof LOCALES)[number];
-export const DEFAULT_LOCALE: Locale = "ar";
+/* the product is English-only for now (user decision); the ar catalog and
+   i18n plumbing stay in place for a future re-enable */
+export const DEFAULT_LOCALE: Locale = "en";
 
 export default getRequestConfig(async () => {
-  let locale: Locale = DEFAULT_LOCALE;
-
-  // static export (GitHub Pages demo) has no request cookies; the client
-  // LocaleProvider applies the user's stored choice after hydration
-  if (process.env.STATIC_EXPORT !== "1") {
-    const store = await cookies();
-    const cookieLocale = store.get("locale")?.value;
-    if (LOCALES.includes(cookieLocale as Locale)) locale = cookieLocale as Locale;
-  }
-
+  const locale: Locale = DEFAULT_LOCALE;
   return {
     locale,
     messages: (await import(`../messages/${locale}.json`)).default,

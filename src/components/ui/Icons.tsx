@@ -137,6 +137,12 @@ export const PopcornIcon = (p: IconProps) => (
   </svg>
 );
 
+export const ThumbsDownIcon = (p: IconProps & { filled?: boolean }) => (
+  <svg {...base(p)} fill={p.filled ? "currentColor" : "none"}>
+    <path d="M17 14V4M7.1 20.3l3.4-6.3H4.8a1.8 1.8 0 01-1.7-2.4l1.9-6A1.8 1.8 0 016.7 4.4H17a2 2 0 012 2V12a2 2 0 01-2 2h-2.6l-3.6 6.8a1.6 1.6 0 01-2.9-.9l.2-.6z" />
+  </svg>
+);
+
 export const LoginIcon = (p: IconProps) => (
   <svg {...base(p)}>
     <path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4" />

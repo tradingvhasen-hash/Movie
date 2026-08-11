@@ -4,10 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useTranslations } from "next-intl";
 import SwipeCard from "./SwipeCard";
+import SwipeBurst from "./SwipeBurst";
 import { useDeck } from "@/lib/useDeck";
 import { useDhawq } from "@/lib/store";
 import { GlowButton, HeartButton, NeuButton } from "./ui";
-import { ArrowUpIcon, ClapperIcon, PopcornIcon, UndoIcon, XIcon } from "./ui/Icons";
+import { ArrowUpIcon, ClapperIcon, PopcornIcon, ThumbsDownIcon, UndoIcon } from "./ui/Icons";
 import type { SwipeAction } from "@/lib/types";
 
 export default function SwipeDeck() {
@@ -28,11 +29,15 @@ export default function SwipeDeck() {
 
   const [forcedExit, setForcedExit] = useState<SwipeAction | null>(null);
   const [hintChecks, setHintChecks] = useState([false, false, false]);
+  const [burst, setBurst] = useState<{ id: number; action: SwipeAction } | null>(null);
 
   const handleSwipe = useCallback(
     (action: SwipeAction) => {
       setForcedExit(null);
       swipeTop(action);
+      // celebration matching the choice
+      setBurst({ id: Date.now(), action });
+      setTimeout(() => setBurst((b) => (b && Date.now() - b.id >= 950 ? null : b)), 1000);
     },
     [swipeTop]
   );
@@ -113,7 +118,7 @@ export default function SwipeDeck() {
             exit={{ opacity: 0, height: 0 }}
             className="overflow-hidden"
           >
-            <div className="neu-card-sm mb-3 p-3">
+            <div className="soft-card-sm mb-3 p-3">
               <div className="mb-1.5 flex items-center justify-between text-xs">
                 <span className="font-semibold text-accent">
                   {t("onboarding.progress")}
@@ -125,9 +130,9 @@ export default function SwipeDeck() {
                   })}
                 </span>
               </div>
-              <div className="neu-inset h-2.5 overflow-hidden rounded-full">
+              <div className="soft-inset h-2.5 overflow-hidden rounded-full">
                 <motion.div
-                  className="h-full rounded-full bg-gradient-to-l from-accent to-accent-deep"
+                  className="h-full rounded-full bg-gradient-to-r from-accent to-accent-soft"
                   animate={{
                     width: `${(calibrationProgress.current / calibrationProgress.total) * 100}%`,
                   }}
@@ -140,8 +145,9 @@ export default function SwipeDeck() {
 
       {/* card stack */}
       <div className="relative mx-auto aspect-[10/15] w-full max-w-sm">
+        <SwipeBurst burst={burst} />
         {queue.length === 0 ? (
-          <div className="neu-card flex h-full flex-col items-center justify-center p-8 text-center">
+          <div className="soft-card flex h-full flex-col items-center justify-center p-8 text-center">
             <PopcornIcon size={48} strokeWidth={1.6} className="text-ink-faint" />
             <h3 className="mt-4 text-xl font-bold">{t("swipe.emptyTitle")}</h3>
             <p className="mt-2 text-sm text-ink-dim">{t("swipe.emptyBody")}</p>
@@ -177,7 +183,7 @@ export default function SwipeDeck() {
           onClick={() => trigger("disliked")}
           className="h-16 w-16 text-ink"
         >
-          <XIcon size={26} strokeWidth={2.6} />
+          <ThumbsDownIcon size={26} strokeWidth={2.2} />
         </NeuButton>
         <NeuButton
           round

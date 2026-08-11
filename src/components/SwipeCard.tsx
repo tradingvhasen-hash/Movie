@@ -9,7 +9,7 @@ import {
 } from "framer-motion";
 import { useLocale, useTranslations } from "next-intl";
 import PosterArt from "./PosterArt";
-import { InfoIcon, StarIcon } from "./ui/Icons";
+import { ArrowUpIcon, HeartIcon, InfoIcon, StarIcon, ThumbsDownIcon } from "./ui/Icons";
 import { genreLabel } from "@/lib/genres";
 import type { SwipeAction, Title } from "@/lib/types";
 
@@ -94,31 +94,33 @@ export default function SwipeCard({ title, index, onSwipe, forcedExit }: SwipeCa
       onDragEnd={handleDragEnd}
       whileDrag={{ scale: 1.02 }}
     >
-      {/* frame: neumorphic card — Uiverse.io by Yaseen549 */}
-      <div className="neu-card relative h-full w-full overflow-hidden">
+      <div className="soft-card relative h-full w-full overflow-hidden">
         <PosterArt title={title} />
 
         {/* bottom info gradient */}
         <div className="card-sheen absolute inset-0" />
 
-        {/* direction stamps — monochrome + single accent */}
+        {/* direction stamps — icons instead of words */}
         <motion.div
           style={{ opacity: likeOpacity }}
-          className="absolute start-5 top-6 rotate-[-8deg] rounded-xl border-4 border-accent px-3 py-1 text-2xl font-extrabold uppercase tracking-wider text-accent"
+          className="absolute start-5 top-6 rotate-[-8deg] rounded-2xl border-4 border-accent bg-white/85 p-3 text-accent backdrop-blur"
+          aria-label={t("swipe.liked")}
         >
-          {t("swipe.liked")}
+          <HeartIcon size={40} filled />
         </motion.div>
         <motion.div
           style={{ opacity: nopeOpacity }}
-          className="absolute end-5 top-6 rotate-[8deg] rounded-xl border-4 border-ink/80 px-3 py-1 text-2xl font-extrabold uppercase tracking-wider text-ink/80"
+          className="absolute end-5 top-6 rotate-[8deg] rounded-2xl border-4 border-white/90 bg-black/30 p-3 text-white backdrop-blur"
+          aria-label={t("swipe.disliked")}
         >
-          {t("swipe.disliked")}
+          <ThumbsDownIcon size={40} filled />
         </motion.div>
         <motion.div
           style={{ opacity: skipOpacity }}
-          className="absolute inset-x-0 bottom-24 mx-auto w-fit rounded-xl border-4 border-ink-dim px-3 py-1 text-2xl font-extrabold uppercase tracking-wider text-ink-dim"
+          className="absolute inset-x-0 bottom-24 mx-auto w-fit rounded-2xl border-4 border-white/90 bg-black/30 p-3 text-white backdrop-blur"
+          aria-label={t("swipe.notSeen")}
         >
-          {t("swipe.notSeen")}
+          <ArrowUpIcon size={40} strokeWidth={2.6} />
         </motion.div>
 
         {/* info block */}

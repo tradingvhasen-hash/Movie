@@ -16,7 +16,7 @@ export default async function ShareGrid({ titles }: { titles: SharedTitle[] }) {
   return (
     <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
       {titles.map((title) => (
-        <div key={title.id} className="neu-card-sm overflow-hidden">
+        <div key={title.id} className="soft-card-sm overflow-hidden">
           <div className="flex aspect-[10/14] w-full items-center justify-center rounded-t-[18px] bg-surface-2">
             {title.poster_path ? (
               // eslint-disable-next-line @next/next/no-img-element

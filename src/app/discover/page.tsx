@@ -4,8 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import TitleTile from "@/components/TitleTile";
-import { ComboInput, HeartButton, NeuButton, RichTooltip } from "@/components/ui";
-import { HeartIcon, InfoIcon, SparklesIcon, XIcon } from "@/components/ui/Icons";
+import { HeartButton, NeuButton, RichTooltip } from "@/components/ui";
+import {
+  HeartIcon,
+  InfoIcon,
+  SearchIcon,
+  SparklesIcon,
+  ThumbsDownIcon,
+} from "@/components/ui/Icons";
 import { getLocalCatalog, getLocalTitle, vectorOf } from "@/lib/catalog";
 import { recommend } from "@/lib/engine/recommend";
 import { useDhawq } from "@/lib/store";
@@ -65,12 +71,14 @@ export default function DiscoverPage() {
   return (
     <div className="px-5">
       <div className="flex items-center gap-2">
-        <h1 className="text-2xl font-bold">{t("discover.title")}</h1>
-        {/* rich tooltip — Uiverse.io by themrsami */}
+        <h1 className="text-2xl font-bold tracking-tight">{t("discover.title")}</h1>
         <RichTooltip
           title={t("discover.howTitle")}
           trigger={
-            <button className="mt-1 text-ink-faint transition hover:text-ink" aria-label={t("discover.howTitle")}>
+            <button
+              className="mt-1 text-ink-faint transition hover:text-ink"
+              aria-label={t("discover.howTitle")}
+            >
               <InfoIcon size={17} />
             </button>
           }
@@ -78,17 +86,19 @@ export default function DiscoverPage() {
           {t("discover.howBody")}
         </RichTooltip>
       </div>
-      <p className="mt-1 text-sm text-ink-dim">{t("discover.subtitle")}</p>
 
-      {/* search — combo input (Uiverse.io by Smit-Prajapati) */}
-      <ComboInput
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder={t("discover.searchAll")}
-        buttonLabel={t("discover.searchBtn")}
-        onAction={() => {}}
-        className="mt-4"
-      />
+      {/* live search — no button */}
+      <div className="relative mt-4">
+        <span className="pointer-events-none absolute inset-y-0 start-4 flex items-center text-ink-faint">
+          <SearchIcon size={17} />
+        </span>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={t("discover.searchAll")}
+          className="neu-input ps-11 text-sm"
+        />
+      </div>
 
       {query.trim() ? (
         <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
@@ -101,22 +111,22 @@ export default function DiscoverPage() {
                 badge={
                   existing && existing.action !== "not_seen" ? (
                     <span
-                      className={`flex h-6 w-6 items-center justify-center rounded-full backdrop-blur ${
+                      className={`flex h-6 w-6 items-center justify-center rounded-full shadow-sm ${
                         existing.action === "liked"
-                          ? "bg-accent text-bg"
-                          : "bg-black/60 text-ink-dim"
+                          ? "bg-accent text-white"
+                          : "bg-white/90 text-ink-dim"
                       }`}
                     >
                       {existing.action === "liked" ? (
                         <HeartIcon size={13} filled />
                       ) : (
-                        <XIcon size={13} strokeWidth={3} />
+                        <ThumbsDownIcon size={12} filled />
                       )}
                     </span>
                   ) : undefined
                 }
                 footer={
-                  <div className="mt-1 flex items-center justify-center gap-2" dir="ltr">
+                  <div className="mt-1.5 flex items-center justify-center gap-2" dir="ltr">
                     <NeuButton
                       round
                       aria-label={t("swipe.disliked")}
@@ -124,9 +134,8 @@ export default function DiscoverPage() {
                       onClick={() => doSwipe(title, "disliked")}
                       className="h-9 w-9 text-ink-dim"
                     >
-                      <XIcon size={15} strokeWidth={2.6} />
+                      <ThumbsDownIcon size={15} strokeWidth={2.2} />
                     </NeuButton>
-                    {/* bursting heart — Uiverse.io by catraco */}
                     <HeartButton
                       onLike={() => doSwipe(title, "liked")}
                       size={38}
@@ -151,7 +160,7 @@ export default function DiscoverPage() {
       ) : (
         <>
           {ratedCount < 12 && (
-            <p className="neu-inset mt-4 px-4 py-2.5 text-xs font-medium text-accent">
+            <p className="soft-inset mt-4 px-4 py-2.5 text-xs font-medium text-accent">
               {t("discover.needMore")}
             </p>
           )}
@@ -163,13 +172,13 @@ export default function DiscoverPage() {
                   key={rec.title.id}
                   title={rec.title}
                   badge={
-                    <span className="rounded-full bg-accent px-2 py-0.5 text-[10px] font-bold text-bg">
+                    <span className="rounded-full bg-accent/95 px-2.5 py-1 text-[10px] font-bold text-white shadow-sm">
                       {t("discover.match", { percent: Math.round(rec.score * 100) })}
                     </span>
                   }
                   footer={
                     because ? (
-                      <div className="mt-1.5 truncate text-[10px] text-ink-faint">
+                      <div className="mt-1 truncate text-[10px] text-ink-faint">
                         {t("discover.becauseYouLiked")}: {because.title[locale]}
                       </div>
                     ) : undefined

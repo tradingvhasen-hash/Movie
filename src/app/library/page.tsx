@@ -2,14 +2,11 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useLocale, useTranslations } from "next-intl";
+import { useTranslations } from "next-intl";
 import TitleTile from "@/components/TitleTile";
-import AddToListSheet from "@/components/AddToListSheet";
 import { DeleteButton, NeuButton } from "@/components/ui";
-import LibraryStatCard from "@/components/ui/StatCard";
-import { FilmIcon, HeartIcon, XIcon } from "@/components/ui/Icons";
+import { FilmIcon, HeartIcon, ThumbsDownIcon } from "@/components/ui/Icons";
 import { getLocalTitle } from "@/lib/catalog";
-import { genreLabel } from "@/lib/genres";
 import { useDhawq } from "@/lib/store";
 import type { Swipe } from "@/lib/types";
 
@@ -17,13 +14,12 @@ type Filter = "all" | "liked" | "disliked";
 
 export default function LibraryPage() {
   const t = useTranslations();
-  const locale = useLocale() as "ar" | "en";
   const swipes = useDhawq((s) => s.swipes);
   const removeSwipe = useDhawq((s) => s.removeSwipe);
 
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
-  const [listTargetId, setListTargetId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const watched = useMemo(
     () =>
@@ -50,53 +46,12 @@ export default function LibraryPage() {
     return rows;
   }, [watched, filter, query]);
 
-  const topGenres = useMemo(() => {
-    const genreCounts = new Map<string, number>();
-    for (const sw of watched) {
-      const title = sw.title ?? getLocalTitle(sw.titleId);
-      for (const g of title?.genres ?? []) {
-        genreCounts.set(g, (genreCounts.get(g) ?? 0) + 1);
-      }
-    }
-    return [...genreCounts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
-      .map(([g]) => g);
-  }, [watched]);
-
   return (
     <div className="px-5">
-      <h1 className="text-2xl font-bold">{t("library.title")}</h1>
+      <h1 className="text-2xl font-bold tracking-tight">{t("library.title")}</h1>
       <p className="mt-1 text-sm text-ink-dim">{t("library.subtitle")}</p>
 
-      {/* stat card with line chart — Uiverse.io by code-town3 */}
-      {watched.length > 0 && (
-        <div className="mt-4">
-          <LibraryStatCard
-            swipes={watched}
-            title={t("lists.growthTitle")}
-            legendText={t("lists.growthLegend")}
-            legendSuffix={t("lists.growthSuffix")}
-          />
-          {topGenres.length > 0 && (
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <span className="text-xs font-semibold text-ink-faint">
-                {t("library.topGenres")}:
-              </span>
-              {topGenres.map((g) => (
-                <span
-                  key={g}
-                  className="neu-inset px-2.5 py-1 text-xs font-medium text-ink-dim"
-                >
-                  {genreLabel(g, locale)}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* filters — neu push buttons (ke1221), inset when active */}
+      {/* filters — push buttons (ke1221), inset when active */}
       <div className="mt-5 flex items-center gap-3">
         {(["all", "liked", "disliked"] as Filter[]).map((f) => (
           <NeuButton
@@ -110,7 +65,6 @@ export default function LibraryPage() {
         ))}
       </div>
 
-      {/* search — neumorphic input (lenfear23) */}
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
@@ -134,15 +88,17 @@ export default function LibraryPage() {
             <LibraryTile
               key={sw.titleId}
               swipe={sw}
-              onAddToList={() => setListTargetId(sw.titleId)}
-              onRemove={() => removeSwipe(sw.titleId)}
+              selected={selectedId === sw.titleId}
+              onSelect={() =>
+                setSelectedId(selectedId === sw.titleId ? null : sw.titleId)
+              }
+              onRemove={() => {
+                removeSwipe(sw.titleId);
+                setSelectedId(null);
+              }}
             />
           ))}
         </div>
-      )}
-
-      {listTargetId && (
-        <AddToListSheet titleId={listTargetId} onClose={() => setListTargetId(null)} />
       )}
     </div>
   );
@@ -150,11 +106,13 @@ export default function LibraryPage() {
 
 function LibraryTile({
   swipe,
-  onAddToList,
+  selected,
+  onSelect,
   onRemove,
 }: {
   swipe: Swipe;
-  onAddToList: () => void;
+  selected: boolean;
+  onSelect: () => void;
   onRemove: () => void;
 }) {
   const t = useTranslations();
@@ -164,29 +122,41 @@ function LibraryTile({
   return (
     <TitleTile
       title={title}
+      onClick={onSelect}
       badge={
         <span
-          className={`flex h-6 w-6 items-center justify-center rounded-full backdrop-blur ${
-            swipe.action === "liked"
-              ? "bg-accent text-bg"
-              : "bg-black/60 text-ink-dim"
+          className={`flex h-6 w-6 items-center justify-center rounded-full shadow-sm ${
+            swipe.action === "liked" ? "bg-accent text-white" : "bg-white/90 text-ink-dim"
           }`}
         >
           {swipe.action === "liked" ? (
             <HeartIcon size={13} filled />
           ) : (
-            <XIcon size={13} strokeWidth={3} />
+            <ThumbsDownIcon size={12} filled />
           )}
         </span>
       }
-      footer={
-        <div className="mt-2 flex items-center gap-2">
-          <NeuButton onClick={onAddToList} className="flex-1 px-2 py-1.5 text-[11px]">
-            {t("library.addToList")}
-          </NeuButton>
-          {/* expanding delete — Uiverse.io by vinodjangid07 */}
-          <DeleteButton label={t("library.removeSwipe")} onDelete={onRemove} className="shrink-0 scale-90" />
-        </div>
+      overlay={
+        selected ? (
+          <div
+            className="absolute inset-0 z-20 flex items-center justify-center rounded-[20px] bg-white/70 backdrop-blur-[2px]"
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect();
+            }}
+          >
+            <div
+              className="rich-tooltip-panel flex flex-col items-center gap-2 !p-3"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <span className="text-xs font-semibold text-ink-dim">
+                {t("library.removeSwipe")}
+              </span>
+              {/* expanding delete — Uiverse.io by vinodjangid07 */}
+              <DeleteButton label={t("common.delete")} onDelete={onRemove} />
+            </div>
+          </div>
+        ) : undefined
       }
     />
   );

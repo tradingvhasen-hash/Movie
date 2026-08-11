@@ -52,23 +52,32 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
 بهذا يتفعّل: تسجيل الدخول (رابط بريدي)، مزامنة المكتبة، روابط المشاركة العامة
 (`/l/…` للقوائم و `/u/…` للمكتبات).
 
-### 2) الكتالوج الكامل — TMDB (مجاني)
+### 2) توسيع الكتالوج المدمج — TMDB (مجاني)
 
-1. سجّل في [themoviedb.org](https://www.themoviedb.org) → **Settings → API** → انسخ API Key
-2. شغّل سكربت البذر (مرة واحدة، ~30–60 دقيقة لكتالوج كامل):
+الكتالوج المرفق (`public/catalog.json`) مبنيّ مسبقاً ويعمل بلا مفاتيح. لإعادة بنائه أو توسيعه:
+
+1. سجّل في [themoviedb.org](https://www.themoviedb.org) → **Settings → API** → انسخ API Key (v3)
+2. شغّل:
 
 ```bash
-TMDB_API_KEY=... SUPABASE_URL=https://xxxx.supabase.co SUPABASE_SERVICE_ROLE_KEY=... \
-  npm run seed                 # ~3-4 آلاف عمل (أفلام + مسلسلات، عربي + إنجليزي)
-
-npm run seed:dry               # تجربة سريعة بدون رفع: يكتب seed-output.json
+TMDB_API_KEY=... npm run catalog -- --count 5000
 ```
 
-> `SUPABASE_SERVICE_ROLE_KEY` سرّي — يُستخدم في السكربت محلياً فقط ولا يوضع أبداً في `NEXT_PUBLIC_*`.
+يجلب الأعمال المعروضة فعلاً (يستبعد ما لم يُعرض بعد، وبرامج الواقع والأخبار)، ويكتب ملفاً مضغوطاً
+بصيغة صفوف موضعية. **التمثيلات الرقمية لا تُخزَّن** — تُحسب في المتصفح عند التحميل (~70 ملّي ثانية
+لـ 5 آلاف عمل)، مما يقلّص حجم التنزيل عدة أضعاف.
 
-بعد البذر يتحول السحب والاكتشاف تلقائياً إلى الكتالوج الكامل بالبوسترات الحقيقية.
+### 3) الكتالوج السحابي — Supabase (لعشرات الآلاف من الأعمال)
 
-### 3) الإشارة التعاونية (اختياري)
+```bash
+TMDB_API_KEY=... SUPABASE_URL=https://xxxx.supabase.co SUPABASE_SERVICE_ROLE_KEY=... npm run seed
+```
+
+> `SUPABASE_SERVICE_ROLE_KEY` سرّي — يُستخدم محلياً فقط ولا يوضع أبداً في `NEXT_PUBLIC_*`.
+
+بعد البذر يقرأ السحب والاكتشاف من القاعدة بدل الملف المدمج.
+
+### 4) الإشارة التعاونية (اختياري)
 
 فعّل امتداد **pg_cron** من لوحة Supabase ثم نفّذ:
 
@@ -76,7 +85,7 @@ npm run seed:dry               # تجربة سريعة بدون رفع: يكتب
 select cron.schedule('refresh-cooc', '30 * * * *', 'select public.refresh_co_occurrence()');
 ```
 
-### 4) النشر — Vercel (مجاني)
+### 5) النشر — Vercel (مجاني)
 
 اربط المستودع في [vercel.com](https://vercel.com) وأضف متغيري `NEXT_PUBLIC_SUPABASE_*` في
 **Project → Settings → Environment Variables**. لا شيء آخر.

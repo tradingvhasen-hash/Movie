@@ -153,7 +153,9 @@ export function calibrationDeck(
   const base = anchors.length > 0 ? anchors : pool.filter((c) => !excludeIds.has(c.title.id));
   if (base.length === 0) return [];
 
-  const sorted = [...base].sort((a, b) => b.title.popularity - a.title.popularity);
+  // vote count, not popularity: we want titles many people have actually
+  // seen, not whatever is trending this week
+  const sorted = [...base].sort((a, b) => b.title.voteCount - a.title.voteCount);
   const picked: CandidateItem[] = [sorted[0]];
   const rest = sorted.slice(1);
 
@@ -166,8 +168,8 @@ export function calibrationDeck(
         const d = 1 - cosine(rest[i].vector, p.vector);
         if (d < minDist) minDist = d;
       }
-      // favour distant AND popular anchors (popular → user likely has seen it)
-      const val = minDist + Math.log10(1 + rest[i].title.popularity) * 0.05;
+      // favour distant AND widely-seen anchors
+      const val = minDist + Math.log10(1 + rest[i].title.voteCount) * 0.04;
       if (val > bestDist) {
         bestDist = val;
         bestIdx = i;

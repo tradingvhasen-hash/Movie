@@ -56,14 +56,40 @@ export default function SwipeDeck() {
 
   if (!hydrated) {
     return (
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.3 }}
-        className="flex h-[60dvh] items-center justify-center text-ink-dim"
+      <div
+        className="mx-auto flex w-full max-w-md flex-col items-center overflow-hidden px-4 pt-4"
+        style={{ height: "calc(100dvh - 74px - env(safe-area-inset-bottom))" }}
       >
-        {t("common.loading")}
-      </motion.div>
+        <div className="mb-2 h-8 w-24 shrink-0 self-start rounded-lg bg-surface-2" />
+        <div className="relative min-h-0 w-full flex-1">
+          <div className="relative mx-auto h-full w-fit">
+            <motion.div
+              className="soft-card h-full max-w-[80vw] overflow-hidden"
+              style={{ aspectRatio: "10 / 14.6" }}
+              animate={{ opacity: [0.55, 1, 0.55] }}
+              transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+            >
+              <div className="h-full w-full bg-gradient-to-br from-surface-2 to-line" />
+            </motion.div>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center justify-center gap-4 py-3">
+          {[56, 44, 44, 56].map((size, i) => (
+            <motion.div
+              key={i}
+              className="rounded-full bg-surface-2"
+              style={{ width: size, height: size }}
+              animate={{ opacity: [0.5, 1, 0.5] }}
+              transition={{
+                duration: 1.6,
+                repeat: Infinity,
+                ease: "easeInOut",
+                delay: i * 0.12,
+              }}
+            />
+          ))}
+        </div>
+      </div>
     );
   }
 

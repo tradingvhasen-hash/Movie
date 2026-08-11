@@ -1,28 +1,66 @@
 import { SAMPLE_TITLES } from "@/lib/data/sample-titles";
+import { decodeCatalog, type EncodedCatalog } from "@/lib/data/catalog-codec";
 import { featurize } from "@/lib/engine/features";
 import type { CandidateItem } from "@/lib/engine/recommend";
 import type { Title } from "@/lib/types";
 
 /**
- * Catalog access. In local/demo mode this is the bundled sample set with
- * vectors computed on first use. Once Supabase is seeded, the swipe deck and
- * discover pages transparently pull the full TMDB catalog instead (see
- * lib/supabase/catalog-remote.ts).
+ * Catalog access.
+ *
+ * The full TMDB catalog ships as a static asset (public/catalog.json) and is
+ * fetched once, then kept in memory. Feature vectors are derived here rather
+ * than shipped: featurize is deterministic, so computing ~5k vectors locally
+ * costs a fraction of a second and keeps the download several times smaller.
+ *
+ * The small bundled sample set is the fallback before the fetch resolves (and
+ * if it ever fails), so the app is never empty.
  */
-let cached: CandidateItem[] | null = null;
-let byId: Map<string, CandidateItem> | null = null;
+let items: CandidateItem[] | null = null;
+let byId = new Map<string, CandidateItem>();
+let loadPromise: Promise<CandidateItem[]> | null = null;
+
+function build(titles: Title[]): CandidateItem[] {
+  const built = titles.map((title) => ({ title, vector: featurize(title) }));
+  items = built;
+  byId = new Map(built.map((c) => [c.title.id, c]));
+  return built;
+}
+
+/** sample set — available synchronously, used until the catalog arrives */
+function fallback(): CandidateItem[] {
+  if (!items) build(SAMPLE_TITLES);
+  return items!;
+}
+
+function assetUrl(path: string): string {
+  const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+  return `${base}${path}`;
+}
+
+/** Fetches and installs the full catalog. Safe to call repeatedly. */
+export function loadCatalog(): Promise<CandidateItem[]> {
+  if (loadPromise) return loadPromise;
+  loadPromise = (async () => {
+    try {
+      const res = await fetch(assetUrl("/catalog.json"), { cache: "force-cache" });
+      if (!res.ok) throw new Error(`catalog ${res.status}`);
+      const data = (await res.json()) as EncodedCatalog;
+      if (!data?.t?.length) throw new Error("empty catalog");
+      return build(decodeCatalog(data));
+    } catch {
+      return fallback();
+    }
+  })();
+  return loadPromise;
+}
 
 export function getLocalCatalog(): CandidateItem[] {
-  if (!cached) {
-    cached = SAMPLE_TITLES.map((title) => ({ title, vector: featurize(title) }));
-    byId = new Map(cached.map((c) => [c.title.id, c]));
-  }
-  return cached;
+  return items ?? fallback();
 }
 
 export function getLocalItem(id: string): CandidateItem | undefined {
   getLocalCatalog();
-  return byId!.get(id);
+  return byId.get(id);
 }
 
 export function getLocalTitle(id: string): Title | undefined {
@@ -31,7 +69,7 @@ export function getLocalTitle(id: string): Title | undefined {
 
 /**
  * Vectors are a pure function of a title's metadata (same math on client,
- * server and seed script), so any Title snapshot can be vectorized on demand.
+ * server and build script), so any Title snapshot can be vectorized on demand.
  */
 const vectorCache = new Map<string, Float32Array>();
 

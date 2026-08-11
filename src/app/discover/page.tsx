@@ -12,7 +12,7 @@ import {
   SparklesIcon,
   ThumbsDownIcon,
 } from "@/components/ui/Icons";
-import { getLocalCatalog, getLocalTitle, vectorOf } from "@/lib/catalog";
+import { getLocalCatalog, getLocalTitle, loadCatalog, vectorOf } from "@/lib/catalog";
 import { recommend } from "@/lib/engine/recommend";
 import { FADE_UP, SECTION, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
 import { useDhawq } from "@/lib/store";
@@ -27,7 +27,15 @@ export default function DiscoverPage() {
   const [hydrated, setHydrated] = useState(false);
   const [query, setQuery] = useState("");
 
-  useEffect(() => setHydrated(true), []);
+  useEffect(() => {
+    let cancelled = false;
+    void loadCatalog().then(() => {
+      if (!cancelled) setHydrated(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const recs: Recommendation[] = useMemo(() => {
     if (!hydrated) return [];

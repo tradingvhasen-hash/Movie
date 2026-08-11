@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getLocalCatalog, getLocalItem, vectorOf } from "@/lib/catalog";
+import { getLocalCatalog, getLocalItem, loadCatalog, vectorOf } from "@/lib/catalog";
 import { calibrationDeck, recommend } from "@/lib/engine/recommend";
 import { COLD_START_TARGET, isCalibrating } from "@/lib/engine/taste";
 import { useDhawq } from "@/lib/store";
@@ -101,13 +101,17 @@ export function useDeck() {
     appendFresh(computeLocalBatch(queuedIds));
   }, [appendFresh]);
 
-  // Initial fill after store hydration (zustand/persist is async on first paint)
+  // wait for the catalog fetch and the persisted store before the first fill
   useEffect(() => {
-    const t = setTimeout(() => {
+    let cancelled = false;
+    void loadCatalog().then(() => {
+      if (cancelled) return;
       setHydrated(true);
       refill();
-    }, 0);
-    return () => clearTimeout(t);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [refill]);
 
   const swipeTop = useCallback(

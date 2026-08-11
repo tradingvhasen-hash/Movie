@@ -6,6 +6,7 @@ import type { Swipe, SwipeAction, Title, UserList } from "@/lib/types";
 import {
   applySwipe,
   emptyProfile,
+  normalizeProfile,
   revertSwipe,
   type TasteProfile,
 } from "@/lib/engine/taste";
@@ -144,7 +145,37 @@ export const useDhawq = create<DhawqState>()(
           lists: s.lists.map((l) => (l.id === listId ? { ...l, isPublic } : l)),
         })),
     }),
-    { name: "dhawq-store", version: 1 }
+    {
+      name: "dhawq-store",
+      version: 2,
+      /**
+       * v2 added the familiarity model. Rather than dropping existing
+       * libraries, the fingerprint is rebuilt from the stored swipes —
+       * every swipe carries a title snapshot, so it can be replayed.
+       */
+      migrate: (persisted: unknown) => {
+        const state = persisted as Partial<DhawqState> | undefined;
+        if (!state) return persisted as DhawqState;
+        const order = state.swipeOrder ?? [];
+        const swipes = state.swipes ?? {};
+        let profile = emptyProfile();
+        for (const id of order) {
+          const sw = swipes[id];
+          const title = sw?.title ?? getLocalTitle(id);
+          if (sw && title) profile = applySwipe(profile, vectorOf(title), sw.action);
+        }
+        return { ...state, profile } as DhawqState;
+      },
+      /** guard against partially-shaped profiles from any older build */
+      merge: (persisted, current) => {
+        const state = (persisted ?? {}) as Partial<DhawqState>;
+        return {
+          ...current,
+          ...state,
+          profile: normalizeProfile(state.profile),
+        };
+      },
+    }
   )
 );
 

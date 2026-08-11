@@ -8,7 +8,8 @@ import { useDhawq } from "@/lib/store";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import type { SwipeAction, Title } from "@/lib/types";
 
-const REFILL_AT = 3;
+/** cards kept queued ahead of the user */
+const QUEUE_AHEAD = 6;
 const BATCH = 10;
 
 /** cloud mode: fetch the next batch from the seeded TMDB catalog */
@@ -39,7 +40,7 @@ async function fetchRemoteBatch(count: number): Promise<Title[] | null> {
 }
 
 /** local/demo mode: run the engine over the bundled catalog */
-function computeLocalBatch(excludeExtra: string[]): Title[] {
+function computeLocalBatch(excludeExtra: string[] = []): Title[] {
   const pool = getLocalCatalog();
   const state = useDhawq.getState();
   const exclude = new Set<string>([...Object.keys(state.swipes), ...excludeExtra]);
@@ -80,26 +81,31 @@ export function useDeck() {
   const calibrating = isCalibrating(profile);
   const ratedSwipes = profile.ratedSwipes;
 
-  const appendFresh = useCallback((fresh: Title[]) => {
-    if (fresh.length === 0) return;
-    setQueue((q) => [...q, ...fresh.filter((f) => !q.some((x) => x.id === f.id))]);
-  }, []);
-
+  /**
+   * Rebuild the upcoming cards from the current fingerprint.
+   *
+   * Every swipe changes what should come next, so the queue is regenerated
+   * from scratch rather than topped up: a stale batch computed ten swipes
+   * ago is exactly what makes the deck feel unresponsive. The card on screen
+   * is preserved so it doesn't swap out from under the user's finger.
+   */
   const refill = useCallback(() => {
-    const queuedIds = queueRef.current.map((t) => t.id);
+    const keepTop = queueRef.current.slice(0, 1);
+    const keepIds = keepTop.map((t) => t.id);
+
+    const install = (fresh: Title[]) => {
+      const next = [...keepTop, ...fresh.filter((f) => !keepIds.includes(f.id))];
+      setQueue(next.slice(0, QUEUE_AHEAD + 1));
+    };
+
     if (isSupabaseConfigured()) {
       void fetchRemoteBatch(BATCH).then((remote) => {
-        if (remote && remote.length > 0) {
-          appendFresh(remote.filter((t) => !queuedIds.includes(t.id)));
-        } else {
-          // cloud not seeded yet → bundled catalog
-          appendFresh(computeLocalBatch(queuedIds));
-        }
+        install(remote && remote.length > 0 ? remote : computeLocalBatch(keepIds));
       });
       return;
     }
-    appendFresh(computeLocalBatch(queuedIds));
-  }, [appendFresh]);
+    install(computeLocalBatch(keepIds));
+  }, []);
 
   // wait for the catalog fetch and the persisted store before the first fill
   useEffect(() => {
@@ -119,11 +125,11 @@ export function useDeck() {
       const top = queueRef.current[0];
       if (!top) return;
       doSwipe(top, action);
-      setQueue((q) => q.slice(1));
-      if (queueRef.current.length - 1 <= REFILL_AT) {
-        // let state settle, then refill with the updated profile
-        setTimeout(refill, 50);
-      }
+      const rest = queueRef.current.slice(1);
+      setQueue(rest);
+      queueRef.current = rest;
+      // re-rank immediately against the updated fingerprint
+      setTimeout(refill, 0);
     },
     [doSwipe, refill]
   );
@@ -149,11 +155,16 @@ export function useDeck() {
     [ratedSwipes, calibrating]
   );
 
+  const undoWithRerank = useCallback(() => {
+    undo();
+    setTimeout(refill, 0);
+  }, [undo, refill]);
+
   return {
     queue,
     hydrated,
     swipeTop,
-    undo,
+    undo: undoWithRerank,
     canUndo,
     calibrating,
     calibrationProgress,

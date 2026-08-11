@@ -120,3 +120,15 @@ export function qualityPrior(rating: number, voteCount: number, meanRating = 6.8
   const wr = (voteCount / (voteCount + m)) * rating + (m / (voteCount + m)) * meanRating;
   return Math.max(0, Math.min(1, (wr - 4) / 5.5));
 }
+
+/**
+ * How likely an average person is to have heard of a title, in [0,1].
+ * Vote count is the best available proxy: unlike TMDB "popularity" it
+ * accumulates over a title's whole life rather than spiking on release.
+ * Log-scaled because the difference between 200 and 2,000 ratings matters
+ * far more than between 30,000 and 40,000.
+ */
+export function recognizability(voteCount: number): number {
+  const MAX_LOG = Math.log10(40000);
+  return Math.max(0, Math.min(1, Math.log10(1 + voteCount) / MAX_LOG));
+}

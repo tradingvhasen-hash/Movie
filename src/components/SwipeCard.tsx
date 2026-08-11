@@ -9,6 +9,7 @@ import {
 } from "framer-motion";
 import { useLocale, useTranslations } from "next-intl";
 import PosterArt from "./PosterArt";
+import { InfoIcon, StarIcon } from "./ui/Icons";
 import { genreLabel } from "@/lib/genres";
 import type { SwipeAction, Title } from "@/lib/types";
 
@@ -93,28 +94,29 @@ export default function SwipeCard({ title, index, onSwipe, forcedExit }: SwipeCa
       onDragEnd={handleDragEnd}
       whileDrag={{ scale: 1.02 }}
     >
-      <div className="relative h-full w-full overflow-hidden rounded-card border border-white/10 bg-surface shadow-[0_24px_60px_-12px_rgba(0,0,0,0.7)]">
+      {/* frame: neumorphic card — Uiverse.io by Yaseen549 */}
+      <div className="neu-card relative h-full w-full overflow-hidden">
         <PosterArt title={title} />
 
         {/* bottom info gradient */}
         <div className="card-sheen absolute inset-0" />
 
-        {/* direction stamps */}
+        {/* direction stamps — monochrome + single accent */}
         <motion.div
           style={{ opacity: likeOpacity }}
-          className="absolute start-5 top-6 rotate-[-8deg] rounded-xl border-4 border-like px-3 py-1 text-2xl font-extrabold uppercase tracking-wider text-like"
+          className="absolute start-5 top-6 rotate-[-8deg] rounded-xl border-4 border-accent px-3 py-1 text-2xl font-extrabold uppercase tracking-wider text-accent"
         >
           {t("swipe.liked")}
         </motion.div>
         <motion.div
           style={{ opacity: nopeOpacity }}
-          className="absolute end-5 top-6 rotate-[8deg] rounded-xl border-4 border-nope px-3 py-1 text-2xl font-extrabold uppercase tracking-wider text-nope"
+          className="absolute end-5 top-6 rotate-[8deg] rounded-xl border-4 border-ink/80 px-3 py-1 text-2xl font-extrabold uppercase tracking-wider text-ink/80"
         >
           {t("swipe.disliked")}
         </motion.div>
         <motion.div
           style={{ opacity: skipOpacity }}
-          className="absolute inset-x-0 bottom-24 mx-auto w-fit rounded-xl border-4 border-skip px-3 py-1 text-2xl font-extrabold uppercase tracking-wider text-skip"
+          className="absolute inset-x-0 bottom-24 mx-auto w-fit rounded-xl border-4 border-ink-dim px-3 py-1 text-2xl font-extrabold uppercase tracking-wider text-ink-dim"
         >
           {t("swipe.notSeen")}
         </motion.div>
@@ -124,22 +126,23 @@ export default function SwipeCard({ title, index, onSwipe, forcedExit }: SwipeCa
           <div className="flex items-end justify-between gap-3">
             <div className="min-w-0">
               <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-                <span className="rounded-md bg-brand/90 px-2 py-0.5 text-[11px] font-bold text-black">
+                <span className="rounded-md bg-white/12 px-2 py-0.5 text-[11px] font-bold text-white/90 backdrop-blur">
                   {title.type === "movie" ? t("card.movie") : t("card.tv")}
                 </span>
-                <span className="rounded-md bg-white/15 px-2 py-0.5 text-[11px] font-semibold text-white/90 backdrop-blur">
+                <span className="rounded-md bg-white/12 px-2 py-0.5 text-[11px] font-semibold text-white/90 backdrop-blur">
                   {title.year}
                 </span>
-                <span className="rounded-md bg-white/15 px-2 py-0.5 text-[11px] font-semibold text-white/90 backdrop-blur">
-                  ⭐ {title.rating.toFixed(1)}
+                <span className="flex items-center gap-1 rounded-md bg-white/12 px-2 py-0.5 text-[11px] font-semibold text-white/90 backdrop-blur">
+                  <StarIcon size={11} filled className="text-accent" />
+                  {title.rating.toFixed(1)}
                 </span>
               </div>
               <h2 className="truncate text-2xl font-bold text-white drop-shadow">
                 {title.title[locale]}
               </h2>
-              <div className="mt-1 flex flex-wrap gap-1.5">
+              <div className="mt-1 flex flex-wrap gap-x-2.5 gap-y-0.5">
                 {title.genres.slice(0, 3).map((g) => (
-                  <span key={g} className="text-xs font-medium text-white/60">
+                  <span key={g} className="text-xs font-medium text-white/55">
                     {genreLabel(g, locale)}
                   </span>
                 ))}
@@ -148,13 +151,9 @@ export default function SwipeCard({ title, index, onSwipe, forcedExit }: SwipeCa
             <button
               onClick={() => setShowDetails((v) => !v)}
               aria-label={t("swipe.details")}
-              className="shrink-0 rounded-full bg-white/15 p-2.5 text-white/90 backdrop-blur transition hover:bg-white/25"
+              className="shrink-0 rounded-full bg-white/12 p-2.5 text-white/90 backdrop-blur transition hover:bg-white/25"
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
-                <circle cx="12" cy="12" r="9.5" strokeWidth="1.8" />
-                <path d="M12 11v5" />
-                <circle cx="12" cy="8" r="0.4" fill="currentColor" />
-              </svg>
+              <InfoIcon size={20} />
             </button>
           </div>
 
@@ -162,7 +161,7 @@ export default function SwipeCard({ title, index, onSwipe, forcedExit }: SwipeCa
             <motion.div
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mt-3 rounded-2xl bg-black/55 p-4 backdrop-blur-md"
+              className="mt-3 rounded-2xl bg-black/60 p-4 backdrop-blur-md"
             >
               <p className="text-sm leading-relaxed text-white/85">
                 {title.overview[locale]}

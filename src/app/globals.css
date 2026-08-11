@@ -1,21 +1,28 @@
 @import "tailwindcss";
 
+/* ─────────────────────────────────────────────────────────────
+   Dhawq design system v2 — graphite neumorphism + single amber
+   accent, derived from the user-chosen Uiverse elements.
+   Every interactive element below is adapted from Uiverse.io
+   (colors/sizes retokenized, animations kept identical).
+   ───────────────────────────────────────────────────────────── */
+
 @theme {
-  --color-bg: #0b0b13;
-  --color-surface: #14141f;
-  --color-surface-2: #1c1c2b;
-  --color-line: #262638;
-  --color-ink: #f2f1f7;
-  --color-ink-dim: #9b99ad;
-  --color-ink-faint: #6b6980;
-  --color-brand: #f5b942;
-  --color-brand-deep: #d99a1b;
-  --color-like: #34d399;
-  --color-nope: #fb7185;
-  --color-skip: #38bdf8;
+  --color-bg: #14161a;
+  --color-surface: #23272f;
+  --color-surface-2: #2a2f39;
+  --color-shadow-dark: #0e1013;
+  --color-shadow-light: #383e4b;
+  --color-line: #2e333e;
+  --color-ink: #f3f6fa;
+  --color-ink-dim: #b0b6c3;
+  --color-ink-faint: #6c7383;
+  --color-accent: #ffd43b;
+  --color-accent-deep: #ff8800;
+  --color-danger: #ff4545;
   --font-sans: var(--font-plex-arabic), var(--font-geist-sans), system-ui,
     sans-serif;
-  --radius-card: 1.5rem;
+  --radius-card: 30px;
 }
 
 html {
@@ -24,17 +31,14 @@ html {
 }
 
 body {
-  background:
-    radial-gradient(1100px 500px at 80% -10%, rgba(245, 185, 66, 0.07), transparent 60%),
-    radial-gradient(900px 500px at 10% 110%, rgba(56, 189, 248, 0.05), transparent 60%),
-    var(--color-bg);
+  background: var(--color-bg);
   color: var(--color-ink);
   min-height: 100dvh;
   overscroll-behavior-y: none;
 }
 
 ::selection {
-  background: rgba(245, 185, 66, 0.35);
+  background: rgba(255, 212, 59, 0.3);
 }
 
 .no-scrollbar::-webkit-scrollbar {
@@ -44,17 +48,1025 @@ body {
   scrollbar-width: none;
 }
 
-/* Swipe card grain + sheen */
+/* poster bottom fade (monochrome) */
 .card-sheen {
-  background-image:
-    linear-gradient(160deg, rgba(255, 255, 255, 0.08), transparent 35%),
-    linear-gradient(to top, rgba(4, 4, 10, 0.94) 0%, rgba(4, 4, 10, 0.55) 34%, transparent 62%);
+  background: linear-gradient(
+    to top,
+    rgba(10, 11, 14, 0.95) 0%,
+    rgba(10, 11, 14, 0.55) 34%,
+    transparent 62%
+  );
 }
 
-@keyframes float-slow {
-  0%, 100% { transform: translateY(0px); }
-  50% { transform: translateY(-6px); }
+/* ─────────────────────────────────────────────────────────────
+   Element: neumorphic card — Uiverse.io by Yaseen549 / adamgiebl
+   (dark colorway, retokenized)
+   ───────────────────────────────────────────────────────────── */
+.neu-card {
+  border-radius: 30px;
+  background: var(--color-surface);
+  box-shadow:
+    15px 15px 30px var(--color-shadow-dark),
+    -15px -15px 30px var(--color-shadow-light);
 }
-.animate-float-slow {
-  animation: float-slow 5s ease-in-out infinite;
+.neu-card-sm {
+  border-radius: 18px;
+  background: var(--color-surface);
+  box-shadow:
+    7px 7px 14px var(--color-shadow-dark),
+    -7px -7px 14px var(--color-shadow-light);
+}
+/* inset variant (same element, pressed-in reading) */
+.neu-inset {
+  border-radius: 14px;
+  background: var(--color-surface);
+  box-shadow:
+    inset 5px 5px 10px var(--color-shadow-dark),
+    inset -5px -5px 10px var(--color-shadow-light);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Element: push button — Uiverse.io by ke1221
+   (dark colorway; presses inset on :active — animation unchanged)
+   ───────────────────────────────────────────────────────────── */
+.neu-btn {
+  color: var(--color-ink-dim);
+  padding: 0.7em 1.7em;
+  font-size: 15px;
+  font-weight: 600;
+  border-radius: 0.5em;
+  background: var(--color-surface);
+  cursor: pointer;
+  border: 1px solid var(--color-surface);
+  transition: all 0.3s;
+  box-shadow:
+    6px 6px 12px var(--color-shadow-dark),
+    -6px -6px 12px var(--color-shadow-light);
+}
+.neu-btn:active,
+.neu-btn[data-pressed="true"] {
+  color: var(--color-ink-faint);
+  box-shadow:
+    inset 4px 4px 12px var(--color-shadow-dark),
+    inset -4px -4px 12px var(--color-shadow-light);
+}
+.neu-btn[data-pressed="true"] {
+  color: var(--color-accent);
+}
+.neu-btn:disabled {
+  opacity: 0.35;
+  pointer-events: none;
+}
+/* circular sizing of the same element (deck action buttons) */
+.neu-btn-round {
+  padding: 0;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Element: expanding delete button — Uiverse.io by vinodjangid07
+   (label localized via data-label; animation unchanged)
+   ───────────────────────────────────────────────────────────── */
+.delete-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: rgb(20, 20, 20);
+  border: none;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0px 0px 20px rgba(0, 0, 0, 0.164);
+  cursor: pointer;
+  transition-duration: 0.3s;
+  overflow: hidden;
+  position: relative;
+}
+.delete-btn .delete-svg {
+  width: 11px;
+  transition-duration: 0.3s;
+}
+.delete-btn .delete-svg path {
+  fill: white;
+}
+.delete-btn:hover,
+.delete-btn[data-armed="true"] {
+  width: 112px;
+  border-radius: 50px;
+  transition-duration: 0.3s;
+  background-color: var(--color-danger);
+  align-items: center;
+}
+.delete-btn:hover .delete-svg,
+.delete-btn[data-armed="true"] .delete-svg {
+  width: 40px;
+  transition-duration: 0.3s;
+  transform: translateY(60%);
+}
+.delete-btn::before {
+  position: absolute;
+  top: -20px;
+  content: attr(data-label);
+  color: white;
+  transition-duration: 0.3s;
+  font-size: 2px;
+}
+.delete-btn:hover::before,
+.delete-btn[data-armed="true"]::before {
+  font-size: 12px;
+  opacity: 1;
+  transform: translateY(26px);
+  transition-duration: 0.3s;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Element: animated checkbox — Uiverse.io by MattiaCode-IT
+   (green → accent gold; animation unchanged)
+   ───────────────────────────────────────────────────────────── */
+.fancy-check-input {
+  display: none;
+}
+.fancy-check-label {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-size: 15px;
+  color: var(--color-ink-dim);
+  font-weight: 500;
+  transition: all 0.2s ease;
+  padding: 8px;
+  border-radius: 8px;
+}
+.fancy-check-label:hover {
+  background: rgba(255, 212, 59, 0.05);
+  color: var(--color-ink);
+}
+.fancy-check-box {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--color-ink-faint);
+  border-radius: 6px;
+  margin-inline-end: 12px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: var(--color-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+  flex-shrink: 0;
+}
+.fancy-check-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #ffd43b 0%, #ff8800 100%);
+  transform: scale(0);
+  transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  border-radius: 4px;
+  opacity: 0;
+}
+.fancy-check-mark {
+  position: relative;
+  z-index: 2;
+  opacity: 0;
+  transform: scale(0.3) rotate(20deg);
+  transition: all 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+.fancy-check-icon {
+  width: 14px;
+  height: 14px;
+  fill: #14161a;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
+}
+.fancy-check-ripple {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  background: rgba(255, 212, 59, 0.4);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  pointer-events: none;
+}
+.fancy-check-label:hover .fancy-check-box {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px rgba(255, 212, 59, 0.1);
+}
+.fancy-check-input:checked + .fancy-check-label .fancy-check-box {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  box-shadow:
+    0 4px 12px rgba(255, 212, 59, 0.3),
+    0 0 0 2px rgba(255, 212, 59, 0.2);
+}
+.fancy-check-input:checked + .fancy-check-label .fancy-check-fill {
+  transform: scale(1);
+  opacity: 1;
+}
+.fancy-check-input:checked + .fancy-check-label .fancy-check-mark {
+  opacity: 1;
+  transform: scale(1) rotate(0deg);
+  animation: checkPop 0.3s ease-out 0.2s;
+}
+.fancy-check-input:checked + .fancy-check-label .fancy-check-ripple {
+  animation: rippleSuccess 0.6s ease-out;
+}
+.fancy-check-label:active .fancy-check-box {
+  transform: scale(0.95);
+}
+@keyframes checkPop {
+  0% {
+    transform: scale(1) rotate(0deg);
+  }
+  50% {
+    transform: scale(1.2) rotate(-5deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+}
+@keyframes rippleSuccess {
+  0% {
+    width: 0;
+    height: 0;
+    opacity: 0.6;
+  }
+  70% {
+    width: 50px;
+    height: 50px;
+    opacity: 0.3;
+  }
+  100% {
+    width: 60px;
+    height: 60px;
+    opacity: 0;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Element: burger ↔ X — Uiverse.io by Cevorob
+   (black → ink; animation unchanged)
+   ───────────────────────────────────────────────────────────── */
+.burger {
+  position: relative;
+  width: 26px;
+  height: 20px;
+  background: transparent;
+  cursor: pointer;
+  display: block;
+}
+.burger input {
+  display: none;
+}
+.burger span {
+  display: block;
+  position: absolute;
+  height: 3px;
+  width: 100%;
+  background: var(--color-ink-dim);
+  border-radius: 9px;
+  opacity: 1;
+  left: 0;
+  transform: rotate(0deg);
+  transition: 0.25s ease-in-out;
+}
+.burger span:nth-of-type(1) {
+  top: 0px;
+  transform-origin: left center;
+}
+.burger span:nth-of-type(2) {
+  top: 50%;
+  transform: translateY(-50%);
+  transform-origin: left center;
+}
+.burger span:nth-of-type(3) {
+  top: 100%;
+  transform-origin: left center;
+  transform: translateY(-100%);
+}
+.burger input:checked ~ span:nth-of-type(1) {
+  transform: rotate(45deg);
+  top: 0px;
+  left: 3px;
+}
+.burger input:checked ~ span:nth-of-type(2) {
+  width: 0%;
+  opacity: 0;
+}
+.burger input:checked ~ span:nth-of-type(3) {
+  transform: rotate(-45deg);
+  top: 18px;
+  left: 3px;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Element: bursting heart — Uiverse.io by catraco
+   (pink → accent gold; animation unchanged)
+   ───────────────────────────────────────────────────────────── */
+.heart-container {
+  --heart-color: var(--color-accent);
+  position: relative;
+  width: 50px;
+  height: 50px;
+  transition: 0.3s;
+}
+.heart-container .heart-checkbox {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  z-index: 20;
+  cursor: pointer;
+}
+.heart-container .svg-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.heart-container .svg-outline,
+.heart-container .svg-filled {
+  fill: var(--heart-color);
+  position: absolute;
+  width: 60%;
+}
+.heart-container .svg-filled {
+  animation: keyframes-svg-filled 1s;
+  display: none;
+}
+.heart-container .svg-celebrate {
+  position: absolute;
+  animation: keyframes-svg-celebrate 0.5s;
+  animation-fill-mode: forwards;
+  display: none;
+  stroke: var(--heart-color);
+  fill: var(--heart-color);
+  stroke-width: 2px;
+}
+.heart-container .heart-checkbox:checked ~ .svg-container .svg-filled {
+  display: block;
+}
+.heart-container .heart-checkbox:checked ~ .svg-container .svg-celebrate {
+  display: block;
+}
+@keyframes keyframes-svg-filled {
+  0% {
+    transform: scale(0);
+  }
+  25% {
+    transform: scale(1.2);
+  }
+  50% {
+    transform: scale(1);
+    filter: brightness(1.5);
+  }
+}
+@keyframes keyframes-svg-celebrate {
+  0% {
+    transform: scale(0);
+  }
+  50% {
+    opacity: 1;
+    filter: brightness(1.5);
+  }
+  100% {
+    transform: scale(1.4);
+    opacity: 0;
+    display: none;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Element: animated checklist — Uiverse.io by JkHuger
+   (light → dark tokens, check purple → accent; animations unchanged)
+   ───────────────────────────────────────────────────────────── */
+.checklist {
+  --background: var(--color-surface);
+  --text: var(--color-ink-dim);
+  --check: var(--color-accent);
+  --disabled: var(--color-ink-faint);
+  background: var(--background);
+  border-radius: 18px;
+  position: relative;
+  padding: 22px 40px;
+  display: grid;
+  grid-template-columns: 30px auto;
+  align-items: center;
+  row-gap: 16px;
+  box-shadow:
+    7px 7px 14px var(--color-shadow-dark),
+    -7px -7px 14px var(--color-shadow-light);
+}
+.checklist label {
+  color: var(--text);
+  position: relative;
+  cursor: pointer;
+  display: grid;
+  align-items: center;
+  width: fit-content;
+  transition: color 0.3s ease;
+  margin-inline-end: 20px;
+}
+.checklist label::before,
+.checklist label::after {
+  content: "";
+  position: absolute;
+}
+.checklist label::before {
+  height: 2px;
+  width: 8px;
+  inset-inline-start: -27px;
+  background: var(--check);
+  border-radius: 2px;
+  transition: background 0.3s ease;
+}
+.checklist label:after {
+  height: 4px;
+  width: 4px;
+  top: 8px;
+  inset-inline-start: -25px;
+  border-radius: 50%;
+}
+.checklist input[type="checkbox"] {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  position: relative;
+  height: 15px;
+  width: 15px;
+  outline: none;
+  border: 0;
+  margin: 0;
+  margin-inline-end: 15px;
+  cursor: pointer;
+  background: var(--background);
+  display: grid;
+  align-items: center;
+}
+.checklist input[type="checkbox"]::before,
+.checklist input[type="checkbox"]::after {
+  content: "";
+  position: absolute;
+  height: 2px;
+  top: auto;
+  background: var(--check);
+  border-radius: 2px;
+}
+.checklist input[type="checkbox"]::before {
+  width: 0px;
+  right: 60%;
+  transform-origin: right bottom;
+}
+.checklist input[type="checkbox"]::after {
+  width: 0px;
+  left: 40%;
+  transform-origin: left bottom;
+}
+.checklist input[type="checkbox"]:checked::before {
+  animation: check-01 0.4s ease forwards;
+}
+.checklist input[type="checkbox"]:checked::after {
+  animation: check-02 0.4s ease forwards;
+}
+.checklist input[type="checkbox"]:checked + label {
+  color: var(--disabled);
+  animation: move 0.3s ease 0.1s forwards;
+}
+.checklist input[type="checkbox"]:checked + label::before {
+  background: var(--disabled);
+  animation: slice 0.4s ease forwards;
+}
+.checklist input[type="checkbox"]:checked + label::after {
+  animation: firework 0.5s ease forwards 0.1s;
+}
+@keyframes move {
+  50% {
+    padding-inline-start: 8px;
+    padding-inline-end: 0px;
+  }
+  100% {
+    padding-inline-end: 4px;
+  }
+}
+@keyframes slice {
+  60% {
+    width: 100%;
+    inset-inline-start: 4px;
+  }
+  100% {
+    width: 100%;
+    inset-inline-start: -2px;
+    padding-inline-start: 0;
+  }
+}
+@keyframes check-01 {
+  0% {
+    width: 4px;
+    top: auto;
+    transform: rotate(0);
+  }
+  50% {
+    width: 0px;
+    top: auto;
+    transform: rotate(0);
+  }
+  51% {
+    width: 0px;
+    top: 8px;
+    transform: rotate(45deg);
+  }
+  100% {
+    width: 5px;
+    top: 8px;
+    transform: rotate(45deg);
+  }
+}
+@keyframes check-02 {
+  0% {
+    width: 4px;
+    top: auto;
+    transform: rotate(0);
+  }
+  50% {
+    width: 0px;
+    top: auto;
+    transform: rotate(0);
+  }
+  51% {
+    width: 0px;
+    top: 8px;
+    transform: rotate(-45deg);
+  }
+  100% {
+    width: 10px;
+    top: 8px;
+    transform: rotate(-45deg);
+  }
+}
+@keyframes firework {
+  0% {
+    opacity: 1;
+    box-shadow:
+      0 0 0 -2px #ffd43b,
+      0 0 0 -2px #ffd43b,
+      0 0 0 -2px #ffd43b,
+      0 0 0 -2px #ffd43b,
+      0 0 0 -2px #ffd43b,
+      0 0 0 -2px #ffd43b;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    box-shadow:
+      0 -15px 0 0px #ffd43b,
+      14px -8px 0 0px #ffd43b,
+      14px 8px 0 0px #ffd43b,
+      0 15px 0 0px #ffd43b,
+      -14px 8px 0 0px #ffd43b,
+      -14px -8px 0 0px #ffd43b;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Element: neumorphic toggle — Uiverse.io by mobinkakei
+   (light → dark tokens; spring animation unchanged)
+   ───────────────────────────────────────────────────────────── */
+.neu-toggle-label {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+.neu-toggle {
+  isolation: isolate;
+  position: relative;
+  height: 26px;
+  width: 52px;
+  border-radius: 13px;
+  overflow: hidden;
+  box-shadow:
+    -8px -4px 8px 0px var(--color-shadow-light),
+    8px 4px 12px 0px var(--color-shadow-dark),
+    4px 4px 4px 0px var(--color-shadow-dark) inset,
+    -4px -4px 4px 0px var(--color-shadow-light) inset;
+}
+.neu-toggle-state {
+  display: none;
+}
+.neu-toggle-indicator {
+  height: 100%;
+  width: 200%;
+  background: var(--color-surface-2);
+  border-radius: 13px;
+  transform: translate3d(-75%, 0, 0);
+  transition: transform 0.4s cubic-bezier(0.85, 0.05, 0.18, 1.35);
+  box-shadow:
+    -8px -4px 8px 0px var(--color-shadow-light),
+    8px 4px 12px 0px var(--color-shadow-dark);
+}
+.neu-toggle-state:checked ~ .neu-toggle-indicator {
+  transform: translate3d(25%, 0, 0);
+  background: linear-gradient(135deg, #ffd43b 0%, #ff8800 100%);
+}
+[dir="rtl"] .neu-toggle-indicator {
+  transform: translate3d(75%, 0, 0);
+}
+[dir="rtl"] .neu-toggle-state:checked ~ .neu-toggle-indicator {
+  transform: translate3d(-25%, 0, 0);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Element: floating-label input — Uiverse.io by alexruix
+   (blue focus → accent; animation unchanged)
+   ───────────────────────────────────────────────────────────── */
+.float-group {
+  position: relative;
+}
+.float-input {
+  border: solid 1.5px var(--color-ink-faint);
+  border-radius: 1rem;
+  background: none;
+  padding: 1rem;
+  font-size: 1rem;
+  width: 100%;
+  color: var(--color-ink);
+  transition: border 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.float-label {
+  position: absolute;
+  inset-inline-start: 15px;
+  top: 0;
+  color: var(--color-ink-dim);
+  pointer-events: none;
+  transform: translateY(1rem);
+  transition: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.float-input:focus,
+.float-input:valid {
+  outline: none;
+  border: 1.5px solid var(--color-accent);
+}
+.float-input:focus ~ .float-label,
+.float-input:valid ~ .float-label {
+  transform: translateY(-50%) scale(0.8);
+  background-color: var(--color-surface);
+  padding: 0 0.2em;
+  border-radius: 4px;
+  color: var(--color-accent);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Element: input + glowing button combo — Uiverse.io by Smit-Prajapati
+   (kept verbatim — this element defines the site palette)
+   ───────────────────────────────────────────────────────────── */
+.combo-input {
+  display: flex;
+  border-radius: 1rem;
+  background: linear-gradient(135deg, #23272f 0%, #14161a 100%);
+  box-shadow:
+    10px 10px 20px #0e1013,
+    -10px -10px 40px #383e4b;
+  padding: 0.3rem;
+  gap: 0.3rem;
+}
+.combo-input input {
+  border-start-start-radius: 0.8rem;
+  border-end-start-radius: 0.8rem;
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+  background: #23272f;
+  box-shadow:
+    inset 5px 5px 10px #0e1013,
+    inset -5px -5px 10px #383e4b,
+    0px 0px 100px rgba(255, 212, 59, 0),
+    0px 0px 100px rgba(255, 102, 0, 0);
+  width: 100%;
+  flex-basis: 75%;
+  padding: 0.85rem 1rem;
+  border: 1px solid transparent;
+  color: white;
+  transition: all 0.2s ease-in-out;
+  min-width: 0;
+}
+.combo-input input:focus {
+  border: 1px solid #ffd43b;
+  outline: none;
+  box-shadow:
+    inset 0px 0px 10px rgba(255, 102, 0, 0.5),
+    inset 0px 0px 10px rgba(255, 212, 59, 0.5),
+    0px 0px 100px rgba(255, 212, 59, 0.5),
+    0px 0px 100px rgba(255, 102, 0, 0.5);
+}
+.combo-input .combo-btn {
+  flex-basis: 25%;
+  padding: 0.85rem 1rem;
+  background: linear-gradient(135deg, rgb(255, 212, 59) 0%, rgb(255, 102, 0) 100%);
+  box-shadow:
+    0px 0px 1px rgba(255, 212, 59, 0.5),
+    0px 0px 1px rgba(255, 102, 0, 0.5);
+  font-weight: 900;
+  letter-spacing: 0.1rem;
+  color: #23272f;
+  border: none;
+  cursor: pointer;
+  border-start-end-radius: 1rem;
+  border-end-end-radius: 1rem;
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+  transition: all 0.2s ease-in-out;
+  white-space: nowrap;
+}
+.combo-input .combo-btn:hover {
+  background: linear-gradient(135deg, rgb(255, 212, 59) 50%, rgb(255, 102, 0) 100%);
+  box-shadow:
+    0px 0px 100px rgba(255, 212, 59, 0.5),
+    0px 0px 100px rgba(255, 102, 0, 0.5);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Element: neumorphic input — Uiverse.io by lenfear23
+   (dark tokens; inset-on-focus unchanged)
+   ───────────────────────────────────────────────────────────── */
+.neu-input {
+  min-height: 40px;
+  padding: 10px 14px;
+  width: 100%;
+  outline: none;
+  color: var(--color-ink);
+  background: var(--color-surface);
+  box-shadow:
+    5px 5px 17px var(--color-shadow-dark),
+    -5px -5px 17px var(--color-shadow-light);
+  border: none;
+  border-radius: 10px;
+  transition: all 0.5s;
+}
+.neu-input:focus {
+  background: var(--color-surface);
+  box-shadow:
+    inset 5px 5px 17px var(--color-shadow-dark),
+    inset -5px -5px 17px var(--color-shadow-light);
+}
+.neu-input::placeholder {
+  color: var(--color-ink-faint);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Element: stat card + three-dots menu — Uiverse.io by code-town3
+   (blue/green → accent/ink; structure & tooltips unchanged)
+   ───────────────────────────────────────────────────────────── */
+.stat-card {
+  background: var(--color-surface);
+  border-radius: 18px;
+  box-shadow:
+    7px 7px 14px var(--color-shadow-dark),
+    -7px -7px 14px var(--color-shadow-light);
+  padding: 1.5rem 1.25rem 1.25rem 1.25rem;
+  color: var(--color-ink);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.stat-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.stat-card-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  margin: 0;
+  line-height: 1.2;
+  background: linear-gradient(90deg, #fff 0%, #f3f6fa 50%, #e3e8ef 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.stat-card-chart {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.linechart {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.linechart .x-labels text {
+  font-size: 12px;
+  fill: var(--color-ink-dim);
+}
+.dot-group .tooltip {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+.dot-group:hover .tooltip {
+  opacity: 1;
+}
+.dot-group .tooltip rect {
+  fill: #14161a;
+  filter: drop-shadow(0 4px 16px rgba(0, 0, 0, 0.22));
+  opacity: 0.92;
+}
+.dot-group .tooltip text {
+  font-size: 14px;
+  font-weight: 500;
+  fill: #fff;
+  letter-spacing: 0.2px;
+}
+.stat-card-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  color: var(--color-ink-dim);
+}
+.legend-value {
+  font-size: 1.6rem;
+  color: var(--color-accent);
+  font-weight: 600;
+}
+.legend-change {
+  color: var(--color-ink-dim);
+  font-weight: 600;
+  margin-inline-start: 10px;
+}
+/* three-dots menu (part of the same element) */
+.menu-wrapper {
+  position: relative;
+  display: inline-block;
+}
+.menu-dots {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  cursor: pointer;
+  width: 18px;
+  align-items: center;
+  margin: 0 8px;
+}
+.menu-dots span {
+  display: block;
+  width: 5px;
+  height: 5px;
+  background: var(--color-ink-faint);
+  border-radius: 50%;
+  transition: background 0.2s;
+}
+.menu-toggle {
+  display: none;
+}
+.menu-select {
+  display: none;
+  position: absolute;
+  inset-inline-end: 0;
+  top: 30px;
+  min-width: 130px;
+  z-index: 10;
+  padding: 8px 0;
+  border-radius: 18px;
+  border: 1.5px solid rgba(80, 90, 120, 0.18);
+  background: rgba(26, 29, 35, 0.85);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.18);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition:
+    opacity 0.25s cubic-bezier(0.4, 2, 0.6, 1),
+    transform 0.25s cubic-bezier(0.4, 2, 0.6, 1);
+  opacity: 0;
+  transform: scale(0.95) translateY(-8px);
+  pointer-events: none;
+}
+.menu-toggle:checked + .menu-dots + .menu-select {
+  display: block;
+  opacity: 1;
+  transform: scale(1) translateY(0);
+  pointer-events: auto;
+}
+.menu-select > * {
+  display: block;
+  width: 100%;
+  text-align: start;
+  padding: 10px 16px;
+  color: var(--color-ink);
+  cursor: pointer;
+  font-size: 14px;
+  border-inline-start: 3px solid transparent;
+  margin-bottom: 2px;
+  border-radius: 8px;
+  background: none;
+  border-top: none;
+  border-bottom: none;
+  border-inline-end: none;
+  transition:
+    background 0.18s,
+    color 0.18s,
+    border-inline-start 0.18s;
+}
+.menu-select > *:hover {
+  background: rgba(255, 212, 59, 0.08);
+  color: var(--color-accent);
+  border-inline-start: 3px solid var(--color-accent);
+}
+.menu-select > .menu-danger:hover {
+  background: rgba(255, 69, 69, 0.08);
+  color: var(--color-danger);
+  border-inline-start: 3px solid var(--color-danger);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Element: glow button + rich tooltip — Uiverse.io by themrsami
+   (indigo → accent gold; structure & transitions unchanged;
+   implemented as utility classes since the original is Tailwind)
+   ───────────────────────────────────────────────────────────── */
+.glow-btn {
+  position: relative;
+  padding: 0.8rem 1.5rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #14161a;
+  background: linear-gradient(135deg, rgb(255, 212, 59) 0%, rgb(255, 136, 0) 100%);
+  border: none;
+  border-radius: 0.75rem;
+  cursor: pointer;
+  transition: all 0.3s;
+  overflow: hidden;
+}
+.glow-btn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(255, 212, 59, 0.25), rgba(255, 136, 0, 0.25));
+  filter: blur(20px);
+  opacity: 0.5;
+  transition: opacity 0.3s;
+}
+.glow-btn:hover::before {
+  opacity: 0.9;
+}
+.glow-btn:hover {
+  box-shadow: 0 0 30px rgba(255, 180, 40, 0.35);
+}
+.glow-btn > span {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+.rich-tooltip {
+  position: absolute;
+  visibility: hidden;
+  opacity: 0;
+  bottom: 100%;
+  left: 50%;
+  transform: translate(-50%, 8px);
+  margin-bottom: 12px;
+  width: 240px;
+  z-index: 30;
+  transition: all 0.3s ease-out;
+}
+.group:hover .rich-tooltip,
+.rich-tooltip[data-open="true"] {
+  visibility: visible;
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.rich-tooltip-panel {
+  position: relative;
+  padding: 1rem;
+  background: linear-gradient(135deg, rgba(26, 29, 35, 0.95), rgba(35, 39, 47, 0.95));
+  backdrop-filter: blur(12px);
+  border-radius: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 0 30px rgba(255, 180, 40, 0.15);
+}
+.rich-tooltip-arrow {
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  width: 12px;
+  height: 12px;
+  background: linear-gradient(135deg, rgba(26, 29, 35, 0.95), rgba(35, 39, 47, 0.95));
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }

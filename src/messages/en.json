@@ -65,7 +65,10 @@
     "searchAll": "Search any title to log it…",
     "markWatched": "Log as watched",
     "empty": "No recommendations yet — start swiping first!",
-    "becauseYouLiked": "Because you loved"
+    "becauseYouLiked": "Because you loved",
+    "howTitle": "How do recommendations work?",
+    "howBody": "Every swipe sharpens your taste fingerprint, so we suggest titles that match what you loved in story and spirit — not just genre.",
+    "searchBtn": "Search"
   },
   "lists": {
     "title": "My Lists",
@@ -74,6 +77,9 @@
     "namePlaceholder": "List name (e.g. Best of 2025)",
     "empty": "No lists yet — create your first one!",
     "itemsCount": "{count} titles",
+    "growthTitle": "Your library growth",
+    "growthLegend": "Titles watched over the last 12 weeks",
+    "growthSuffix": "of them loved",
     "delete": "Delete list",
     "share": "Share",
     "addItems": "Add titles from your library",
@@ -89,6 +95,8 @@
     "poweredBy": "Made with Dhawq"
   },
   "auth": {
+    "email": "Email",
+    "sent": "We sent you a sign-in link — check your inbox",
     "signIn": "Sign in",
     "signOut": "Sign out",
     "guest": "Browsing as guest — your data is stored on this device",

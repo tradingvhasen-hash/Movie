@@ -1,67 +1,101 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { AnimatePresence, motion } from "framer-motion";
 import { useTranslations } from "next-intl";
 import AuthButton from "./AuthButton";
 import { useLocaleSwitch } from "./LocaleProvider";
+import { Burger, NeuButton } from "./ui";
+import {
+  BooksIcon,
+  CardsIcon,
+  ClapperIcon,
+  FilmIcon,
+  GlobeIcon,
+  SparklesIcon,
+} from "./ui/Icons";
 
 const TABS = [
-  { href: "/", key: "swipe", icon: "🃏" },
-  { href: "/discover", key: "discover", icon: "✨" },
-  { href: "/library", key: "library", icon: "📚" },
-  { href: "/lists", key: "lists", icon: "🎞️" },
+  { href: "/", key: "swipe", Icon: CardsIcon },
+  { href: "/discover", key: "discover", Icon: SparklesIcon },
+  { href: "/library", key: "library", Icon: BooksIcon },
+  { href: "/lists", key: "lists", Icon: FilmIcon },
 ] as const;
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const t = useTranslations();
   const { locale, setLocale } = useLocaleSwitch();
   const pathname = usePathname();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const isSharePage = pathname.startsWith("/l/") || pathname.startsWith("/u/");
 
-  function toggleLocale() {
-    setLocale(locale === "ar" ? "en" : "ar");
-  }
-
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col">
-      <header className="sticky top-0 z-40 flex items-center justify-between px-5 py-4 backdrop-blur-md">
-        <Link href="/" className="flex items-center gap-2">
-          <span className="text-2xl">🎬</span>
-          <span className="bg-gradient-to-l from-brand to-amber-200 bg-clip-text text-xl font-extrabold text-transparent">
+      <header className="sticky top-0 z-40 flex items-center justify-between bg-bg/85 px-5 py-4 backdrop-blur-md">
+        <Link href="/" className="flex items-center gap-2.5">
+          <ClapperIcon size={24} className="text-accent" />
+          <span className="bg-gradient-to-l from-accent to-accent-deep bg-clip-text text-xl font-extrabold text-transparent">
             {t("app.name")}
           </span>
         </Link>
-        <div className="flex items-center gap-2">
-          <AuthButton />
-          <button
-            onClick={toggleLocale}
-            className="rounded-full border border-line bg-surface px-3.5 py-1.5 text-sm font-semibold text-ink-dim transition hover:text-ink"
-          >
-            {t("app.language")}
-          </button>
-        </div>
+        {/* burger ↔ X — Uiverse.io by Cevorob */}
+        <Burger open={menuOpen} onToggle={setMenuOpen} label="menu" />
       </header>
+
+      {/* settings panel */}
+      <AnimatePresence>
+        {menuOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-30 bg-black/50 backdrop-blur-sm"
+            onClick={() => setMenuOpen(false)}
+          >
+            <motion.div
+              initial={{ y: -16, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: -16, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 320, damping: 30 }}
+              className="neu-card mx-auto mt-20 flex w-[calc(100%-2.5rem)] max-w-sm flex-col gap-3 p-5"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <NeuButton
+                onClick={() => {
+                  setLocale(locale === "ar" ? "en" : "ar");
+                  setMenuOpen(false);
+                }}
+                className="flex w-full items-center justify-center gap-2"
+              >
+                <GlobeIcon size={18} />
+                {t("app.language")}
+              </NeuButton>
+              <AuthButton />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <main className="flex-1 pb-24">{children}</main>
 
       {!isSharePage && (
-        <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-bg/85 backdrop-blur-lg">
+        <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-bg/90 backdrop-blur-lg">
           <div className="mx-auto flex max-w-5xl items-stretch justify-around">
-            {TABS.map((tab) => {
-              const active =
-                tab.href === "/" ? pathname === "/" : pathname.startsWith(tab.href);
+            {TABS.map(({ href, key, Icon }) => {
+              const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
               return (
                 <Link
-                  key={tab.href}
-                  href={tab.href}
-                  className={`flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[11px] font-semibold transition ${
-                    active ? "text-brand" : "text-ink-faint hover:text-ink-dim"
+                  key={href}
+                  href={href}
+                  className={`flex flex-1 flex-col items-center gap-1 py-2.5 text-[11px] font-semibold transition ${
+                    active ? "text-accent" : "text-ink-faint hover:text-ink-dim"
                   }`}
                 >
-                  <span className="text-xl">{tab.icon}</span>
-                  {t(`nav.${tab.key}`)}
+                  <Icon size={21} strokeWidth={active ? 2.4 : 2} />
+                  {t(`nav.${key}`)}
                 </Link>
               );
             })}

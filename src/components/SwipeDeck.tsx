@@ -6,6 +6,8 @@ import { useTranslations } from "next-intl";
 import SwipeCard from "./SwipeCard";
 import { useDeck } from "@/lib/useDeck";
 import { useDhawq } from "@/lib/store";
+import { GlowButton, HeartButton, NeuButton } from "./ui";
+import { ArrowUpIcon, ClapperIcon, PopcornIcon, UndoIcon, XIcon } from "./ui/Icons";
 import type { SwipeAction } from "@/lib/types";
 
 export default function SwipeDeck() {
@@ -25,6 +27,7 @@ export default function SwipeDeck() {
   const resetAll = useDhawq((s) => s.resetAll);
 
   const [forcedExit, setForcedExit] = useState<SwipeAction | null>(null);
+  const [hintChecks, setHintChecks] = useState([false, false, false]);
 
   const handleSwipe = useCallback(
     (action: SwipeAction) => {
@@ -66,32 +69,35 @@ export default function SwipeDeck() {
   }
 
   if (!onboardingSeen) {
+    const hints = [t("swipe.hintRight"), t("swipe.hintLeft"), t("swipe.hintUp")];
     return (
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
-        className="mx-auto flex max-w-md flex-col items-center px-6 pt-14 text-center"
+        className="mx-auto flex max-w-md flex-col items-center px-6 pt-12 text-center"
       >
-        <div className="mb-6 text-6xl">🎬</div>
-        <h1 className="text-3xl font-bold">{t("onboarding.welcomeTitle")}</h1>
+        <ClapperIcon size={56} strokeWidth={1.6} className="text-accent" />
+        <h1 className="mt-5 text-3xl font-bold">{t("onboarding.welcomeTitle")}</h1>
         <p className="mt-4 leading-relaxed text-ink-dim">{t("onboarding.welcomeBody")}</p>
-        <div className="mt-6 grid w-full gap-2 text-sm">
-          <div className="flex items-center gap-3 rounded-xl bg-surface p-3">
-            <span className="text-like">➡️</span> {t("swipe.hintRight")}
-          </div>
-          <div className="flex items-center gap-3 rounded-xl bg-surface p-3">
-            <span className="text-nope">⬅️</span> {t("swipe.hintLeft")}
-          </div>
-          <div className="flex items-center gap-3 rounded-xl bg-surface p-3">
-            <span className="text-skip">⬆️</span> {t("swipe.hintUp")}
-          </div>
+
+        {/* swipe hints as animated checklist — Uiverse.io by JkHuger */}
+        <div className="checklist mt-6 w-full text-start" dir="auto">
+          {hints.map((hint, i) => (
+            <HintRow
+              key={i}
+              id={`hint-${i}`}
+              checked={hintChecks[i]}
+              onChange={(v) =>
+                setHintChecks((prev) => prev.map((c, j) => (j === i ? v : c)))
+              }
+              label={hint}
+            />
+          ))}
         </div>
-        <button
-          onClick={setOnboardingSeen}
-          className="mt-8 w-full rounded-2xl bg-brand py-3.5 text-lg font-bold text-black transition hover:bg-brand-deep"
-        >
+
+        <GlowButton onClick={setOnboardingSeen} className="mt-8 w-full text-lg">
           {t("onboarding.start")}
-        </button>
+        </GlowButton>
       </motion.div>
     );
   }
@@ -107,9 +113,9 @@ export default function SwipeDeck() {
             exit={{ opacity: 0, height: 0 }}
             className="overflow-hidden"
           >
-            <div className="mb-3 rounded-2xl bg-surface p-3">
+            <div className="neu-card-sm mb-3 p-3">
               <div className="mb-1.5 flex items-center justify-between text-xs">
-                <span className="font-semibold text-brand">
+                <span className="font-semibold text-accent">
                   {t("onboarding.progress")}
                 </span>
                 <span className="text-ink-dim">
@@ -119,9 +125,9 @@ export default function SwipeDeck() {
                   })}
                 </span>
               </div>
-              <div className="h-1.5 overflow-hidden rounded-full bg-surface-2">
+              <div className="neu-inset h-2.5 overflow-hidden rounded-full">
                 <motion.div
-                  className="h-full rounded-full bg-brand"
+                  className="h-full rounded-full bg-gradient-to-l from-accent to-accent-deep"
                   animate={{
                     width: `${(calibrationProgress.current / calibrationProgress.total) * 100}%`,
                   }}
@@ -135,19 +141,19 @@ export default function SwipeDeck() {
       {/* card stack */}
       <div className="relative mx-auto aspect-[10/15] w-full max-w-sm">
         {queue.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center rounded-card border border-line bg-surface p-8 text-center">
-            <div className="text-5xl">🍿</div>
+          <div className="neu-card flex h-full flex-col items-center justify-center p-8 text-center">
+            <PopcornIcon size={48} strokeWidth={1.6} className="text-ink-faint" />
             <h3 className="mt-4 text-xl font-bold">{t("swipe.emptyTitle")}</h3>
             <p className="mt-2 text-sm text-ink-dim">{t("swipe.emptyBody")}</p>
-            <button
+            <NeuButton
               onClick={() => {
                 resetAll();
                 setTimeout(refill, 50);
               }}
-              className="mt-6 rounded-xl bg-surface-2 px-4 py-2 text-sm font-semibold text-ink transition hover:bg-line"
+              className="mt-6 text-sm"
             >
               {t("swipe.reset")}
-            </button>
+            </NeuButton>
           </div>
         ) : (
           queue.slice(0, 3).map((title, i) => (
@@ -162,52 +168,43 @@ export default function SwipeDeck() {
         )}
       </div>
 
-      {/* action buttons */}
-      <div className="mt-5 flex items-center justify-center gap-4" dir="ltr">
-        <ActionButton
-          label={t("swipe.disliked")}
-          color="nope"
+      {/* action buttons: neu buttons (ke1221) + bursting heart (catraco) */}
+      <div className="mt-6 flex items-center justify-center gap-5" dir="ltr">
+        <NeuButton
+          round
+          aria-label={t("swipe.disliked")}
+          title={t("swipe.disliked")}
           onClick={() => trigger("disliked")}
-          icon={
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
-              <path d="M6 6l12 12M18 6L6 18" />
-            </svg>
-          }
-        />
-        <ActionButton
-          label={t("swipe.undo")}
-          color="dim"
-          small
+          className="h-16 w-16 text-ink"
+        >
+          <XIcon size={26} strokeWidth={2.6} />
+        </NeuButton>
+        <NeuButton
+          round
+          aria-label={t("swipe.undo")}
+          title={t("swipe.undo")}
           disabled={!canUndo}
           onClick={undo}
-          icon={
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 14L4 9l5-5" />
-              <path d="M4 9h10a6 6 0 016 6v1" />
-            </svg>
-          }
-        />
-        <ActionButton
-          label={t("swipe.notSeen")}
-          color="skip"
-          small
+          className="h-12 w-12"
+        >
+          <UndoIcon size={19} />
+        </NeuButton>
+        <NeuButton
+          round
+          aria-label={t("swipe.notSeen")}
+          title={t("swipe.notSeen")}
           onClick={() => trigger("not_seen")}
-          icon={
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 19V5M5 12l7-7 7 7" />
-            </svg>
-          }
-        />
-        <ActionButton
-          label={t("swipe.liked")}
-          color="like"
-          onClick={() => trigger("liked")}
-          icon={
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 21s-7.5-4.9-9.7-9.1C.7 8.7 2.6 5 6.1 5c2 0 3.4 1.1 4.2 2.4L12 9l1.7-1.6C14.5 6.1 15.9 5 17.9 5c3.5 0 5.4 3.7 3.8 6.9C19.5 16.1 12 21 12 21z" />
-            </svg>
-          }
-        />
+          className="h-12 w-12"
+        >
+          <ArrowUpIcon size={19} />
+        </NeuButton>
+        <div className="neu-btn neu-btn-round h-16 w-16">
+          <HeartButton
+            onLike={() => trigger("liked")}
+            size={56}
+            title={t("swipe.liked")}
+          />
+        </div>
       </div>
 
       <p className="mt-4 hidden text-center text-xs text-ink-faint sm:block">
@@ -217,40 +214,29 @@ export default function SwipeDeck() {
   );
 }
 
-function ActionButton({
+/* one row of the JkHuger checklist element */
+function HintRow({
+  id,
+  checked,
+  onChange,
   label,
-  icon,
-  color,
-  onClick,
-  small = false,
-  disabled = false,
 }: {
+  id: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
   label: string;
-  icon: React.ReactNode;
-  color: "like" | "nope" | "skip" | "dim";
-  onClick: () => void;
-  small?: boolean;
-  disabled?: boolean;
 }) {
-  const colorCls =
-    color === "like"
-      ? "text-like border-like/40 hover:bg-like/15"
-      : color === "nope"
-        ? "text-nope border-nope/40 hover:bg-nope/15"
-        : color === "skip"
-          ? "text-skip border-skip/40 hover:bg-skip/15"
-          : "text-ink-dim border-line hover:bg-surface-2";
   return (
-    <button
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      disabled={disabled}
-      className={`flex items-center justify-center rounded-full border-2 bg-surface shadow-lg transition active:scale-90 disabled:opacity-30 ${colorCls} ${
-        small ? "h-12 w-12" : "h-16 w-16"
-      }`}
-    >
-      {icon}
-    </button>
+    <>
+      <input
+        type="checkbox"
+        id={id}
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      <label htmlFor={id} className="text-sm">
+        {label}
+      </label>
+    </>
   );
 }

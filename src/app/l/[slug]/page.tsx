@@ -44,7 +44,7 @@ export default async function SharedListPage({ params }: PageProps<"/l/[slug]">)
       <p className="text-sm text-ink-dim">{t("share.listBy", { name: ownerName })}</p>
       <h1 className="mt-1 text-3xl font-bold">{list.name}</h1>
       <ShareGrid titles={titles} />
-      <p className="mt-10 text-center text-xs text-ink-faint">{t("share.poweredBy")} 🎬</p>
+      <p className="mt-10 text-center text-xs text-ink-faint">{t("share.poweredBy")}</p>
     </div>
   );
 }
@@ -52,7 +52,7 @@ export default async function SharedListPage({ params }: PageProps<"/l/[slug]">)
 function ShareNotFound({ message }: { message: string }) {
   return (
     <div className="flex flex-col items-center px-5 pt-24 text-center">
-      <div className="text-5xl">🔒</div>
+      <div className="text-4xl text-ink-faint">●</div>
       <p className="mt-4 text-ink-dim">{message}</p>
     </div>
   );

@@ -5,6 +5,9 @@ import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import TitleTile from "@/components/TitleTile";
 import AddToListSheet from "@/components/AddToListSheet";
+import { DeleteButton, NeuButton } from "@/components/ui";
+import LibraryStatCard from "@/components/ui/StatCard";
+import { FilmIcon, HeartIcon, XIcon } from "@/components/ui/Icons";
 import { getLocalTitle } from "@/lib/catalog";
 import { genreLabel } from "@/lib/genres";
 import { useDhawq } from "@/lib/store";
@@ -47,21 +50,18 @@ export default function LibraryPage() {
     return rows;
   }, [watched, filter, query]);
 
-  const stats = useMemo(() => {
+  const topGenres = useMemo(() => {
     const genreCounts = new Map<string, number>();
-    let liked = 0;
     for (const sw of watched) {
-      if (sw.action === "liked") liked++;
       const title = sw.title ?? getLocalTitle(sw.titleId);
       for (const g of title?.genres ?? []) {
         genreCounts.set(g, (genreCounts.get(g) ?? 0) + 1);
       }
     }
-    const topGenres = [...genreCounts.entries()]
+    return [...genreCounts.entries()]
       .sort((a, b) => b[1] - a[1])
       .slice(0, 3)
       .map(([g]) => g);
-    return { total: watched.length, liked, topGenres };
   }, [watched]);
 
   return (
@@ -69,64 +69,67 @@ export default function LibraryPage() {
       <h1 className="text-2xl font-bold">{t("library.title")}</h1>
       <p className="mt-1 text-sm text-ink-dim">{t("library.subtitle")}</p>
 
+      {/* stat card with line chart — Uiverse.io by code-town3 */}
       {watched.length > 0 && (
-        <div className="mt-4 grid grid-cols-3 gap-2">
-          <StatCard value={stats.total} label={t("library.watchedCount")} />
-          <StatCard value={stats.liked} label={t("library.likedCount")} accent />
-          <div className="rounded-2xl border border-line bg-surface p-3">
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-ink-faint">
-              {t("library.topGenres")}
-            </div>
-            <div className="mt-1 flex flex-wrap gap-1">
-              {stats.topGenres.map((g) => (
+        <div className="mt-4">
+          <LibraryStatCard
+            swipes={watched}
+            title={t("lists.growthTitle")}
+            legendText={t("lists.growthLegend")}
+            legendSuffix={t("lists.growthSuffix")}
+          />
+          {topGenres.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold text-ink-faint">
+                {t("library.topGenres")}:
+              </span>
+              {topGenres.map((g) => (
                 <span
                   key={g}
-                  className="rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-medium text-ink-dim"
+                  className="neu-inset px-2.5 py-1 text-xs font-medium text-ink-dim"
                 >
                   {genreLabel(g, locale)}
                 </span>
               ))}
             </div>
-          </div>
+          )}
         </div>
       )}
 
-      <div className="mt-4 flex items-center gap-2">
+      {/* filters — neu push buttons (ke1221), inset when active */}
+      <div className="mt-5 flex items-center gap-3">
         {(["all", "liked", "disliked"] as Filter[]).map((f) => (
-          <button
+          <NeuButton
             key={f}
+            pressed={filter === f}
             onClick={() => setFilter(f)}
-            className={`rounded-full px-3.5 py-1.5 text-sm font-semibold transition ${
-              filter === f
-                ? "bg-brand text-black"
-                : "bg-surface text-ink-dim hover:text-ink"
-            }`}
+            className="px-3.5 py-1.5 text-sm"
           >
             {t(`library.${f}`)}
-          </button>
+          </NeuButton>
         ))}
       </div>
 
+      {/* search — neumorphic input (lenfear23) */}
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder={t("library.search")}
-        className="mt-3 w-full rounded-xl border border-line bg-surface px-4 py-2.5 text-sm outline-none placeholder:text-ink-faint focus:border-brand/60"
+        className="neu-input mt-4 text-sm"
       />
 
       {filtered.length === 0 ? (
         <div className="mt-12 flex flex-col items-center text-center">
-          <div className="text-5xl">🎞️</div>
+          <FilmIcon size={44} strokeWidth={1.6} className="text-ink-faint" />
           <p className="mt-4 text-ink-dim">{t("library.empty")}</p>
-          <Link
-            href="/"
-            className="mt-5 rounded-xl bg-brand px-5 py-2.5 font-bold text-black"
-          >
-            {t("library.startSwiping")}
+          <Link href="/" className="mt-5">
+            <span className="glow-btn inline-block">
+              <span>{t("library.startSwiping")}</span>
+            </span>
           </Link>
         </div>
       ) : (
-        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+        <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
           {filtered.map((sw) => (
             <LibraryTile
               key={sw.titleId}
@@ -141,19 +144,6 @@ export default function LibraryPage() {
       {listTargetId && (
         <AddToListSheet titleId={listTargetId} onClose={() => setListTargetId(null)} />
       )}
-    </div>
-  );
-}
-
-function StatCard({ value, label, accent = false }: { value: number; label: string; accent?: boolean }) {
-  return (
-    <div className="rounded-2xl border border-line bg-surface p-3">
-      <div className={`text-2xl font-extrabold ${accent ? "text-like" : "text-brand"}`}>
-        {value}
-      </div>
-      <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-ink-faint">
-        {label}
-      </div>
     </div>
   );
 }
@@ -176,30 +166,26 @@ function LibraryTile({
       title={title}
       badge={
         <span
-          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+          className={`flex h-6 w-6 items-center justify-center rounded-full backdrop-blur ${
             swipe.action === "liked"
-              ? "bg-like/90 text-black"
-              : "bg-nope/90 text-black"
+              ? "bg-accent text-bg"
+              : "bg-black/60 text-ink-dim"
           }`}
         >
-          {swipe.action === "liked" ? "♥" : "✕"}
+          {swipe.action === "liked" ? (
+            <HeartIcon size={13} filled />
+          ) : (
+            <XIcon size={13} strokeWidth={3} />
+          )}
         </span>
       }
       footer={
-        <div className="mt-2 flex gap-1.5">
-          <button
-            onClick={onAddToList}
-            className="flex-1 rounded-lg bg-surface-2 py-1 text-[11px] font-semibold text-ink-dim transition hover:text-ink"
-          >
+        <div className="mt-2 flex items-center gap-2">
+          <NeuButton onClick={onAddToList} className="flex-1 px-2 py-1.5 text-[11px]">
             {t("library.addToList")}
-          </button>
-          <button
-            onClick={onRemove}
-            title={t("library.removeSwipe")}
-            className="rounded-lg bg-surface-2 px-2 py-1 text-[11px] text-ink-faint transition hover:text-nope"
-          >
-            🗑
-          </button>
+          </NeuButton>
+          {/* expanding delete — Uiverse.io by vinodjangid07 */}
+          <DeleteButton label={t("library.removeSwipe")} onDelete={onRemove} className="shrink-0 scale-90" />
         </div>
       }
     />

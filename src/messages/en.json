@@ -1,0 +1,109 @@
+{
+  "app": {
+    "name": "Dhawq",
+    "tagline": "Discover what you truly love",
+    "language": "العربية"
+  },
+  "nav": {
+    "swipe": "Swipe",
+    "discover": "Discover",
+    "library": "Library",
+    "lists": "Lists"
+  },
+  "swipe": {
+    "liked": "Loved it",
+    "disliked": "Not for me",
+    "notSeen": "Haven't seen",
+    "undo": "Undo",
+    "details": "Details",
+    "hintRight": "Swipe right: watched & loved it",
+    "hintLeft": "Swipe left: watched, didn't like it",
+    "hintUp": "Swipe up: haven't seen it",
+    "emptyTitle": "No more cards for now!",
+    "emptyBody": "You've swiped everything we have. Come back later or browse Discover.",
+    "reset": "Reset all cards",
+    "keyboard": "Keyboard: ← not for me • → loved it • ↑ haven't seen"
+  },
+  "onboarding": {
+    "welcomeTitle": "Welcome to Dhawq",
+    "welcomeBody": "Swipe cards so we learn your taste: right if you watched and loved it, left if you didn't like it, up if you haven't seen it. After a few swipes we'll start recommending titles made for you.",
+    "start": "Let's go",
+    "progress": "Building your taste fingerprint",
+    "done": "Your taste fingerprint is ready! Recommendations are now personal",
+    "calibrating": "Calibration round: {count} of {total}"
+  },
+  "card": {
+    "movie": "Movie",
+    "tv": "Series",
+    "director": "Directed by",
+    "creator": "Created by",
+    "cast": "Starring",
+    "rating": "Rating",
+    "themes": "Mood & themes"
+  },
+  "library": {
+    "title": "My Library",
+    "subtitle": "Everything you've ever watched, in one place",
+    "all": "All",
+    "liked": "Loved",
+    "disliked": "Disliked",
+    "empty": "Your library is empty — start swiping to fill it!",
+    "search": "Search your library…",
+    "watchedCount": "titles watched",
+    "likedCount": "loved",
+    "topGenres": "Most watched genres",
+    "share": "Share your library",
+    "addToList": "Add to list",
+    "removeSwipe": "Remove from library",
+    "startSwiping": "Start swiping"
+  },
+  "discover": {
+    "title": "Discover",
+    "subtitle": "Recommendations built from your taste fingerprint",
+    "match": "{percent}% match",
+    "needMore": "Swipe more cards to sharpen your recommendations",
+    "searchAll": "Search any title to log it…",
+    "markWatched": "Log as watched",
+    "empty": "No recommendations yet — start swiping first!",
+    "becauseYouLiked": "Because you loved"
+  },
+  "lists": {
+    "title": "My Lists",
+    "subtitle": "Create favorite lists and share them with the world",
+    "create": "New list",
+    "namePlaceholder": "List name (e.g. Best of 2025)",
+    "empty": "No lists yet — create your first one!",
+    "itemsCount": "{count} titles",
+    "delete": "Delete list",
+    "share": "Share",
+    "addItems": "Add titles from your library",
+    "public": "Public",
+    "private": "Private",
+    "copied": "Link copied!",
+    "shareRequiresAccount": "Public link sharing requires the cloud account (Supabase) — see README"
+  },
+  "share": {
+    "libraryOf": "{name}'s library",
+    "listBy": "A list by {name}",
+    "notFound": "This page doesn't exist or isn't public",
+    "poweredBy": "Made with Dhawq"
+  },
+  "auth": {
+    "signIn": "Sign in",
+    "signOut": "Sign out",
+    "guest": "Browsing as guest — your data is stored on this device",
+    "syncNote": "Sign in to save your library to the cloud and share it",
+    "notConfigured": "Cloud account not configured yet — the app runs fully locally"
+  },
+  "stats": {
+    "tasteReady": "Taste fingerprint ready",
+    "swipes": "swipes"
+  },
+  "common": {
+    "cancel": "Cancel",
+    "save": "Save",
+    "close": "Close",
+    "confirm": "Confirm",
+    "loading": "Loading…"
+  }
+}

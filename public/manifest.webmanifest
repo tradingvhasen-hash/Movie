@@ -1,0 +1,17 @@
+{
+  "name": "Dhawq — ذَوق",
+  "short_name": "Dhawq",
+  "description": "اكتشف ما تحبّه فعلاً — Discover what you truly love",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b0b13",
+  "theme_color": "#0b0b13",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

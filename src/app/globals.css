@@ -1,0 +1,60 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #0b0b13;
+  --color-surface: #14141f;
+  --color-surface-2: #1c1c2b;
+  --color-line: #262638;
+  --color-ink: #f2f1f7;
+  --color-ink-dim: #9b99ad;
+  --color-ink-faint: #6b6980;
+  --color-brand: #f5b942;
+  --color-brand-deep: #d99a1b;
+  --color-like: #34d399;
+  --color-nope: #fb7185;
+  --color-skip: #38bdf8;
+  --font-sans: var(--font-plex-arabic), var(--font-geist-sans), system-ui,
+    sans-serif;
+  --radius-card: 1.5rem;
+}
+
+html {
+  background: var(--color-bg);
+  color-scheme: dark;
+}
+
+body {
+  background:
+    radial-gradient(1100px 500px at 80% -10%, rgba(245, 185, 66, 0.07), transparent 60%),
+    radial-gradient(900px 500px at 10% 110%, rgba(56, 189, 248, 0.05), transparent 60%),
+    var(--color-bg);
+  color: var(--color-ink);
+  min-height: 100dvh;
+  overscroll-behavior-y: none;
+}
+
+::selection {
+  background: rgba(245, 185, 66, 0.35);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+/* Swipe card grain + sheen */
+.card-sheen {
+  background-image:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.08), transparent 35%),
+    linear-gradient(to top, rgba(4, 4, 10, 0.94) 0%, rgba(4, 4, 10, 0.55) 34%, transparent 62%);
+}
+
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-6px); }
+}
+.animate-float-slow {
+  animation: float-slow 5s ease-in-out infinite;
+}

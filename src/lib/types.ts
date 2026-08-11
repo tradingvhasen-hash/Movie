@@ -1,0 +1,50 @@
+export type TitleType = "movie" | "tv";
+
+export interface Title {
+  /** Stable id: "movie-603" (tmdb) or "s-matrix" for bundled samples */
+  id: string;
+  type: TitleType;
+  tmdbId?: number;
+  title: { en: string; ar: string };
+  overview: { en: string; ar: string };
+  year: number;
+  genres: string[];
+  keywords: string[];
+  people: { director?: string; cast: string[] };
+  originalLanguage: string;
+  /** TMDB vote average 0-10 */
+  rating: number;
+  voteCount: number;
+  popularity: number;
+  posterPath?: string | null;
+  backdropPath?: string | null;
+  /** Part of the cold-start calibration deck */
+  onboarding?: boolean;
+}
+
+export type SwipeAction = "liked" | "disliked" | "not_seen";
+
+export interface Swipe {
+  titleId: string;
+  action: SwipeAction;
+  at: number; // epoch ms
+  /** snapshot of the title at swipe time, so the library renders even after
+   * the catalog changes (e.g. switching from bundled demo data to TMDB) */
+  title?: Title;
+}
+
+export interface UserList {
+  id: string;
+  name: string;
+  isPublic: boolean;
+  titleIds: string[];
+  createdAt: number;
+}
+
+export interface Recommendation {
+  title: Title;
+  /** 0..1 blended match score */
+  score: number;
+  /** id of the liked title that most explains this rec, if any */
+  becauseOf?: string;
+}

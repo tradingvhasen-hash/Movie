@@ -35,6 +35,17 @@ export interface TasteProfile {
   ratedSwipes: number;
   /** every swipe including "not seen" (familiarity evidence) */
   totalSwipes: number;
+
+  /**
+   * Original-language counts across everything the user has watched.
+   * The feature vector devotes only a sliver of its dimensions to language,
+   * so a Mexican comedy can out-score an English one on keywords alone —
+   * this tracks the preference explicitly instead.
+   */
+  langSeen: Record<string, number>;
+  /** sum/count of release years of liked titles → era centre of gravity */
+  likedYearSum: number;
+  likedYearCount: number;
 }
 
 export const LIKE_WEIGHT = 1.0;
@@ -55,6 +66,9 @@ export function emptyProfile(): TasteProfile {
     unseenCount: 0,
     ratedSwipes: 0,
     totalSwipes: 0,
+    langSeen: {},
+    likedYearSum: 0,
+    likedYearCount: 0,
   };
 }
 
@@ -71,13 +85,59 @@ export function normalizeProfile(p: Partial<TasteProfile> | undefined): TastePro
     seenCount: p.seenCount ?? 0,
     unseenCount: p.unseenCount ?? 0,
     totalSwipes: p.totalSwipes ?? p.ratedSwipes ?? 0,
+    langSeen: p.langSeen && typeof p.langSeen === "object" ? p.langSeen : {},
+    likedYearSum: p.likedYearSum ?? 0,
+    likedYearCount: p.likedYearCount ?? 0,
   } as TasteProfile;
+}
+
+/**
+ * How strongly to favour a language, in roughly [-1, 1]. Languages the user
+ * actually watches score positive; ones absent from their history score
+ * negative — but only once there is enough history to justify it, so a
+ * single Korean film never locks the catalog to Korean.
+ */
+export function languageAffinity(profile: TasteProfile, language: string): number {
+  const total = profile.seenCount;
+  if (total < 3) return 0;
+  const seen = profile.langSeen[language] ?? 0;
+  const share = seen / total;
+  const evidence = Math.min(1, total / 12);
+  // share of 0 → -1, share of ~0.25+ → +1
+  const raw = seen === 0 ? -1 : Math.min(1, share / 0.25);
+  return raw * evidence;
+}
+
+/** Mean release year of liked titles, or null when there aren't any yet */
+export function likedEra(profile: TasteProfile): number | null {
+  if (profile.likedYearCount === 0) return null;
+  return profile.likedYearSum / profile.likedYearCount;
+}
+
+/**
+ * Era closeness in [0, 1]: same decade ≈ 1, four decades apart ≈ 0.
+ * Deliberately gentle — it nudges a 2020s viewer away from 1950s films
+ * without burying a classic they would genuinely enjoy.
+ */
+export function eraAffinity(profile: TasteProfile, year: number): number {
+  const era = likedEra(profile);
+  if (era === null) return 0;
+  const gap = Math.abs(year - era);
+  const evidence = Math.min(1, profile.likedYearCount / 5);
+  return Math.max(0, 1 - gap / 40) * evidence;
+}
+
+/** side metadata the vector under-represents but users care about */
+export interface SwipeMeta {
+  language?: string;
+  year?: number;
 }
 
 export function applySwipe(
   profile: TasteProfile,
   vector: Float32Array | number[],
-  action: SwipeAction
+  action: SwipeAction,
+  meta: SwipeMeta = {}
 ): TasteProfile {
   const next: TasteProfile = {
     ...profile,
@@ -86,6 +146,7 @@ export function applySwipe(
     dislikedSum: [...profile.dislikedSum],
     seenSum: [...profile.seenSum],
     unseenSum: [...profile.unseenSum],
+    langSeen: { ...profile.langSeen },
     totalSwipes: profile.totalSwipes + 1,
   };
 
@@ -102,10 +163,18 @@ export function applySwipe(
     next.seenSum[i] += vector[i] ?? 0;
   }
   next.seenCount += 1;
+  // watching it at all — liked or not — proves the language is accessible
+  if (meta.language) {
+    next.langSeen[meta.language] = (next.langSeen[meta.language] ?? 0) + 1;
+  }
 
   if (action === "liked") {
     for (let i = 0; i < DIM; i++) next.likedSum[i] += vector[i] ?? 0;
     next.likedCount += 1;
+    if (meta.year) {
+      next.likedYearSum += meta.year;
+      next.likedYearCount += 1;
+    }
   } else {
     for (let i = 0; i < DIM; i++) next.dislikedSum[i] += vector[i] ?? 0;
     next.dislikedCount += 1;
@@ -118,7 +187,8 @@ export function applySwipe(
 export function revertSwipe(
   profile: TasteProfile,
   vector: Float32Array | number[],
-  action: SwipeAction
+  action: SwipeAction,
+  meta: SwipeMeta = {}
 ): TasteProfile {
   const next: TasteProfile = {
     ...profile,
@@ -127,6 +197,7 @@ export function revertSwipe(
     dislikedSum: [...profile.dislikedSum],
     seenSum: [...profile.seenSum],
     unseenSum: [...profile.unseenSum],
+    langSeen: { ...profile.langSeen },
     totalSwipes: Math.max(0, profile.totalSwipes - 1),
   };
 
@@ -142,10 +213,19 @@ export function revertSwipe(
     next.seenSum[i] -= vector[i] ?? 0;
   }
   next.seenCount = Math.max(0, next.seenCount - 1);
+  if (meta.language && next.langSeen[meta.language]) {
+    const left = next.langSeen[meta.language] - 1;
+    if (left > 0) next.langSeen[meta.language] = left;
+    else delete next.langSeen[meta.language];
+  }
 
   if (action === "liked") {
     for (let i = 0; i < DIM; i++) next.likedSum[i] -= vector[i] ?? 0;
     next.likedCount = Math.max(0, next.likedCount - 1);
+    if (meta.year && next.likedYearCount > 0) {
+      next.likedYearSum -= meta.year;
+      next.likedYearCount -= 1;
+    }
   } else {
     for (let i = 0; i < DIM; i++) next.dislikedSum[i] -= vector[i] ?? 0;
     next.dislikedCount = Math.max(0, next.dislikedCount - 1);

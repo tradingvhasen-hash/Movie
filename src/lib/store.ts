@@ -8,6 +8,7 @@ import {
   emptyProfile,
   normalizeProfile,
   revertSwipe,
+  type SwipeMeta,
   type TasteProfile,
 } from "@/lib/engine/taste";
 import { getLocalTitle, vectorOf } from "@/lib/catalog";
@@ -37,6 +38,15 @@ function vectorFor(swipe: Swipe): Float32Array | null {
   return title ? vectorOf(title) : null;
 }
 
+/** language + year, which the feature vector barely encodes */
+function metaOf(title: Title | undefined): SwipeMeta {
+  return title ? { language: title.originalLanguage, year: title.year } : {};
+}
+
+function metaFor(swipe: Swipe): SwipeMeta {
+  return metaOf(swipe.title ?? getLocalTitle(swipe.titleId));
+}
+
 export const useDhawq = create<DhawqState>()(
   persist(
     (set, get) => ({
@@ -54,9 +64,9 @@ export const useDhawq = create<DhawqState>()(
           let profile = s.profile;
           if (existed) {
             const oldV = vectorFor(existed);
-            if (oldV) profile = revertSwipe(profile, oldV, existed.action);
+            if (oldV) profile = revertSwipe(profile, oldV, existed.action, metaFor(existed));
           }
-          profile = applySwipe(profile, v, action);
+          profile = applySwipe(profile, v, action, metaOf(title));
           return {
             swipes: {
               ...s.swipes,
@@ -80,7 +90,8 @@ export const useDhawq = create<DhawqState>()(
           return {
             swipes,
             swipeOrder: st.swipeOrder.slice(0, -1),
-            profile: v && last ? revertSwipe(st.profile, v, last.action) : st.profile,
+            profile:
+              v && last ? revertSwipe(st.profile, v, last.action, metaFor(last)) : st.profile,
           };
         });
         return lastId;
@@ -97,7 +108,7 @@ export const useDhawq = create<DhawqState>()(
           return {
             swipes,
             swipeOrder: st.swipeOrder.filter((id) => id !== titleId),
-            profile: v ? revertSwipe(st.profile, v, sw.action) : st.profile,
+            profile: v ? revertSwipe(st.profile, v, sw.action, metaFor(sw)) : st.profile,
           };
         });
       },
@@ -147,9 +158,10 @@ export const useDhawq = create<DhawqState>()(
     }),
     {
       name: "dhawq-store",
-      version: 2,
+      version: 3,
       /**
-       * v2 added the familiarity model. Rather than dropping existing
+       * v2 added the familiarity model, v3 the language and era signals.
+       * Rather than dropping existing
        * libraries, the fingerprint is rebuilt from the stored swipes —
        * every swipe carries a title snapshot, so it can be replayed.
        */
@@ -162,7 +174,9 @@ export const useDhawq = create<DhawqState>()(
         for (const id of order) {
           const sw = swipes[id];
           const title = sw?.title ?? getLocalTitle(id);
-          if (sw && title) profile = applySwipe(profile, vectorOf(title), sw.action);
+          if (sw && title) {
+            profile = applySwipe(profile, vectorOf(title), sw.action, metaOf(title));
+          }
         }
         return { ...state, profile } as DhawqState;
       },

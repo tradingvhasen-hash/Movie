@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getLocalCatalog, getLocalItem, loadCatalog, vectorOf } from "@/lib/catalog";
-import { calibrationDeck, recommend } from "@/lib/engine/recommend";
+import { recommend } from "@/lib/engine/recommend";
 import { COLD_START_TARGET, isCalibrating } from "@/lib/engine/taste";
 import { useDhawq } from "@/lib/store";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
@@ -28,7 +28,6 @@ async function fetchRemoteBatch(count: number): Promise<Title[] | null> {
         exclude,
         likedIds,
         count,
-        mode: isCalibrating(state.profile) ? "calibration" : "recommend",
       }),
     });
     if (!res.ok) return null;
@@ -45,10 +44,6 @@ function computeLocalBatch(excludeExtra: string[] = []): Title[] {
   const state = useDhawq.getState();
   const exclude = new Set<string>([...Object.keys(state.swipes), ...excludeExtra]);
 
-  if (isCalibrating(state.profile)) {
-    const fresh = calibrationDeck(pool, exclude, BATCH);
-    if (fresh.length > 0) return fresh;
-  }
   const likedItems = Object.values(state.swipes)
     .filter((s) => s.action === "liked")
     .map((s) => {
@@ -60,12 +55,25 @@ function computeLocalBatch(excludeExtra: string[] = []): Title[] {
     excludeIds: exclude,
     count: BATCH,
     likedItems,
+    anchorRatio: anchorRatioFor(state.profile),
   }).map((r) => r.title);
 }
 
 /**
- * The swipe queue: calibration anchors while the taste fingerprint is cold,
- * then personalized recommendations from the engine.
+ * Breadth needed right now: heavy while the profile is blank, gone once
+ * there is real taste evidence. Replaces the old all-or-nothing calibration
+ * mode, which ignored the fingerprint entirely for the first several swipes
+ * and made likes look like they did nothing.
+ */
+function anchorRatioFor(profile: { ratedSwipes: number }): number {
+  const RAMP = 8;
+  return Math.max(0, 0.6 * (1 - profile.ratedSwipes / RAMP));
+}
+
+/**
+ * The swipe queue. Always ranked by the engine — breadth comes from the
+ * anchor share above, never from bypassing the fingerprint — and rebuilt
+ * after every swipe so the newest signal is visible on the next card.
  */
 export function useDeck() {
   const swipes = useDhawq((s) => s.swipes);

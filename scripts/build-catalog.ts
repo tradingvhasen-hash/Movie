@@ -28,7 +28,14 @@ const TARGET = Number(args[args.indexOf("--count") + 1]) || 5000;
    and parsed by the browser's native JSON parser */
 const OUT = "public/catalog.json";
 
-const MIN_VOTES = 60;
+/**
+ * Fame floor. A catalog built at 60 votes is ~92% titles nobody has heard
+ * of, which is exactly what made the deck feel random. TMDB has ~5.5k
+ * movies over 1,000 votes and ~1.1k series over 400 — enough for a full
+ * catalog where every entry is genuinely recognizable. Series get a lower
+ * bar because TV accumulates far fewer votes than film.
+ */
+const MIN_VOTES: Record<TitleType, number> = { movie: 1000, tv: 400 };
 const TODAY = new Date().toISOString().slice(0, 10);
 
 /** not narrative works — they pollute taste vectors and the swipe deck */
@@ -93,36 +100,42 @@ async function tmdb(path: string, params: Record<string, string> = {}): Promise<
   }
 }
 
-/** Collect ids from popular/top-rated plus year-sliced discover for depth */
+/**
+ * Collect ids, most-rated first. Ordering the whole corpus by vote count
+ * (rather than slicing per year) is what keeps the catalog to titles people
+ * have actually heard of — the old year slices were what dragged in the
+ * obscure regional tail.
+ */
 async function collectIds(type: TitleType, want: number): Promise<number[]> {
   const ids = new Set<number>();
   const dateField = type === "movie" ? "primary_release_date" : "first_air_date";
+  const floor = MIN_VOTES[type];
 
-  for (const list of ["popular", "top_rated"]) {
-    for (let page = 1; page <= 60 && ids.size < want; page++) {
+  for (let page = 1; page <= 500 && ids.size < want; page++) {
+    const data = await tmdb(`/discover/${type}`, {
+      page: String(page),
+      sort_by: "vote_count.desc",
+      "vote_count.gte": String(floor),
+      [`${dateField}.lte`]: TODAY,
+    });
+    const results = data.results ?? [];
+    for (const r of results) ids.add(r.id);
+    if (results.length === 0 || page >= (data.total_pages ?? 1)) break;
+    if (page % 25 === 0) console.log(`  ${type}/discover page ${page}: ${ids.size} ids`);
+  }
+  console.log(`  ${type}: ${ids.size} ids (floor ${floor} votes)`);
+
+  // top_rated adds acclaimed titles the vote ordering can bury
+  for (const list of ["top_rated", "popular"]) {
+    for (let page = 1; page <= 25 && ids.size < want; page++) {
       const data = await tmdb(`/${type}/${list}`, { page: String(page) });
-      for (const r of data.results ?? []) ids.add(r.id);
+      for (const r of data.results ?? []) {
+        if ((r.vote_count ?? 0) >= floor) ids.add(r.id);
+      }
       if (page >= (data.total_pages ?? 1)) break;
     }
-    console.log(`  ${type}/${list}: ${ids.size} ids`);
   }
-
-  // year slices keep the catalog from being only the last few years
-  const thisYear = new Date().getFullYear();
-  for (let year = thisYear; year >= 1970 && ids.size < want; year--) {
-    for (let page = 1; page <= 3 && ids.size < want; page++) {
-      const data = await tmdb(`/discover/${type}`, {
-        page: String(page),
-        sort_by: "vote_count.desc",
-        [`${dateField}.gte`]: `${year}-01-01`,
-        [`${dateField}.lte`]: year === thisYear ? TODAY : `${year}-12-31`,
-        "vote_count.gte": String(MIN_VOTES),
-      });
-      for (const r of data.results ?? []) ids.add(r.id);
-      if (page >= (data.total_pages ?? 1)) break;
-    }
-    if (year % 10 === 0) console.log(`  ${type}/discover ${year}: ${ids.size} ids`);
-  }
+  console.log(`  ${type}: ${ids.size} ids after lists`);
   return [...ids].slice(0, want);
 }
 
@@ -142,7 +155,7 @@ async function fetchTitle(type: TitleType, id: number): Promise<Title | null> {
     const released: string | undefined =
       type === "movie" ? d.release_date : d.first_air_date;
     const year = Number(released?.slice(0, 4));
-    if (!titleEn || !year || (d.vote_count ?? 0) < MIN_VOTES) return null;
+    if (!titleEn || !year || (d.vote_count ?? 0) < MIN_VOTES[type]) return null;
     if (d.adult) return null;
     // TMDB popularity spikes for unreleased titles; asking "have you watched
     // this?" about a film that isn't out yet is nonsense, so drop them
@@ -252,9 +265,10 @@ function markOnboarding(titles: Title[]) {
 
 async function main() {
   const started = Date.now();
-  // over-fetch ~18% because low-vote and adult titles get filtered out
-  const movieWant = Math.round(TARGET * 0.62 * 1.18);
-  const tvWant = Math.round(TARGET * 0.38 * 1.18);
+  // TMDB simply has more well-rated films than series, so the split follows
+  // what's actually available above the fame floor
+  const movieWant = Math.round(TARGET * 0.78 * 1.12);
+  const tvWant = Math.round(TARGET * 0.22 * 1.12);
   console.log(`Collecting ids (target ${TARGET}: ${movieWant} movie / ${tvWant} tv)…`);
   const movieIds = await collectIds("movie", movieWant);
   const tvIds = await collectIds("tv", tvWant);

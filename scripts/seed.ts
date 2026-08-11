@@ -6,8 +6,9 @@
  *   TMDB_API_KEY=...  SUPABASE_URL=...  SUPABASE_SERVICE_ROLE_KEY=... \
  *     npx tsx scripts/seed.ts [--pages 50] [--dry]
  *
- *   --pages N  pages per category (4 categories × N pages × 20 ≈ catalog size;
- *              default 50 → ~3-4k unique titles)
+ *   --pages N  pages per TMDB list (2 lists × 2 types × N pages × 20, minus
+ *              overlap and low-vote titles; default 250 → ~10-15k titles,
+ *              TMDB caps each list at 500 pages → ~40k max)
  *   --dry      fetch + featurize only, write JSON to ./seed-output.json,
  *              skip the Supabase upload (works without Supabase keys)
  *
@@ -26,7 +27,7 @@ const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const args = process.argv.slice(2);
 const DRY = args.includes("--dry");
-const PAGES = Number(args[args.indexOf("--pages") + 1]) || 50;
+const PAGES = Math.min(Number(args[args.indexOf("--pages") + 1]) || 250, 500);
 const ONBOARDING_COUNT = 60;
 
 if (!API_KEY) {
@@ -211,9 +212,9 @@ async function main() {
   for (const t of titles) vectors.set(t.id, featurize(t));
 
   pickOnboarding(titles, vectors);
-  const simRows = computeSimilarities(titles, vectors);
 
   if (DRY) {
+    const simRows = computeSimilarities(titles.slice(0, 500), vectors);
     writeFileSync("./seed-output.json", JSON.stringify({ titles, similarities: simRows.length }, null, 1));
     console.log(`Dry run complete → ./seed-output.json (${titles.length} titles, dim=${DIM})`);
     return;
@@ -249,14 +250,17 @@ async function main() {
     console.log(`  titles: ${Math.min(i + 200, titles.length)}/${titles.length}`);
   }
 
-  console.log("Uploading similarities…");
-  for (let i = 0; i < simRows.length; i += 1000) {
-    const { error } = await supabase.from("item_similarity").upsert(simRows.slice(i, i + 1000));
-    if (error) throw new Error(`similarity upsert failed: ${error.message}`);
-    if (i % 10000 === 0) console.log(`  similarities: ${i}/${simRows.length}`);
+  console.log("Rebuilding item similarities in-database (HNSW)…");
+  const { error: simError } = await supabase.rpc("rebuild_item_similarity", { top_k: 30 });
+  if (simError) {
+    console.warn(
+      `  rpc timed out or failed (${simError.message}).\n` +
+        "  Run this once in the Supabase SQL editor instead:\n" +
+        "    select public.rebuild_item_similarity();"
+    );
   }
 
-  console.log(`✅ Done: ${titles.length} titles, ${simRows.length} similarity edges.`);
+  console.log(`✅ Done: ${titles.length} titles uploaded.`);
 }
 
 main().catch((e) => {

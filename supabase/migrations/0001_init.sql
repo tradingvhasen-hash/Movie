@@ -187,6 +187,27 @@ as $$
   limit pool_count;
 $$;
 
+-- Rebuild the precomputed nearest-neighbour table using the HNSW index.
+-- Run once after seeding (SQL editor):  select public.rebuild_item_similarity();
+create or replace function public.rebuild_item_similarity(top_k integer default 30)
+returns void
+language plpgsql security definer
+as $$
+begin
+  truncate public.item_similarity;
+  insert into public.item_similarity (title_id, similar_title_id, score)
+  select t.id, n.id, n.score
+  from public.titles t
+  cross join lateral (
+    select t2.id, (1 - (t2.feature_vector <=> t.feature_vector))::real as score
+    from public.titles t2
+    where t2.id <> t.id
+    order by t2.feature_vector <=> t.feature_vector
+    limit top_k
+  ) n;
+end;
+$$;
+
 -- ─────────────────────────────────────────────────────────────
 -- Collaborative co-occurrence refresh ("users who liked X also liked Y")
 -- Schedule hourly with pg_cron (Dashboard → Database → Extensions → pg_cron):

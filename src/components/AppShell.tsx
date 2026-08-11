@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useLocale, useTranslations } from "next-intl";
+import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
 import AuthButton from "./AuthButton";
+import { useLocaleSwitch } from "./LocaleProvider";
 
 const TABS = [
   { href: "/", key: "swipe", icon: "🃏" },
@@ -14,16 +15,13 @@ const TABS = [
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const t = useTranslations();
-  const locale = useLocale();
-  const router = useRouter();
+  const { locale, setLocale } = useLocaleSwitch();
   const pathname = usePathname();
 
   const isSharePage = pathname.startsWith("/l/") || pathname.startsWith("/u/");
 
   function toggleLocale() {
-    const next = locale === "ar" ? "en" : "ar";
-    document.cookie = `locale=${next};path=/;max-age=31536000;samesite=lax`;
-    router.refresh();
+    setLocale(locale === "ar" ? "en" : "ar");
   }
 
   return (

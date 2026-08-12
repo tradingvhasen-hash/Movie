@@ -62,7 +62,11 @@ const DEFAULT_WEIGHTS: FacetWeights = {
   genre: 1.0,
   cast: 0.7,
   director: 0.6,
-  era: 0.35,
+  // raised from 0.35 on user report that Discover kept surfacing older
+  // titles they did not recognise. Deliberately a nudge, not a jump: era is
+  // real information (people do lean modern or classic) but a weak one, and
+  // over-weighting it would bury a great match from the wrong decade.
+  era: 0.55,
   language: 0.45,
 };
 

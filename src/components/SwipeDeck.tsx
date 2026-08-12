@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import SwipeCard from "./SwipeCard";
 import SwipeBurst from "./SwipeBurst";
+import TastePicker from "./TastePicker";
 import { useDeck } from "@/lib/useDeck";
 import { useDhawq } from "@/lib/store";
 import { GlowButton, HeartButton, NeuButton } from "./ui";
@@ -19,6 +20,8 @@ export default function SwipeDeck() {
   const resetAll = useDhawq((s) => s.resetAll);
 
   const [forcedExit, setForcedExit] = useState<SwipeAction | null>(null);
+  /** welcome → pick a few you love → deck */
+  const [picking, setPicking] = useState(false);
   const [hintChecks, setHintChecks] = useState([false, false, false]);
   const [burst, setBurst] = useState<{ id: number; action: SwipeAction } | null>(null);
 
@@ -104,7 +107,19 @@ export default function SwipeDeck() {
     );
   }
 
-  /* ── onboarding ── */
+  /* ── onboarding: welcome, then the taste picker ── */
+  if (!onboardingSeen && picking) {
+    return (
+      <TastePicker
+        onDone={() => {
+          setOnboardingSeen();
+          setPicking(false);
+          setTimeout(refill, 0);
+        }}
+      />
+    );
+  }
+
   if (!onboardingSeen) {
     const hints = [t("swipe.hintRight"), t("swipe.hintLeft"), t("swipe.hintUp")];
     return (
@@ -143,7 +158,7 @@ export default function SwipeDeck() {
           </motion.div>
 
           <motion.div variants={FADE_UP} className="mt-7 w-full">
-            <GlowButton onClick={setOnboardingSeen} className="w-full text-lg">
+            <GlowButton onClick={() => setPicking(true)} className="w-full text-lg">
               {t("onboarding.start")}
             </GlowButton>
           </motion.div>

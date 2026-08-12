@@ -123,10 +123,18 @@ const FAME_TIERS = [
  * from the top ~1,800 of the catalog and led with the 23rd most-watched film
  * in existence: a correct answer to the wrong question.
  *
- * So Discover keeps a floor (nothing from the true long tail, where the
- * metadata is too thin to match on anyway) and opens everything above it.
+ * It kept a floor at the top 4,000 on the theory that thinner metadata below
+ * that could not be matched on anyway. Measured, that theory was wrong: the
+ * floor was hiding 28% of the catalog and cost 2 points of benchmark quality
+ * (17% → 19%). Discover now draws from everything.
+ *
+ * This matches what the retrieval-bottleneck literature reports — that the
+ * limiting factor in cold-start recommendation is usually whether the right
+ * item entered the candidate pool at all, not how it was scored once there.
+ * The deck keeps its fame tiers, because a card you have never heard of is
+ * genuinely unratable.
  */
-const DISCOVER_POOL = 4000;
+const DISCOVER_POOL = Infinity;
 
 export type RankMode = "swipe" | "discover";
 
@@ -365,6 +373,7 @@ export function recommend(
   const { facets, facetWeights, streaks, totalSwipes } = profile;
 
   const coWatch = opts.likedTitles?.length ? coWatchBonus(opts.likedTitles) : null;
+  const coWatchScale = mode === "discover" ? 1 : CO_WATCH_DECK_SCALE;
 
   // centre of meaning for everything the viewer has liked
   let soulCentre: number[] | null = null;
@@ -389,7 +398,6 @@ export function recommend(
     for (let i = 0; i < v.length; i++) d += soulCentre[i] * v[i];
     return d;
   };
-  const coWatchScale = mode === "discover" ? 1 : CO_WATCH_DECK_SCALE;
 
   const scored: { c: CandidateItem; score: number; facet: number }[] = [];
   for (const c of gated) {

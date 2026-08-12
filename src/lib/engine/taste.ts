@@ -52,6 +52,26 @@ export interface TasteProfile {
   ratedSwipes: number;
   /** every swipe including "not seen" — also the clock streak cooldowns use */
   totalSwipes: number;
+  /**
+   * Tokens from the most recent liked titles, newest first.
+   *
+   * The tables are a *set* — they know what you like, not when. Sequence
+   * carries real information that a set throws away: three horror films in a
+   * row tonight means you want a fourth now, not the comedy you liked last
+   * month. Netflix's 2025 rebuild is built on exactly this idea, reading the
+   * viewing history as an ordered sequence rather than a bag.
+   *
+   * RECORDED AS TRIED AND NOT SHIPPED. A scoring bonus built on this was
+   * measured at four weights and made the benchmark worse every time
+   * (19% → 17%). The likely reason is that the benchmark's simulated viewers
+   * have a fixed taste and never change mood mid-session, so there is no
+   * momentum to capture and the signal only over-weights whatever came last —
+   * which means the test is blind to the idea rather than disproving it. The
+   * field is kept and maintained so a future test with mood-switching viewers
+   * can try again; nothing reads it today.
+   */
+  recent: string[][];
+
   /** titles the user has actually watched */
   seenCount: number;
   /** titles swiped away as unwatched */
@@ -62,6 +82,8 @@ export const LIKE_WEIGHT = 1.0;
 export const DISLIKE_WEIGHT = -0.7;
 /** decay applied to the running taste vector before each update → recency bias */
 export const RECENCY_DECAY = 0.995;
+/** how many recent likes carry short-term momentum */
+export const RECENT_LIKES = 5;
 
 export function emptyProfile(): TasteProfile {
   return {
@@ -73,6 +95,7 @@ export function emptyProfile(): TasteProfile {
     likedCount: 0,
     dislikedSum: new Array(DIM).fill(0),
     dislikedCount: 0,
+    recent: [],
     ratedSwipes: 0,
     totalSwipes: 0,
     seenCount: 0,
@@ -105,6 +128,7 @@ export function normalizeProfile(p: Partial<TasteProfile> | undefined): TastePro
     dislikedCount: p.dislikedCount ?? 0,
     ratedSwipes: p.ratedSwipes ?? 0,
     totalSwipes: p.totalSwipes ?? p.ratedSwipes ?? 0,
+    recent: Array.isArray(p.recent) ? p.recent : [],
     seenCount: p.seenCount ?? 0,
     unseenCount: p.unseenCount ?? 0,
   };
@@ -165,6 +189,10 @@ export function applySwipe(
   if (action === "liked") {
     for (let i = 0; i < DIM; i++) next.likedSum[i] += vector[i] ?? 0;
     next.likedCount = profile.likedCount + 1;
+    next.recent = [
+      [...tokens.story.slice(0, 6), ...tokens.genre],
+      ...profile.recent,
+    ].slice(0, RECENT_LIKES);
   } else {
     for (let i = 0; i < DIM; i++) next.dislikedSum[i] += vector[i] ?? 0;
     next.dislikedCount = profile.dislikedCount + 1;

@@ -60,6 +60,7 @@ export default function DiscoverPage() {
       likedItems,
       seed,
       vectorFor: vectorOf,
+      mode: "discover",
     });
   }, [hydrated, swipes, profile, seed]);
 

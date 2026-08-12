@@ -28,6 +28,12 @@ const W_QUALITY = 0.25;
  */
 const W_RECOGNITION_COLD = 0.9;
 const W_RECOGNITION_WARM = 0.55;
+/**
+ * In Discover, recognisability is barely rewarded at all — it is kept only
+ * to break ties away from titles with almost no ratings. Ranking a
+ * recommendation list by fame surfaces what the user has already watched.
+ */
+const W_RECOGNITION_DISCOVER = 0.12;
 
 /** MMR diversity penalty: higher → more varied results */
 const MMR_LAMBDA = 0.35;
@@ -47,7 +53,25 @@ const FAME_TIERS = [
   { untilSwipes: Infinity, size: 3000 },
 ];
 
-export function fameTierSize(profile: TasteProfile): number {
+/**
+ * Discovery is the opposite problem to swiping.
+ *
+ * A card can only be rated if the user has heard of the title, so the deck is
+ * gated hard on fame. A recommendation is only useful if they *haven't* seen
+ * it — and the titles they are most likely to have already seen are exactly
+ * the famous ones. Running Discover through the swipe settings meant it drew
+ * from the top ~1,800 of the catalog and led with the 23rd most-watched film
+ * in existence: a correct answer to the wrong question.
+ *
+ * So Discover keeps a floor (nothing from the true long tail, where the
+ * metadata is too thin to match on anyway) and opens everything above it.
+ */
+const DISCOVER_POOL = 4000;
+
+export type RankMode = "swipe" | "discover";
+
+export function fameTierSize(profile: TasteProfile, mode: RankMode = "swipe"): number {
+  if (mode === "discover") return DISCOVER_POOL;
   for (const tier of FAME_TIERS) {
     if (profile.totalSwipes < tier.untilSwipes) return tier.size;
   }
@@ -161,6 +185,12 @@ export interface RecommendOptions {
   coOccurrenceBonus?: Map<string, number>;
   /** override the automatic exploration share */
   exploreRatio?: number;
+  /**
+   * "swipe" (default) ranks cards to rate: famous, broad, with exploration
+   * probes. "discover" ranks titles to watch next: the whole catalog above a
+   * quality floor, no fame bias, no probes.
+   */
+  mode?: RankMode;
 }
 
 /**
@@ -183,11 +213,14 @@ export function recommend(
   const seed = opts.seed ?? 1;
   const rng = makeRng(seed + profile.totalSwipes * 2654435761);
 
-  const gated = byFame(pool).slice(0, fameTierSize(profile));
+  const mode = opts.mode ?? "swipe";
+  const gated = byFame(pool).slice(0, fameTierSize(profile, mode));
 
   const confidence = tasteConfidence(profile);
   const wRecognition =
-    W_RECOGNITION_COLD + (W_RECOGNITION_WARM - W_RECOGNITION_COLD) * confidence;
+    mode === "discover"
+      ? W_RECOGNITION_DISCOVER
+      : W_RECOGNITION_COLD + (W_RECOGNITION_WARM - W_RECOGNITION_COLD) * confidence;
   const { facets, facetWeights, streaks, totalSwipes } = profile;
 
   const scored: { c: CandidateItem; score: number; facet: number }[] = [];
@@ -211,7 +244,10 @@ export function recommend(
   if (scored.length === 0) return [];
   scored.sort((a, b) => b.score - a.score);
 
-  const exploreRatio = opts.exploreRatio ?? exploreRatioFor(profile);
+  // exploration exists to *learn*, which is a swiping activity. A probe in a
+  // recommendation grid is just an off-topic suggestion.
+  const exploreRatio =
+    opts.exploreRatio ?? (mode === "discover" ? 0 : exploreRatioFor(profile));
   const exploreSlots = Math.min(count - 1, Math.round(count * exploreRatio));
   const mainSlots = Math.max(1, count - exploreSlots);
 

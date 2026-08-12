@@ -60,10 +60,29 @@ const W_RECOGNITION_WARM = 0.55;
  */
 const W_RECOGNITION_DISCOVER = 0.12;
 
-/** MMR diversity penalty: higher → more varied results */
+/**
+ * Diversity, and why the two surfaces need different amounts of it.
+ *
+ * The deck needs plenty. A new user has told us nothing, and a batch of ten
+ * near-identical cards teaches us almost nothing about them — variety is how
+ * a taste gets *found*.
+ *
+ * Discover needs almost none. By then the taste is known and the user is
+ * asking "what should I watch", so forcing a deliberately-different title into
+ * the list means handing them something the engine itself scores at 48% while
+ * an 80% match sits unshown. Measured on a five-sitcom library: at deck-level
+ * diversity Discover returned The Lord of the Rings, Breaking Bad and The
+ * Departed alongside the sitcoms; at a quarter of it, seven of eight were
+ * strong matches and one stayed different.
+ *
+ * Both were on one dial until now — an oversight, since fame, exploration and
+ * recognisability had already been split by mode.
+ */
 const MMR_LAMBDA = 0.35;
 /** extra penalty per already-picked result sharing a genre */
 const GENRE_REPEAT_PENALTY = 0.16;
+/** Discover keeps a quarter of it: one window for discovery, not four */
+const DISCOVER_DIVERSITY_SCALE = 0.25;
 /** how many top-scored candidates the diversity pass considers */
 const FINALIST_POOL = 60;
 
@@ -383,6 +402,7 @@ export function recommend(
   // recommendation grid is just an off-topic suggestion.
   const exploreRatio =
     opts.exploreRatio ?? (mode === "discover" ? 0 : exploreRatioFor(profile));
+  const divScale = mode === "discover" ? DISCOVER_DIVERSITY_SCALE : 1;
   const exploreSlots = Math.min(count - 1, Math.round(count * exploreRatio));
   const mainSlots = Math.max(1, count - exploreSlots);
 
@@ -424,7 +444,10 @@ export function recommend(
       for (const g of cand.c.title.genres) {
         repeats = Math.max(repeats, genreCounts.get(g) ?? 0);
       }
-      const val = cand.score - MMR_LAMBDA * maxSim - GENRE_REPEAT_PENALTY * repeats;
+      const val =
+        cand.score -
+        divScale * MMR_LAMBDA * maxSim -
+        divScale * GENRE_REPEAT_PENALTY * repeats;
       if (val > bestVal) {
         bestVal = val;
         bestIdx = i;

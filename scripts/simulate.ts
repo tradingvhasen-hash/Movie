@@ -325,6 +325,78 @@ console.log(`catalog: ${catalog.length} titles\n`);
   );
 }
 
+/* ── 10. the deck must not circle inside one family ───────────────────── */
+{
+  /**
+   * Reaching a *specific* title by swiping. Not a goal in itself — hundreds of
+   * titles usually match a taste equally well, so any single one is a needle —
+   * but it is a sharp detector for a deck that has stopped exploring.
+   *
+   * At full strength the co-watch signal did exactly that: every like drags in
+   * its own ~8 neighbours, so a handful of likes pinned the same few hundred
+   * titles to the top of every batch. Total swipes across these targets went
+   * 340 → 489. Scaling it down in deck mode brought it back to 343 while
+   * Discover kept the full-strength signal, and its benchmark above.
+   */
+  const targets = ["Rush Hour", "The Conjuring", "La La Land", "Superbad"];
+  let totalWith = 0;
+  let totalWithout = 0;
+
+  for (const name of targets) {
+    const target = catalog.find((t) => t.title.en === name);
+    if (!target) continue;
+    const tg = new Set(target.genres.map((g) => g.toLowerCase()));
+    const similar = (t: Title) => {
+      const g = new Set(t.genres.map((x) => x.toLowerCase()));
+      let shared = 0;
+      for (const x of g) if (tg.has(x)) shared++;
+      return shared / new Set([...g, ...tg]).size >= 0.5;
+    };
+
+    for (const useCoWatch of [false, true]) {
+      let profile = emptyProfile();
+      const seen = new Set<string>();
+      const liked: Title[] = [];
+      let swipes = 0;
+      const CAP = 400;
+      while (swipes < CAP) {
+        const batch = recommend(pool, profile, {
+          excludeIds: seen,
+          count: 10,
+          seed: 5,
+          vectorFor,
+          likedTitles: useCoWatch ? liked : undefined,
+        });
+        if (batch.length === 0) break;
+        let found = false;
+        for (const r of batch) {
+          if (r.title.id === target.id) {
+            found = true;
+            break;
+          }
+          const action = similar(r.title) ? "liked" : "disliked";
+          if (action === "liked") liked.push(r.title);
+          profile = applySwipe(profile, r.title, vectorFor(r.title), action);
+          seen.add(r.title.id);
+          swipes++;
+          if (swipes >= CAP) break;
+        }
+        if (found) break;
+      }
+      if (useCoWatch) totalWith += swipes;
+      else totalWithout += swipes;
+    }
+  }
+
+  const ratio = totalWith / Math.max(totalWithout, 1);
+  check(
+    "deck still explores with co-watch on",
+    ratio <= 1.15,
+    `${totalWith} swipes to reach ${targets.length} targets vs ${totalWithout} with the ` +
+      `signal off (${ratio.toFixed(2)}×; target ≤1.15× — it was 1.44× at full strength)`
+  );
+}
+
 /* ── summary ──────────────────────────────────────────────────────────── */
 const failed = results.filter((r) => !r.pass);
 console.log(

@@ -178,6 +178,22 @@ const CO_WATCH_HIT = 0.22;
 const CO_WATCH_MAX = 0.85;
 
 /**
+ * The two surfaces want opposite things from this signal.
+ *
+ * Discover answers "what should I watch now", and a tight circle around what
+ * you already love is exactly right — at full strength it took a comedy-only
+ * library from 8/12 to 12/12.
+ *
+ * The swipe deck is where you *teach* the engine, and there the same tightness
+ * is harmful: every like drags in only its own ~8 neighbours, so 20 likes pin
+ * roughly 160 titles to the top of every batch and crowd out everything else.
+ * Measured, that pushed La La Land from 20 swipes away to 101, and
+ * Interstellar from 165 to 233 — the deck circles inside one family instead of
+ * mapping the rest of your taste.
+ */
+const CO_WATCH_DECK_SCALE = 0.3;
+
+/**
  * Score candidates by what the people who watched your favourites went on to
  * watch.
  *
@@ -282,6 +298,7 @@ export function recommend(
   const { facets, facetWeights, streaks, totalSwipes } = profile;
 
   const coWatch = opts.likedTitles?.length ? coWatchBonus(opts.likedTitles) : null;
+  const coWatchScale = mode === "discover" ? 1 : CO_WATCH_DECK_SCALE;
 
   const scored: { c: CandidateItem; score: number; facet: number }[] = [];
   for (const c of gated) {
@@ -296,7 +313,7 @@ export function recommend(
       wRecognition * known +
       confidence * W_FACETS * fs.total +
       JITTER * jitterFor(c.title.id, seed) +
-      (coWatch?.get(c.title.id)?.score ?? 0) +
+      coWatchScale * (coWatch?.get(c.title.id)?.score ?? 0) +
       (opts.coOccurrenceBonus?.get(c.title.id) ?? 0);
 
     scored.push({ c, score, facet: fs.total });
@@ -414,7 +431,7 @@ export function recommend(
       score,
       // a co-watch hit adds real evidence beyond the facet tables, so it
       // lifts the reported match rather than being invisible in it
-      match: matchPercent(facet + (hit ? hit.score : 0), confidence),
+      match: matchPercent(facet + (hit ? coWatchScale * hit.score : 0), confidence),
       reasons: explainMatch(facets, facetWeights, c.title).map((r) => ({
         kind: r.kind as string,
         label: r.label,

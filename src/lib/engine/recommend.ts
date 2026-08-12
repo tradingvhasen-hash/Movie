@@ -89,7 +89,15 @@ const DISCOVER_DIVERSITY_SCALE = 0.25;
  * of the range scores occupy in Discover.
  */
 const RANK_MIDPOINT = 0.4;
-const RANK_SPREAD = 0.6;
+/**
+ * Widened after using the app: at 0.6 a heavy user saw four cards all reading
+ * exactly 95%, which implies a precision the number does not have. Widening
+ * helps, but only so far — the honest finding is that the top ten results out
+ * of four thousand really are near-equally good, so this figure is flat at the
+ * top no matter how it is scaled. The reason line under each card is what
+ * actually distinguishes them.
+ */
+const RANK_SPREAD = 2.2;
 
 /** how many top-scored candidates the diversity pass considers */
 const FINALIST_POOL = 60;

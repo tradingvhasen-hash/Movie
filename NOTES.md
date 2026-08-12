@@ -102,6 +102,39 @@ against the improved engine, not the old one.
 
 ---
 
+## The feel ruler, and the first thing it found (2026-08-12)
+
+`npm run feel`. Seven tastes named by film rather than described by genre —
+each list cut in half at random four times, half handed to the engine, half
+held back as the answer key. Chance is printed next to every score, because
+without it a number like 9% is unreadable.
+
+    FEEL SCORE   9.2%    chance 2.0%    4.7× chance    first hit at rank 9/60
+
+It has resolution the old feel line never had — 19% for the comfort-sitcom
+taste, 4% for dry deadpan comedy — and it moved on the very first thing tried:
+
+| arm | feel score | genre benchmark (8 seeds) |
+|---|---|---|
+| shipped engine | 9.2% | 19% |
+| TMDB co-watch stripped | **14.9%** | **17%**, and a simulation check fails |
+| hand-written AI edges instead | 24.1% (contaminated) | 19% |
+
+**TMDB's "people who watched this also watched" data helps genre-defined
+tastes and hurts feel-defined ones.** That is not a bug to fix by flipping a
+constant — 19% → 17% is a real cost, and it breaks the comedy-library check.
+It is a trade-off the old instrument could not see at all.
+
+Nothing was changed in response. `COWATCH=<0..1> npm run feel` exists purely to
+re-run the sweep, and defaults to today's behaviour in the browser. The right
+moment to re-decide is *after* the soul layer, when there is a better source of
+feel to weigh against co-watch instead of simply having less of everything.
+
+The 24.1% row is recorded and not believed: those edges and these lists were
+written by the same model, so they agree with themselves.
+
+---
+
 ## Open question: what a tap on the onboarding grid really means
 
 The benchmark's simulated viewer taps any tile sharing genres with its target,

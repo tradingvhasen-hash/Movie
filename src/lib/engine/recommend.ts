@@ -265,6 +265,14 @@ const CO_WATCH_MAX = 0.85;
  * mapping the rest of your taste.
  */
 const CO_WATCH_DECK_SCALE = 0.3;
+/** Discover's share of the same signal — see the sweep in NOTES.md */
+const CO_WATCH_DISCOVER_SCALE = 1;
+
+/** measurement only: COWATCH=0.5 npm run feel. Always 1 in the browser. */
+const COWATCH_ENV =
+  typeof process !== "undefined" && process.env?.COWATCH
+    ? Number(process.env.COWATCH)
+    : 1;
 
 /**
  * Score candidates by what the people who watched your favourites went on to
@@ -378,7 +386,8 @@ export function recommend(
   const { facets, facetWeights, streaks, totalSwipes } = profile;
 
   const coWatch = opts.likedTitles?.length ? coWatchBonus(opts.likedTitles) : null;
-  const coWatchScale = mode === "discover" ? 1 : CO_WATCH_DECK_SCALE;
+  const coWatchScale =
+    (mode === "discover" ? CO_WATCH_DISCOVER_SCALE : CO_WATCH_DECK_SCALE) * COWATCH_ENV;
 
   // centre of meaning for everything the viewer has liked
   let soulCentre: number[] | null = null;

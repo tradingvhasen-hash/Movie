@@ -10,6 +10,7 @@
     "seed": "tsx scripts/seed.ts",
     "seed:dry": "tsx scripts/seed.ts --dry --pages 3",
     "benchmark": "tsx scripts/benchmark.ts",
+    "feel": "tsx scripts/feel-test.ts",
     "simulate": "tsx scripts/simulate.ts"
   },
   "dependencies": {

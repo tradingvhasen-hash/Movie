@@ -43,16 +43,23 @@ export default function SwipeDeck() {
     [queue.length, forcedExit]
   );
 
-  /* the swipe page is exactly one viewport tall, so nothing should ever
-     scroll behind it — belt and braces with the CSS, which some mobile
-     browsers apply inconsistently to the document element */
+  /**
+   * The swipe screen is exactly one viewport tall and must never scroll — an
+   * upward swipe belongs to the card, not the page.
+   *
+   * But only that screen. The lock was applied on mount, which also froze the
+   * taste picker rendered from here, leaving its grid stuck on the first row
+   * with the rest unreachable. It now follows the screen actually on show.
+   */
+  const deckVisible = onboardingSeen && !picking;
   useEffect(() => {
+    if (!deckVisible) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = prev;
     };
-  }, []);
+  }, [deckVisible]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {

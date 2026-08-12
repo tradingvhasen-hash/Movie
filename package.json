@@ -8,7 +8,9 @@
     "start": "next start",
     "catalog": "tsx scripts/build-catalog.ts",
     "seed": "tsx scripts/seed.ts",
-    "seed:dry": "tsx scripts/seed.ts --dry --pages 3"
+    "seed:dry": "tsx scripts/seed.ts --dry --pages 3",
+    "benchmark": "tsx scripts/benchmark.ts",
+    "simulate": "tsx scripts/simulate.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.2",

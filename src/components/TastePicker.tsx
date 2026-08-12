@@ -6,12 +6,12 @@ import TitleTile from "./TitleTile";
 import { GlowButton } from "./ui";
 import { HeartIcon } from "./ui/Icons";
 import { getLocalCatalog } from "@/lib/catalog";
+import { resolveSeeds } from "@/lib/data/taste-seeds";
 import { FADE_UP, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
 import { useDhawq } from "@/lib/store";
-import type { Title } from "@/lib/types";
 
 /** how many titles the grid offers */
-const CHOICES = 36;
+const CHOICES = 50;
 /** how many picks before the button unlocks */
 const MIN_PICKS = 3;
 
@@ -31,37 +31,35 @@ const MIN_PICKS = 3;
  * films you love is a far sharper signal than rating forty you half-like, and
  * it is the standard remedy for cold start in the literature.
  *
- * The grid is drawn from across the catalog's genres rather than straight down
- * the popularity list, so every taste has something to recognise.
+ * The fifty tiles are a hand-named list — each audience's own canon, classics
+ * included — because every attempt to derive them from the catalog's own
+ * numbers produced the same wall of modern blockbusters. See taste-seeds.ts.
  */
 export default function TastePicker({ onDone }: { onDone: () => void }) {
   const swipe = useDhawq((s) => s.swipe);
   const [picked, setPicked] = useState<Set<string>>(new Set());
 
   const choices = useMemo(() => {
-    const pool = getLocalCatalog()
-      .map((c) => c.title)
-      .sort((a, b) => b.voteCount - a.voteCount);
+    const pool = getLocalCatalog().map((c) => c.title);
 
-    // round-robin across genres so the grid is not twelve superhero films
-    const byGenre = new Map<string, Title[]>();
-    for (const t of pool.slice(0, 900)) {
-      const g = t.genres[0]?.toLowerCase() ?? "other";
-      if (!byGenre.has(g)) byGenre.set(g, []);
-      byGenre.get(g)!.push(t);
-    }
-    const lanes = [...byGenre.values()];
-    const out: Title[] = [];
-    for (let round = 0; out.length < CHOICES; round++) {
-      let added = false;
-      for (const lane of lanes) {
+    /**
+     * The grid is a named list, not a derived one — see taste-seeds.ts for why
+     * two attempts at deriving it both produced the same wall of modern
+     * blockbusters.
+     */
+    const out = resolveSeeds(pool, CHOICES);
+
+    // only reachable if the catalog fetch failed and we are on the bundled
+    // sample set: fill the remainder with whatever is best known
+    if (out.length < CHOICES) {
+      const used = new Set(out.map((t) => t.id));
+      for (const t of [...pool].sort((a, b) => b.voteCount - a.voteCount)) {
         if (out.length >= CHOICES) break;
-        if (lane[round]) {
-          out.push(lane[round]);
-          added = true;
+        if (!used.has(t.id)) {
+          used.add(t.id);
+          out.push(t);
         }
       }
-      if (!added) break;
     }
     return out;
   }, []);

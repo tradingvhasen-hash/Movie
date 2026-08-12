@@ -170,6 +170,61 @@ function unexploredGenres(
     .map((x) => x.g);
 }
 
+/* ── co-watch signal ───────────────────────────────────────────────────── */
+
+/** how much a single co-watch link can add */
+const CO_WATCH_HIT = 0.22;
+/** ceiling, so a title recommended by many likes cannot swamp everything */
+const CO_WATCH_MAX = 0.85;
+
+/**
+ * Score candidates by what the people who watched your favourites went on to
+ * watch.
+ *
+ * This is the one thing the facet tables structurally cannot do. They can
+ * only connect two titles through a value both carry, and measured on the
+ * real catalog *The Hangover* and *Rush Hour* share exactly one — the word
+ * "comedy". Their keyword lists ("amnesia, blackjack, chapel" against
+ * "martial arts, fbi, chinese mafia") describe events, never the feel that
+ * makes them the same kind of night in. TMDB's audience data knows they go
+ * together because the same people watch both.
+ *
+ * Links are ordered by relevance, so earlier ones count for more, and hits
+ * from several different likes accumulate — a title recommended by four of
+ * your favourites is a stronger bet than one recommended by a single one.
+ */
+export interface CoWatch {
+  score: number;
+  /** id of the liked title that contributed most — a real "because you liked" */
+  from: string;
+  fromStrength: number;
+}
+
+export function coWatchBonus(liked: Title[]): Map<string, CoWatch> {
+  const bonus = new Map<string, CoWatch>();
+  for (const title of liked) {
+    const links = title.related;
+    if (!links || links.length === 0) continue;
+    for (let rank = 0; rank < links.length; rank++) {
+      // first neighbour ≈ full weight, last ≈ 40%
+      const positional = 1 - (0.6 * rank) / links.length;
+      const add = CO_WATCH_HIT * positional;
+      const id = links[rank];
+      const prev = bonus.get(id);
+      if (!prev) {
+        bonus.set(id, { score: add, from: title.id, fromStrength: add });
+      } else {
+        prev.score = Math.min(CO_WATCH_MAX, prev.score + add);
+        if (add > prev.fromStrength) {
+          prev.from = title.id;
+          prev.fromStrength = add;
+        }
+      }
+    }
+  }
+  return bonus;
+}
+
 /* ── main entry point ──────────────────────────────────────────────────── */
 
 export interface RecommendOptions {
@@ -179,8 +234,11 @@ export interface RecommendOptions {
   seed?: number;
   /** builds a feature vector on demand, for the finalist diversity pass */
   vectorFor?: (title: Title) => Float32Array;
-  /** liked titles, for "because you liked" explanations */
-  likedItems?: CandidateItem[];
+  /**
+   * Everything the user has liked. Drives the co-watch signal and the
+   * "because you loved…" line.
+   */
+  likedTitles?: Title[];
   /** candidate id → bonus from collaborative co-occurrence (cloud path) */
   coOccurrenceBonus?: Map<string, number>;
   /** override the automatic exploration share */
@@ -223,6 +281,8 @@ export function recommend(
       : W_RECOGNITION_COLD + (W_RECOGNITION_WARM - W_RECOGNITION_COLD) * confidence;
   const { facets, facetWeights, streaks, totalSwipes } = profile;
 
+  const coWatch = opts.likedTitles?.length ? coWatchBonus(opts.likedTitles) : null;
+
   const scored: { c: CandidateItem; score: number; facet: number }[] = [];
   for (const c of gated) {
     if (excludeIds.has(c.title.id)) continue;
@@ -236,6 +296,7 @@ export function recommend(
       wRecognition * known +
       confidence * W_FACETS * fs.total +
       JITTER * jitterFor(c.title.id, seed) +
+      (coWatch?.get(c.title.id)?.score ?? 0) +
       (opts.coOccurrenceBonus?.get(c.title.id) ?? 0);
 
     scored.push({ c, score, facet: fs.total });
@@ -347,31 +408,20 @@ export function recommend(
   }
 
   return picked.map(({ c, score, facet }) => {
-    let becauseOf: string | undefined;
-    if (opts.likedItems && opts.likedItems.length > 0) {
-      const cv = vecOf(c);
-      if (cv) {
-        let best = -Infinity;
-        for (const li of opts.likedItems) {
-          const lv = vecOf(li);
-          if (!lv) continue;
-          const s = cosine(lv, cv);
-          if (s > best) {
-            best = s;
-            becauseOf = best > 0.25 ? li.title.id : undefined;
-          }
-        }
-      }
-    }
+    const hit = coWatch?.get(c.title.id);
     return {
       title: c.title,
       score,
-      match: matchPercent(facet, confidence),
+      // a co-watch hit adds real evidence beyond the facet tables, so it
+      // lifts the reported match rather than being invisible in it
+      match: matchPercent(facet + (hit ? hit.score : 0), confidence),
       reasons: explainMatch(facets, facetWeights, c.title).map((r) => ({
         kind: r.kind as string,
         label: r.label,
       })),
-      becauseOf,
+      // "because you loved X" now names the title whose audience actually
+      // leads here, instead of the nearest vector
+      becauseOf: hit?.from,
     };
   });
 }

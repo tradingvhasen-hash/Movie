@@ -47,17 +47,14 @@ export default function DiscoverPage() {
         .filter((s) => s.action !== "not_seen")
         .map((s) => s.titleId)
     );
-    const likedItems = Object.values(swipes)
+    const likedTitles = Object.values(swipes)
       .filter((s) => s.action === "liked")
-      .map((s) => {
-        const title = s.title ?? getLocalTitle(s.titleId);
-        return title ? { title, vector: vectorOf(title) } : null;
-      })
-      .filter((x): x is NonNullable<typeof x> => Boolean(x));
+      .map((s) => s.title ?? getLocalTitle(s.titleId))
+      .filter((t): t is NonNullable<typeof t> => Boolean(t));
     return recommend(pool, profile, {
       excludeIds: exclude,
       count: 24,
-      likedItems,
+      likedTitles,
       seed,
       vectorFor: vectorOf,
       mode: "discover",

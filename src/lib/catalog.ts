@@ -1,5 +1,6 @@
 import { SAMPLE_TITLES } from "@/lib/data/sample-titles";
 import { decodeCatalog, type EncodedCatalog } from "@/lib/data/catalog-codec";
+import { buildRarityIndex } from "@/lib/engine/facets";
 import { featurize } from "@/lib/engine/features";
 import type { CandidateItem } from "@/lib/engine/recommend";
 import type { Title } from "@/lib/types";
@@ -27,6 +28,10 @@ function build(titles: Title[]): CandidateItem[] {
   const built: CandidateItem[] = titles.map((title) => ({ title }));
   items = built;
   byId = new Map(built.map((c) => [c.title.id, c]));
+  // how rare each keyword, genre, actor and language is can only be known
+  // from the whole catalog, and scoring needs it to tell an informative
+  // value from a near-universal one
+  buildRarityIndex(titles);
   return built;
 }
 

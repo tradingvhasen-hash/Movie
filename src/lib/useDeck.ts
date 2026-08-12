@@ -44,11 +44,17 @@ function computeLocalBatch(excludeExtra: string[] = []): Title[] {
   const state = useDhawq.getState();
   const exclude = new Set<string>([...Object.keys(state.swipes), ...excludeExtra]);
 
+  const likedTitles = Object.values(state.swipes)
+    .filter((s) => s.action === "liked")
+    .map((s) => s.title ?? getLocalItem(s.titleId)?.title)
+    .filter((t): t is Title => Boolean(t));
+
   return recommend(pool, state.profile, {
     excludeIds: exclude,
     count: BATCH,
     seed: state.seed,
     vectorFor: vectorOf,
+    likedTitles,
   }).map((r) => r.title);
 }
 

@@ -127,13 +127,96 @@ export function titleTokens(title: Title): TitleTokens {
   return tokens;
 }
 
+/* ── how informative a value is ───────────────────────────────────────── */
+
+/**
+ * Rarity weighting.
+ *
+ * Without this, a value shared by most of the catalog counts as much as one
+ * that picks out a handful of titles. Measured on the real catalog: the token
+ * `en` appears in 87% of titles, so after twenty English likes it contributed
+ * an identical +0.73 to *every* English candidate — a large constant that
+ * carries no information at all, and enough on its own to lift The Dark
+ * Knight above a comedy for someone who only likes comedies.
+ *
+ * The weight is simply the share of the catalog a value does *not* cover:
+ *
+ *     en (87% of titles)      → 0.13   near-universal, separates nothing
+ *     comedy (33%)            → 0.67   still tells us a great deal
+ *     2010s (30%)             → 0.70
+ *     a specific director     → ~1.0
+ *
+ * Textbook IDF was tried first and measurably made recommendations worse
+ * (8/12 → 6/12 comedies for a comedy-only library). It is built for free text
+ * with an open vocabulary; our facets are small closed lists, so its steep log
+ * curve punished `comedy` almost as hard as `en` while inflating one-off
+ * keywords — and 46% of our keywords appear in exactly one title, so
+ * inflating them amplifies pure noise. This curve leaves rare values at ~1
+ * instead of boosting them, and only bites when a value approaches universal.
+ */
+const rarity: Record<FacetKind, Record<string, number>> = {
+  story: {},
+  genre: {},
+  cast: {},
+  director: {},
+  era: {},
+  language: {},
+};
+let rarityReady = false;
+
+const RARITY_MIN = 0.08;
+
+/**
+ * Measure every value's rarity from the catalog. Called once after the
+ * catalog loads; scoring falls back to uniform weights until then, so nothing
+ * breaks if it never runs (the bundled sample set, or a test).
+ */
+export function buildRarityIndex(titles: Title[]): void {
+  const n = titles.length;
+  if (n === 0) return;
+
+  const df: Record<FacetKind, Map<string, number>> = {
+    story: new Map(),
+    genre: new Map(),
+    cast: new Map(),
+    director: new Map(),
+    era: new Map(),
+    language: new Map(),
+  };
+
+  for (const title of titles) {
+    const tokens = titleTokens(title);
+    for (const kind of FACET_KINDS) {
+      // a value counts once per title however often it appears in it
+      for (const token of new Set(tokens[kind])) {
+        df[kind].set(token, (df[kind].get(token) ?? 0) + 1);
+      }
+    }
+  }
+
+  for (const kind of FACET_KINDS) {
+    const table: Record<string, number> = {};
+    for (const [token, count] of df[kind]) {
+      table[token] = Math.max(RARITY_MIN, 1 - count / n);
+    }
+    rarity[kind] = table;
+  }
+  rarityReady = true;
+}
+
+/** unknown values are treated as averagely informative */
+function rarityOf(kind: FacetKind, token: string): number {
+  if (!rarityReady) return 1;
+  return rarity[kind][token] ?? 1;
+}
+
 /* ── reading the tables ───────────────────────────────────────────────── */
 
 /** A token's learned affinity in roughly [-1, 1], shrunk toward 0 when thin */
-function tokenWeight(table: FacetTable, token: string): number {
+function tokenWeight(table: FacetTable, kind: FacetKind, token: string): number {
   const entry = table[token];
   if (!entry) return 0;
-  return entry[0] / (entry[1] + TOKEN_K);
+  return (entry[0] / (entry[1] + TOKEN_K)) * rarityOf(kind, token);
 }
 
 export interface FacetScore {
@@ -178,7 +261,7 @@ export function facetScore(
         sum -= 1;
         continue;
       }
-      sum += tokenWeight(table, token);
+      sum += tokenWeight(table, kind, token);
     }
     const raw = Math.tanh(sum / Math.sqrt(list.length));
     perKind[kind] = raw;
@@ -409,7 +492,7 @@ export function explainMatch(
   for (const kind of FACET_KINDS) {
     const table = tables[kind];
     for (const token of tokens[kind]) {
-      const strength = tokenWeight(table, token) * weights[kind];
+      const strength = tokenWeight(table, kind, token) * weights[kind];
       if (strength > 0.08) {
         reasons.push({ kind, label: labelFor(title, kind, token), strength });
       }

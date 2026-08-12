@@ -1,5 +1,21 @@
 # Notebook — agreed ideas, deliberately not built yet
 
+> **Everything here is groundwork.** The agreed end state is a hosted site with
+> a real database and a catalog around 50,000 titles. Every piece built now
+> must survive that move, so: nothing may assume the catalog fits in the
+> browser, and nothing may assume there is no server. Where a shortcut was
+> taken for the static build, it is written down as such below.
+
+## Scale checklist for the current build
+| Piece | Today (5,555, static) | At 50,000 (hosted) |
+|---|---|---|
+| Catalog | one 2.9 MB JSON, fetched whole | too big to ship — must be queried |
+| Rarity index | built in the browser on load | precompute once, store in the DB |
+| Co-watch links | 46k links inside catalog.json | own table, joined on demand |
+| Ranking | runs in the browser | can stay client-side for the deck, server-side for Discover |
+| TMDB fetch | 5,600 requests, ~4 min | ~50,000 requests, ~40 min — unchanged code, just longer |
+
+
 Parked by decision, not forgotten. Each entry says what it is, why it is
 waiting, and what it would take.
 

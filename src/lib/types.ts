@@ -20,6 +20,13 @@ export interface Title {
   backdropPath?: string | null;
   /** Part of the cold-start calibration deck */
   onboarding?: boolean;
+  /**
+   * Ids of titles TMDB's audience data links to this one ("people who watched
+   * this also watched…"), strongest first. This is the only signal in the
+   * catalog not derived from the title's own metadata, so it can connect two
+   * films that share no keyword, genre or crew.
+   */
+  related?: string[];
 }
 
 export type SwipeAction = "liked" | "disliked" | "not_seen";

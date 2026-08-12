@@ -8,14 +8,14 @@ import type { Title, TitleType } from "../types";
  */
 export interface EncodedCatalog {
   /** format version, so a stale cached file can be detected */
-  v: 1;
+  v: 1 | 2;
   /** interned genre slugs */
   g: string[];
   /** interned language codes */
   l: string[];
   /** [tmdbId, isTv, titleEn, titleAr, overviewEn, year, genreIdx[],
    *   keywords[], director, cast[], langIdx, rating, votes, popularity,
-   *   posterPath, onboarding] */
+   *   posterPath, onboarding, relatedIdx[]] */
   t: EncodedTitle[];
 }
 
@@ -36,6 +36,13 @@ type EncodedTitle = [
   number, // popularity
   string, // poster path ("" = none)
   0 | 1, // onboarding
+  /**
+   * Co-watch neighbours, as positions in this same `t` array rather than
+   * ids. A title id like "movie-27205" costs ~14 bytes; its index costs 3-4.
+   * Across ~5,500 titles × up to 20 links that is the difference between
+   * ~1.4 MB and ~350 KB on a file every visitor downloads.
+   */
+  number[]?,
 ];
 
 export function encodeCatalog(titles: Title[]): EncodedCatalog {
@@ -46,6 +53,8 @@ export function encodeCatalog(titles: Title[]): EncodedCatalog {
     if (i === -1) i = pool.push(value) - 1;
     return i;
   };
+
+  const indexOfId = new Map(titles.map((title, i) => [title.id, i]));
 
   const t = titles.map<EncodedTitle>((title) => [
     title.tmdbId ?? 0,
@@ -64,12 +73,20 @@ export function encodeCatalog(titles: Title[]): EncodedCatalog {
     title.popularity,
     title.posterPath ?? "",
     title.onboarding ? 1 : 0,
+    (title.related ?? [])
+      .map((id) => indexOfId.get(id))
+      .filter((i): i is number => i !== undefined),
   ]);
 
-  return { v: 1, g: genres, l: langs, t };
+  return { v: 2, g: genres, l: langs, t };
 }
 
 export function decodeCatalog(data: EncodedCatalog): Title[] {
+  const idAt = (i: number): string | undefined => {
+    const row = data.t[i];
+    return row ? `${row[1] === 1 ? "tv" : "movie"}-${row[0]}` : undefined;
+  };
+
   return data.t.map((row) => {
     const type: TitleType = row[1] === 1 ? "tv" : "movie";
     const en = row[2];
@@ -89,6 +106,10 @@ export function decodeCatalog(data: EncodedCatalog): Title[] {
       popularity: row[13],
       posterPath: row[14] || null,
       onboarding: row[15] === 1,
+      // absent in v1 files
+      related: (row[16] ?? [])
+        .map(idAt)
+        .filter((id): id is string => id !== undefined),
     };
   });
 }

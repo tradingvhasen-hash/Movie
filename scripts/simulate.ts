@@ -13,12 +13,14 @@ import { decodeCatalog, type EncodedCatalog } from "../src/lib/data/catalog-code
 import { featurize } from "../src/lib/engine/features";
 import { recommend, fameTierSize, type CandidateItem } from "../src/lib/engine/recommend";
 import { applySwipe, emptyProfile, type TasteProfile } from "../src/lib/engine/taste";
+import { buildRarityIndex, titleTokens } from "../src/lib/engine/facets";
 import type { SwipeAction, Title } from "../src/lib/types";
 
 const catalog = decodeCatalog(
   JSON.parse(readFileSync("public/catalog.json", "utf8")) as EncodedCatalog
 );
 const pool: CandidateItem[] = catalog.map((title) => ({ title }));
+buildRarityIndex(catalog);
 
 const vecCache = new Map<string, Float32Array>();
 const vectorFor = (t: Title) => {
@@ -232,6 +234,94 @@ console.log(`catalog: ${catalog.length} titles\n`);
     "facet attribution — 4 likes from one director",
     found,
     `${director}: ${found ? "another of their films surfaced" : "no further film surfaced"} in the next 20`
+  );
+}
+
+/* ── 8. Discover for a single-taste library: the reported failure ─────── */
+{
+  // a real "I only watch broad comedies" library, named explicitly rather
+  // than filtered by genre tag — "top comedies by votes" is mostly Deadpool
+  // and Thor: Ragnarok, which is a different viewer entirely
+  const WANT = [
+    "The Hangover", "Superbad", "Anchorman: The Legend of Ron Burgundy",
+    "Step Brothers", "Bridesmaids", "21 Jump Street", "Ted", "Dumb and Dumber",
+    "Zoolander", "Tropic Thunder", "We're the Millers", "Horrible Bosses",
+    "The 40 Year Old Virgin", "Knocked Up", "Pineapple Express", "Old School",
+    "Wedding Crashers", "Napoleon Dynamite", "Mean Girls",
+  ];
+  const liked = WANT.map((n) =>
+    catalog.find((t) => t.title.en.toLowerCase() === n.toLowerCase())
+  ).filter((t): t is Title => Boolean(t));
+
+  let profile = emptyProfile();
+  const exclude = new Set<string>();
+  for (const t of liked) {
+    profile = applySwipe(profile, t, vectorFor(t), "liked");
+    exclude.add(t.id);
+  }
+
+  const recs = recommend(pool, profile, {
+    excludeIds: exclude,
+    count: 12,
+    seed: 5,
+    vectorFor,
+    mode: "discover",
+    likedTitles: liked,
+  });
+  const hits = recs.filter((r) => hasGenre(r.title, "comedy")).length;
+  check(
+    "Discover for a single-taste library",
+    hits >= 10,
+    `${hits}/12 recommendations are comedies for a ${liked.length}-comedy library ` +
+      `(target ≥10; was 8 before the co-watch signal)`
+  );
+}
+
+/* ── 9. co-watch reaches where shared metadata cannot ─────────────────── */
+{
+  /**
+   * Data-health guard on the co-watch links, plus an honest measurement of
+   * where their value comes from.
+   *
+   * The original hypothesis was that they would mostly connect titles our
+   * metadata cannot relate at all. Measured, that is only ~7% of links — most
+   * co-watch pairs are sequels or share a genre and cast, which the facet
+   * tables already see. The real contribution turns out to be *ordering*:
+   * among the many titles that look similar on paper, these say which ones
+   * the same audience actually watches. That is what took the single-taste
+   * Discover benchmark above from 8/12 to 12/12, not new reach.
+   */
+  const byId = new Map(catalog.map((t) => [t.id, t]));
+  const overlap = (a: Title, b: Title) => {
+    const ta = titleTokens(a);
+    const tb = titleTokens(b);
+    let shared = 0;
+    for (const kind of ["story", "genre", "cast", "director"] as const) {
+      const set = new Set(tb[kind]);
+      for (const tok of ta[kind]) if (set.has(tok)) shared++;
+    }
+    return shared;
+  };
+
+  let total = 0;
+  let blind = 0;
+  for (const t of catalog) {
+    for (const id of t.related ?? []) {
+      const other = byId.get(id);
+      if (!other) continue;
+      total++;
+      if (overlap(t, other) <= 1) blind++;
+    }
+  }
+  const share = blind / Math.max(total, 1);
+  const linked = catalog.filter((t) => (t.related?.length ?? 0) > 0).length;
+  const perTitle = total / catalog.length;
+  check(
+    "co-watch coverage",
+    linked / catalog.length >= 0.95 && perTitle >= 5,
+    `${pct(linked / catalog.length)} of titles have links, ${perTitle.toFixed(1)} each on ` +
+      `average (${total.toLocaleString()} total); ${pct(share)} of them join titles sharing ` +
+      `≤1 keyword/genre/actor/director`
   );
 }
 

@@ -212,6 +212,34 @@ const SOULS: Map<string, number[]> | undefined = process.env.SOULS
 const catalog = decodeCatalog(
   JSON.parse(readFileSync("public/catalog.json", "utf8")) as EncodedCatalog
 );
+
+/**
+ * Experimental: swap or augment the catalog's co-watch edges with
+ * model-written recommendation lists. AI_EDGES=ai | union | off (default).
+ * Off by default and never used by the app — this is a measurement harness.
+ */
+if (process.env.AI_EDGES && process.env.AI_EDGES !== "off") {
+  const raw = JSON.parse(
+    readFileSync(process.env.AI_EDGES_FILE ?? "scripts/data/ai-edges.json", "utf8")
+  ) as Record<string, string[]>;
+  const idOf = new Map(catalog.map((t) => [t.title.en.toLowerCase(), t.id]));
+  const byIdTmp = new Map(catalog.map((t) => [t.id, t]));
+  let applied = 0;
+  for (const [name, recs] of Object.entries(raw)) {
+    const id = idOf.get(name.toLowerCase());
+    if (!id) continue;
+    const t = byIdTmp.get(id)!;
+    const aiIds = recs
+      .map((r) => idOf.get(r.toLowerCase()))
+      .filter((x): x is string => Boolean(x) && x !== id);
+    t.related =
+      process.env.AI_EDGES === "ai"
+        ? aiIds
+        : [...new Set([...aiIds, ...(t.related ?? [])])].slice(0, 20);
+    applied++;
+  }
+  console.log(`AI edges: ${process.env.AI_EDGES} mode, applied to ${applied} titles\n`);
+}
 const pool: CandidateItem[] = catalog.map((title) => ({ title }));
 buildRarityIndex(catalog);
 

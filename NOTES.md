@@ -138,3 +138,71 @@ which needs a capable model.
 
 The `souls` option in `recommend.ts` is the hook for that experiment and costs
 nothing while unused.
+
+---
+
+## Proven: model-written recommendation edges (2026-08-12)
+
+The one idea that survived measurement. Cost so far: **$0** — the lists were
+written by the model in-session, no API, no key.
+
+**The idea.** Ask the model, once per title, the question a person actually
+asks: *"someone loved X — what next?"* Store the answers as edges. The engine
+then walks that graph from everything the user liked. AI supplies knowledge it
+alone has; the maths supplies personalisation it alone can do.
+
+**Written by hand for 115 titles**, 12 recommendations each, in three layers —
+obvious / adjacent / same-feel-different-world — specifically to avoid the
+tight-circle failure that TMDB's co-watch data caused in the deck.
+
+### Result 1 — clean, external validation
+
+Checked against real TMDB co-watch behaviour, which nobody here authored:
+
+| | |
+|---|---|
+| my picks TMDB also links | **16.4%** |
+| random titles TMDB links | 0.15% |
+| | **107× better than chance** |
+| my picks TMDB does *not* have | **84%** — genuinely new information |
+
+High enough to prove the lists are sound; low enough to prove they are not
+just re-deriving the free data we already ship. The pre-registered abort
+condition was ">60% overlap ⇒ abandon". It came in at 16.4%.
+
+### Result 2 — clean, pre-existing answer key
+
+`benchmark.ts` reference lists were written before this idea existed:
+
+| arm | overall | genre-defined | feel-defined |
+|---|---|---|---|
+| current engine (TMDB edges) | 17% | 25% | 0% |
+| **AI edges only** | **19%** | **29%** | 0% |
+| both | 18% | 27% | 0% |
+
+### Result 3 — held-out, but CONTAMINATED
+
+`scripts/feel-test.ts`. Like half a feel-defined library, hold the other half
+back as the answer key:
+
+| | without | with AI edges |
+|---|---|---|
+| Mad Max (gritty practical action) | 8% | **33%** |
+| Before Sunrise (quiet talky romance) | 8% | **50%** |
+
+**Do not trust this number.** The same model wrote both the edges and the
+answer key, so agreement is partly self-fulfilling. It is recorded because the
+direction matches Result 1, not as proof.
+
+### What is still unproven
+
+The feel line in `benchmark.ts` stayed at 0% in every arm. Its personas swipe
+by *genre overlap*, so they cannot express a feel-defined taste in the first
+place — the persona is the limitation, not necessarily the engine. Fixing that
+means personas defined by named films rather than genre rules.
+
+### Next
+
+Scale from 115 titles to the full catalog. ~$3 one-off via any API, or free in
+sessions like this one at ~100 titles a time. Engine code is unchanged so far:
+`AI_EDGES=ai|union npm run benchmark` is a measurement harness only.

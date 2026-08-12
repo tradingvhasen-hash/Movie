@@ -83,6 +83,14 @@ const MMR_LAMBDA = 0.35;
 const GENRE_REPEAT_PENALTY = 0.16;
 /** Discover keeps a quarter of it: one window for discovery, not four */
 const DISCOVER_DIVERSITY_SCALE = 0.25;
+/**
+ * Where a blended score sits on the "recommend this" scale, used only to turn
+ * it into the percentage shown to the user. Roughly the centre and half-width
+ * of the range scores occupy in Discover.
+ */
+const RANK_MIDPOINT = 0.4;
+const RANK_SPREAD = 0.6;
+
 /** how many top-scored candidates the diversity pass considers */
 const FINALIST_POOL = 60;
 
@@ -504,14 +512,22 @@ export function recommend(
     }
   }
 
-  return picked.map(({ c, score, facet }) => {
+  const out = picked.map(({ c, score, facet }) => {
     const hit = coWatch?.get(c.title.id);
     return {
       title: c.title,
       score,
-      // a co-watch hit adds real evidence beyond the facet tables, so it
-      // lifts the reported match rather than being invisible in it
-      match: matchPercent(facet + (hit ? coWatchScale * hit.score : 0), confidence),
+      /**
+       * Derived from the score the list is actually ranked by, not from the
+       * facet total alone. Those two disagreed — facets measure taste fit
+       * while the ranking also weighs how good and how findable a title is —
+       * so a 62% could sit below a 48% and the page looked broken. One number
+       * now drives both the order and the label.
+       *
+       * Still absolute rather than batch-relative: a title reports the same
+       * figure in every batch, which was the original point.
+       */
+      match: matchPercent((score - RANK_MIDPOINT) / RANK_SPREAD, confidence),
       reasons: explainMatch(facets, facetWeights, c.title).map((r) => ({
         kind: r.kind as string,
         label: r.label,
@@ -521,6 +537,18 @@ export function recommend(
       becauseOf: hit?.from,
     };
   });
+
+  /**
+   * Discover is read top-down as a ranked list, so it must actually be
+   * ranked: the diversity pass picks *which* titles appear, but it emits them
+   * in the order it happened to choose them, which put a 62% match below a
+   * 48% one. Selection stays diverse; presentation is strongest-first.
+   *
+   * The deck is left alone — there the order is the queue, and the diversity
+   * pass deliberately spaces similar cards apart.
+   */
+  if (mode === "discover") out.sort((a, b) => b.score - a.score);
+  return out;
 }
 
 /**

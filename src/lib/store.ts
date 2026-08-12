@@ -83,7 +83,20 @@ interface DhawqState {
   lists: UserList[];
   onboardingSeen: boolean;
 
+  /** ids of onboarding tiles shown and not tapped, so they can be replayed */
+  passed: string[];
+
   swipe: (title: Title, action: SwipeAction) => void;
+  /**
+   * Fold "shown and not tapped" evidence into the fingerprint.
+   *
+   * Not swipes: nothing is added to the library, nothing is retired from the
+   * deck, and the user can still be shown any of these titles later. The
+   * onboarding grid otherwise hands the engine a handful of likes and no
+   * negatives at all, so whatever those few titles happen to share — an era, a
+   * language, a genre — is inflated with nothing to push back against it.
+   */
+  learnPasses: (titles: Title[]) => void;
   undo: () => string | null;
   removeSwipe: (titleId: string) => void;
   resetAll: () => void;
@@ -109,6 +122,17 @@ export const useDhawq = create<DhawqState>()(
       seed: makeSeed(),
       lists: [],
       onboardingSeen: false,
+      passed: [],
+
+      learnPasses: (titles) =>
+        set((s) => {
+          const already = new Set(s.passed);
+          const fresh = titles.filter((t) => !already.has(t.id) && !s.swipes[t.id]);
+          if (fresh.length === 0) return {};
+          let profile = s.profile;
+          for (const t of fresh) profile = applySwipe(profile, t, vectorOf(t), "not_seen");
+          return { profile, passed: [...s.passed, ...fresh.map((t) => t.id)] };
+        }),
 
       swipe: (title, action) => {
         const v = vectorOf(title);
@@ -172,7 +196,13 @@ export const useDhawq = create<DhawqState>()(
       },
 
       resetAll: () =>
-        set({ swipes: {}, swipeOrder: [], profile: emptyProfile(), seed: makeSeed() }),
+        set({
+          swipes: {},
+          swipeOrder: [],
+          passed: [],
+          profile: emptyProfile(),
+          seed: makeSeed(),
+        }),
 
       setOnboardingSeen: () => set({ onboardingSeen: true }),
 
@@ -238,6 +268,11 @@ export const useDhawq = create<DhawqState>()(
           const title = sw?.title ?? getLocalTitle(id);
           if (sw && title) profile = applySwipe(profile, title, vectorOf(title), sw.action);
         }
+        // onboarding passes are evidence too, and are replayed the same way
+        for (const id of state.passed ?? []) {
+          const title = getLocalTitle(id);
+          if (title) profile = applySwipe(profile, title, vectorOf(title), "not_seen");
+        }
         return { ...state, profile, seed: state.seed ?? makeSeed() } as DhawqState;
       },
       /** guard against partially-shaped profiles from any older build */
@@ -247,6 +282,7 @@ export const useDhawq = create<DhawqState>()(
           ...current,
           ...state,
           seed: state.seed ?? current.seed,
+          passed: state.passed ?? [],
           profile: normalizeProfile(state.profile),
         };
       },

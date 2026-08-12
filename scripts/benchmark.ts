@@ -8,10 +8,41 @@
  * change ships.
  *
  * ─────────────────────────────────────────────────────────────────────────
- * THE THREE TESTS
+ * THE FOUR TESTS
  *
  * Each target film is a viewer's taste. Every run starts from a completely
  * fresh account: empty profile, empty history, nothing carried over.
+ *
+ *   TEST 0 — THE FIRST PAGE
+ *     What the very first Discover page is worth, before a single swipe. With
+ *     no onboarding grid there is nothing to go on and it scores ~1%; with the
+ *     grid, the viewer taps the tiles they love and the page is built from
+ *     those taps alone. This is the only test that sees the onboarding screen,
+ *     and the arm is opt-in:
+ *
+ *       PICKER=curated|derived|popular npm run benchmark   (default: off)
+ *       PICKER_NEG=1|2                 also learn from the tiles left untapped
+ *       SEEDS=8                        more fresh accounts, for close calls
+ *
+ *     Measured 2026-08-12, eight fresh accounts per viewer:
+ *
+ *       grid            first page   viewers with nothing to tap   after 20 likes
+ *       none                  1%            —                          19%
+ *       popularity list       4%            1 of 6                     17%
+ *       genre × era          10%            1 of 6                     17%
+ *       named canons          6%            none                       14%
+ *       named + passes       11%            none                       18%
+ *
+ *     The last row is what ships. Two findings are worth keeping:
+ *
+ *     · Taps alone made the *later* session worse (19% → 14%). The simulated
+ *       viewer taps anything sharing genres with its target — 12 Angry Men and
+ *       The Sound of Music for a Before Sunrise fan — so six loose taps teach
+ *       the engine six slightly wrong things, with no negative evidence to
+ *       balance them. A real viewer taps films they love; this arm cannot.
+ *     · Adding the untapped tiles as evidence recovers almost all of it
+ *       (14% → 18%) and doubles the first page (6% → 11%). Evidence the grid
+ *       was already collecting and throwing away.
  *
  *   TEST 1 — DECK REACH
  *     Swipe as that viewer would (right on the same kind of film, left
@@ -74,6 +105,7 @@
  */
 import { readFileSync } from "node:fs";
 import { decodeCatalog, type EncodedCatalog } from "../src/lib/data/catalog-codec";
+import { resolveSeeds } from "../src/lib/data/taste-seeds";
 import { featurize } from "../src/lib/engine/features";
 import { recommend, type CandidateItem } from "../src/lib/engine/recommend";
 import { applySwipe, emptyProfile } from "../src/lib/engine/taste";
@@ -184,7 +216,9 @@ const PANEL: Target[] = [
 ];
 
 /** fresh accounts, several of them, so no result is a lucky seed */
-const SEEDS = [11, 707, 4242];
+const ALL_SEEDS = [11, 707, 4242, 88, 1301, 5, 96431, 24601];
+/** three is enough to spot a lucky run; SEEDS=8 when a gap needs settling */
+const SEEDS = ALL_SEEDS.slice(0, Number(process.env.SEEDS ?? 3));
 const CAP = 300;
 const DISCOVER_SIZE = 24;
 /**
@@ -276,10 +310,73 @@ function swipesRight(target: Title) {
   };
 }
 
+/* ── the onboarding grid, as an optional arm ───────────────────────────────
+   PICKER=curated | derived | popular | off (default)
+
+   The panel above starts every viewer from a blank profile, so it is blind to
+   the "pick a few you love" screen — the change that most affects a real first
+   session. This arm runs the same six viewers through that screen first: they
+   tap the tiles they would love (the same genre-overlap judgement they swipe
+   with), and only then does the run begin.
+
+   Three grids are implemented so the comparison is real rather than a
+   before/after of one:
+     popular — straight down the vote-count list (the first version shipped)
+     derived — genre × era buckets, best-known title per bucket (the second)
+     curated — the hand-named audience canons in taste-seeds.ts (current)
+*/
+const PICKER = process.env.PICKER ?? "off";
+/** how many tiles a viewer is assumed to tap — a real one taps a handful */
+const MAX_PICKS = 6;
+const GRID_SIZE = 50;
+
+function buildGrid(mode: string): Title[] {
+  const byVotes = [...catalog].sort((a, b) => b.voteCount - a.voteCount);
+  if (mode === "curated") return resolveSeeds(catalog, GRID_SIZE);
+  if (mode === "popular") return byVotes.slice(0, GRID_SIZE);
+
+  // the genre × era version, kept here only so it can still be measured
+  const eras: ((y: number) => boolean)[] = [
+    (y) => y < 1980,
+    (y) => y >= 1980 && y < 2000,
+    (y) => y >= 2000 && y < 2012,
+    (y) => y >= 2012,
+  ];
+  const buckets = new Map<string, Title[]>();
+  for (const t of byVotes) {
+    const era = eras.findIndex((test) => test(t.year));
+    if (era < 0) continue;
+    for (const g of t.genres.slice(0, 2)) {
+      const key = `${g.toLowerCase()}|${era}`;
+      const lane = buckets.get(key) ?? [];
+      if (lane.length < 6) lane.push(t);
+      buckets.set(key, lane);
+    }
+  }
+  const lanes = [...buckets.values()].sort((a, b) => b[0].voteCount - a[0].voteCount);
+  const out: Title[] = [];
+  const used = new Set<string>();
+  for (let round = 0; out.length < GRID_SIZE && round < 6; round++) {
+    for (const lane of lanes) {
+      if (out.length >= GRID_SIZE) break;
+      const pick = lane[round];
+      if (pick && !used.has(pick.id)) {
+        used.add(pick.id);
+        out.push(pick);
+      }
+    }
+  }
+  return out;
+}
+
+const GRID = PICKER === "off" ? [] : buildGrid(PICKER);
+
 interface RunResult {
   reached: number;
   hitRate: number;
   discover: Title[];
+  /** tiles this viewer would have tapped, before any swipe */
+  picked: number;
 }
 
 /**
@@ -290,7 +387,7 @@ interface RunResult {
 function run(
   target: Title,
   seed: number,
-  mode: "deck" | "discover" | "quality"
+  mode: "deck" | "discover" | "quality" | "cold"
 ): RunResult {
   const likesIt = swipesRight(target);
   let profile = emptyProfile();
@@ -299,6 +396,40 @@ function run(
   const liked: Title[] = [];
   let swipes = 0;
   let likes = 0;
+
+  /* the onboarding screen, when this arm is on: tap the tiles you love.
+     Picks are likes, but they are not swipes — a real user has swiped nothing
+     at this point — so they do not count toward the reach or quality clocks. */
+  let picked = 0;
+  const tapped = new Set<string>();
+  for (const tile of GRID) {
+    if (picked >= MAX_PICKS) break;
+    if (tile.id === target.id || !likesIt(tile)) continue;
+    profile = applySwipe(profile, tile, vectorFor(tile), "liked");
+    liked.push(tile);
+    shown.add(tile.id);
+    rated.add(tile.id);
+    tapped.add(tile.id);
+    picked++;
+  }
+  /* PICKER_NEG=1: the tiles the viewer looked at and did *not* tap.
+     A grid of fifty produces up to six likes and no negatives at all, so
+     everything those six touch — era, language, genre — is inflated with
+     nothing to push back. The other forty-odd tiles were examined and passed
+     over, which is exactly what a swipe-up means. */
+  if (process.env.PICKER_NEG) {
+    for (const tile of GRID) {
+      if (tile.id === target.id || tapped.has(tile.id)) continue;
+      profile = applySwipe(profile, tile, vectorFor(tile), "not_seen");
+      // NEG=1 also retires the tile (a swipe would). Separating that matters:
+      // retiring forty famous crowd-pleasers improves Discover on its own,
+      // which is a different claim from learning anything.
+      if (process.env.PICKER_NEG === "1") {
+        shown.add(tile.id);
+        rated.add(tile.id);
+      }
+    }
+  }
 
   const discoverNow = () =>
     recommend(pool, profile, {
@@ -310,6 +441,9 @@ function run(
       likedTitles: liked,
       souls: SOULS,
     }).map((r) => r.title);
+
+  // what a brand-new account sees on Discover having only tapped the grid
+  if (mode === "cold") return { reached: 0, hitRate: 0, discover: discoverNow(), picked };
 
   while (swipes < CAP) {
     const batch = recommend(pool, profile, {
@@ -327,7 +461,7 @@ function run(
 
       if (rec.title.id === target.id) {
         if (mode === "deck") {
-          return { reached: swipes, hitRate: likes / Math.max(swipes, 1), discover: [] };
+          return { reached: swipes, hitRate: likes / Math.max(swipes, 1), discover: [], picked };
         }
         shown.add(rec.title.id); // seen, deliberately left unrated
         continue;
@@ -344,17 +478,17 @@ function run(
       swipes++;
 
       if (mode === "quality" && likes >= QUALITY_LIKES) {
-        return { reached: swipes, hitRate: likes / swipes, discover: discoverNow() };
+        return { reached: swipes, hitRate: likes / swipes, discover: discoverNow(), picked };
       }
       if (mode === "discover" && swipes % 5 === 0) {
         const d = discoverNow();
         if (d.some((t) => t.id === target.id)) {
-          return { reached: swipes, hitRate: likes / swipes, discover: d };
+          return { reached: swipes, hitRate: likes / swipes, discover: d, picked };
         }
       }
     }
   }
-  return { reached: -1, hitRate: likes / Math.max(swipes, 1), discover: discoverNow() };
+  return { reached: -1, hitRate: likes / Math.max(swipes, 1), discover: discoverNow(), picked };
 }
 
 const median = (xs: number[]) => {
@@ -376,6 +510,11 @@ interface Row {
   shown: Title[];
   hits: Title[];
   spread: string;
+  /** picker arm: tiles tapped, and the Discover page they alone produce */
+  picked: number;
+  cold: number;
+  coldShown: Title[];
+  coldHits: Title[];
 }
 const rows: Row[] = [];
 
@@ -417,7 +556,20 @@ for (const target of PANEL) {
   const best = ordered[Math.floor(ordered.length / 2)];
   const spread = graded.map((g) => `${Math.round(g.pct * 100)}%`).join(" / ");
 
+  // TEST 0 — the very first Discover page, built from the grid taps alone
+  const coldRuns = SEEDS.map((s) => run(film, s, "cold"));
+  const coldGraded = coldRuns.map((r) => {
+    const top = r.discover.filter((t) => t.id !== film.id).slice(0, GRADED);
+    return { pct: top.length ? top.filter((t) => truth.has(t.id)).length / top.length : 0, top };
+  });
+  const coldOrdered = [...coldGraded].sort((a, b) => a.pct - b.pct);
+  const coldMid = coldOrdered[Math.floor(coldOrdered.length / 2)];
+
   rows.push({
+    picked: coldRuns.length ? coldRuns[0].picked : 0,
+    cold: median(coldGraded.map((g) => g.pct)),
+    coldShown: coldMid?.top ?? [],
+    coldHits: (coldMid?.top ?? []).filter((t) => truth.has(t.id)),
     target,
     film,
     deck: fmt(deckRuns),
@@ -435,6 +587,37 @@ for (const target of PANEL) {
         `${target.film} are not in this catalog`
     );
   }
+}
+
+if (true) {
+  console.log(
+    `\nTEST 0 — the onboarding grid (${PICKER}, ${GRID.length} tiles, up to ` +
+      `${MAX_PICKS} taps)\n\n` +
+      `  Quality of the very first Discover page, built from the taps alone —\n` +
+      `  zero swipes. This is what a brand-new account actually sees.\n`
+  );
+  console.log("  target                 tiles this viewer would tap   first-page quality");
+  for (const r of rows) {
+    console.log(
+      `  ${r.target.film.padEnd(21)} ${String(r.picked).padStart(10)}` +
+        `                     ${String(Math.round(r.cold * 100) + "%").padStart(6)}`
+    );
+  }
+  console.log();
+  for (const r of rows) {
+    if (!r.coldShown.length) continue;
+    console.log(`  ${r.target.film} — first page:`);
+    for (const t of r.coldShown) {
+      console.log(`     ${r.coldHits.some((h) => h.id === t.id) ? "✓" : "·"} ${t.title.en}`);
+    }
+    console.log();
+  }
+  const coldAvg = rows.reduce((s, r) => s + r.cold, 0) / Math.max(rows.length, 1);
+  const noTaps = rows.filter((r) => r.picked === 0).map((r) => r.target.film);
+  console.log(`  first-page quality, all six viewers: ${Math.round(coldAvg * 100)}%`);
+  console.log(
+    `  viewers who found nothing to tap: ${noTaps.length ? noTaps.join(", ") : "none"}\n`
+  );
 }
 
 console.log("\nTEST 1 & 2 — swipes needed, from a fresh account each time\n");

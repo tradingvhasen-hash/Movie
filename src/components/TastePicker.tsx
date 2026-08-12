@@ -37,6 +37,7 @@ const MIN_PICKS = 3;
  */
 export default function TastePicker({ onDone }: { onDone: () => void }) {
   const swipe = useDhawq((s) => s.swipe);
+  const learnPasses = useDhawq((s) => s.learnPasses);
   const [picked, setPicked] = useState<Set<string>>(new Set());
 
   const choices = useMemo(() => {
@@ -74,6 +75,9 @@ export default function TastePicker({ onDone }: { onDone: () => void }) {
 
   const confirm = () => {
     for (const t of choices) if (picked.has(t.id)) swipe(t, "liked");
+    // the tiles they looked at and left alone are evidence as well — see
+    // learnPasses. Without them the grid teaches likes and nothing else.
+    learnPasses(choices.filter((t) => !picked.has(t.id)));
     onDone();
   };
 

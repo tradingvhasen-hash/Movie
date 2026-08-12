@@ -102,6 +102,21 @@ against the improved engine, not the old one.
 
 ---
 
+## Open question: what a tap on the onboarding grid really means
+
+The benchmark's simulated viewer taps any tile sharing genres with its target,
+which is the best a genre-rule persona can do and is *not* how a person picks.
+For a Before Sunrise viewer it taps 12 Angry Men and The Sound of Music.
+
+That is why the "taps only" arm made the later session worse (19% → 14%): six
+loose taps teach six slightly wrong things. Learning from the untapped tiles
+recovers it (→ 18%), but the underlying question is untested: **how much better
+is the grid when the taps are genuinely felt?** Answering it needs personas
+defined by named films rather than genre rules — the same fix the feel-defined
+line has been waiting for.
+
+---
+
 ## Tried and rejected: meaning-vectors over our own text (2026-08-12)
 
 Cost: $0. No API key, no signup — all 5,555 titles embedded locally with

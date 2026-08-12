@@ -141,7 +141,12 @@ export type RankMode = "swipe" | "discover";
 export function fameTierSize(profile: TasteProfile, mode: RankMode = "swipe"): number {
   if (mode === "discover") return DISCOVER_POOL;
   for (const tier of FAME_TIERS) {
-    if (profile.totalSwipes < tier.untilSwipes) return tier.size;
+    // rated swipes, not every swipe: the tier's whole claim is "this viewer
+    // has proved how much they watch", and a swipe-up proves the opposite.
+    // It also keeps the onboarding grid — which teaches from dozens of tiles
+    // the viewer passed over — from fast-forwarding a brand-new account into
+    // titles it has never heard of.
+    if (profile.ratedSwipes < tier.untilSwipes) return tier.size;
   }
   return FAME_TIERS[FAME_TIERS.length - 1].size;
 }

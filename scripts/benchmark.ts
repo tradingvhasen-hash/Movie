@@ -205,6 +205,10 @@ const QUALITY_LIKES = 20;
 /** how many of Discover's top slots test 3 grades */
 const GRADED = 12;
 
+const SOULS: Map<string, number[]> | undefined = process.env.SOULS
+  ? new Map(Object.entries(JSON.parse(readFileSync(process.env.SOULS, "utf8"))))
+  : undefined;
+
 const catalog = decodeCatalog(
   JSON.parse(readFileSync("public/catalog.json", "utf8")) as EncodedCatalog
 );
@@ -276,6 +280,7 @@ function run(
       vectorFor,
       mode: "discover",
       likedTitles: liked,
+      souls: SOULS,
     }).map((r) => r.title);
 
   while (swipes < CAP) {
@@ -285,6 +290,7 @@ function run(
       seed,
       vectorFor,
       likedTitles: liked,
+      souls: SOULS,
     });
     if (batch.length === 0) break;
 

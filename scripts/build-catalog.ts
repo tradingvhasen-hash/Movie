@@ -26,7 +26,7 @@ const args = process.argv.slice(2);
 const TARGET = Number(args[args.indexOf("--count") + 1]) || 5000;
 /* served as a static asset so it is cached separately from the JS bundle
    and parsed by the browser's native JSON parser */
-const OUT = "public/catalog.json";
+const OUT = process.env.CATALOG_OUT ?? "public/catalog.json";
 
 /**
  * Fame floor. A catalog built at 60 votes is ~92% titles nobody has heard
@@ -42,7 +42,7 @@ const TODAY = new Date().toISOString().slice(0, 10);
 const EXCLUDED_GENRES = new Set(["news", "talk", "reality", "soap"]);
 /** valid catalog entries, but poor signals for cold-start calibration */
 const NON_CALIBRATION_GENRES = new Set(["documentary"]);
-const MAX_OVERVIEW = 200;
+const MAX_OVERVIEW = Number(process.env.MAX_OVERVIEW ?? 200);
 const MAX_KEYWORDS = 10;
 const MAX_CAST = 4;
 /** co-watch neighbours kept per title (TMDB returns 20 on page 1) */

@@ -99,3 +99,42 @@ committed, never shipped to the client, exactly like the TMDB key.
 **Status:** revisit *after* living with v8. If the deck now reads your taste in
 40 swipes, this may not be needed at all — and that judgement should be made
 against the improved engine, not the old one.
+
+---
+
+## Tried and rejected: meaning-vectors over our own text (2026-08-12)
+
+Cost: $0. No API key, no signup — all 5,555 titles embedded locally with
+all-MiniLM-L6-v2 in under two minutes.
+
+The idea was the cheap half of the "soul" plan: stop comparing titles by
+matching words and compare them by meaning instead, using the text we already
+have (title, genres, overview, keywords, director, cast).
+
+**It made recommendations worse, at every weight, on both the clipped
+200-character overviews and full-length ones re-fetched for the test.** The
+benchmark's feel-defined tastes — the whole reason for trying — went from 4%
+to 0% every single run.
+
+The reason, from a direct probe:
+
+| pair | similarity | should be |
+|---|---|---|
+| The Hangover ↔ Rush Hour | 0.369 (vs 0.117 by keywords) | high — **improved** |
+| Before Sunrise ↔ Cosmos | 0.089 | low ✓ |
+| Mad Max ↔ John Wick | 0.307 | **high** ✗ |
+| Mad Max ↔ Rebel Moon | 0.359 | **low** ✗ |
+
+Meaning-matching genuinely beats word-matching on *story* — Hangover ↔ Rush
+Hour tripled. But Mad Max and Rebel Moon really do have similar plots; what
+separates them is craft, pace and tone, and **no plot summary mentions craft,
+pace or tone**. Embedding a summary faithfully preserves a summary.
+
+**Conclusion: the bottleneck is the text, not the comparison method.** Better
+maths on the same words cannot recover information the words never carried.
+That is now measured rather than assumed, and it sharpens the remaining
+question: the only untried lever is text *written to describe mood and craft*,
+which needs a capable model.
+
+The `souls` option in `recommend.ts` is the hook for that experiment and costs
+nothing while unused.

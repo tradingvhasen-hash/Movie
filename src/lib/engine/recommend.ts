@@ -20,6 +20,31 @@ export interface CandidateItem {
    early on the quality and recognizability priors dominate and the deck
    stays full of titles the user has a real chance of having watched. */
 const W_FACETS = 1.6;
+/**
+ * Weight of the meaning signal, when meaning-vectors are supplied.
+ *
+ * MEASURED, AND IT DID NOT WORK — read this before trying it again.
+ * All 5,555 titles were embedded locally (all-MiniLM-L6-v2, free, 57s) from
+ * their own text: title, genres, overview, keywords, director, cast. Then the
+ * benchmark was run at several weights, twice — once on the shipped
+ * 200-character overviews and again after re-fetching full-length ones:
+ *
+ *     baseline (no meaning)      15% overall, 4% on feel-defined tastes
+ *     clipped text  w=0.25/0.5/0.9   13% / 8% / 13%,  feel 0%
+ *     full text     w=0.4/0.8/1.4    13% / 11% / 15%, feel 0%
+ *
+ * Never better, and the feel line — the whole point — went to zero every
+ * time. The reason showed up in a direct probe: Mad Max ↔ Rebel Moon scored
+ * 0.359 while Mad Max ↔ John Wick scored 0.307. Their *plots* really are
+ * alike (warrior versus tyrant in a wasteland); what separates them is craft
+ * and tone, and no plot summary mentions craft or tone.
+ *
+ * So the bottleneck is the text, not the comparison. Embedding a summary
+ * faithfully preserves a summary. The `souls` option below is kept because it
+ * is the hook for the next experiment — text actually written to describe
+ * mood and craft — but nothing supplies it today.
+ */
+const W_SOUL = 1.4;
 const W_QUALITY = 0.25;
 /**
  * Pull toward well-known titles. This stays high even once taste is
@@ -260,6 +285,13 @@ export interface RecommendOptions {
   /** override the automatic exploration share */
   exploreRatio?: number;
   /**
+   * Optional meaning-vectors, one per title id: a sentence embedding of the
+   * title's own text. Where the facet tables compare *values*, these compare
+   * *meaning*, so two titles that share no keyword can still be close.
+   * Absent by default — the engine behaves exactly as before without it.
+   */
+  souls?: Map<string, number[]>;
+  /**
    * "swipe" (default) ranks cards to rate: famous, broad, with exploration
    * probes. "discover" ranks titles to watch next: the whole catalog above a
    * quality floor, no fame bias, no probes.
@@ -298,6 +330,30 @@ export function recommend(
   const { facets, facetWeights, streaks, totalSwipes } = profile;
 
   const coWatch = opts.likedTitles?.length ? coWatchBonus(opts.likedTitles) : null;
+
+  // centre of meaning for everything the viewer has liked
+  let soulCentre: number[] | null = null;
+  if (opts.souls && opts.likedTitles?.length) {
+    for (const t of opts.likedTitles) {
+      const v = opts.souls.get(t.id);
+      if (!v) continue;
+      if (!soulCentre) soulCentre = new Array(v.length).fill(0);
+      for (let i = 0; i < v.length; i++) soulCentre[i] += v[i];
+    }
+    if (soulCentre) {
+      let n = 0;
+      for (const x of soulCentre) n += x * x;
+      n = Math.sqrt(n) || 1;
+      for (let i = 0; i < soulCentre.length; i++) soulCentre[i] /= n;
+    }
+  }
+  const soulSim = (id: string): number => {
+    const v = soulCentre && opts.souls?.get(id);
+    if (!v || !soulCentre) return 0;
+    let d = 0;
+    for (let i = 0; i < v.length; i++) d += soulCentre[i] * v[i];
+    return d;
+  };
   const coWatchScale = mode === "discover" ? 1 : CO_WATCH_DECK_SCALE;
 
   const scored: { c: CandidateItem; score: number; facet: number }[] = [];
@@ -314,6 +370,7 @@ export function recommend(
       confidence * W_FACETS * fs.total +
       JITTER * jitterFor(c.title.id, seed) +
       coWatchScale * (coWatch?.get(c.title.id)?.score ?? 0) +
+      confidence * W_SOUL * soulSim(c.title.id) +
       (opts.coOccurrenceBonus?.get(c.title.id) ?? 0);
 
     scored.push({ c, score, facet: fs.total });

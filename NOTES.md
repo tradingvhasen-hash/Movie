@@ -102,6 +102,52 @@ against the improved engine, not the old one.
 
 ---
 
+## The bake-off — results (2026-08-13)
+
+Three methods, 800 films, one closed world, graded by all 398 real MovieLens
+libraries. **Spent: $1.65.** Pre-registered bar, written before any result was
+seen: **+3 points on the human ruler, or it does not get scaled.**
+
+| arm | human score | vs baseline |
+|---|---|---|
+| baseline (TMDB co-watch @0.15) | 23.9% | — |
+| **soul** — 60 words on how it feels, embedded locally | 23.1% | **−0.8** |
+| tags — 10 from a fixed mood/craft vocabulary | 24.8% | +0.9 |
+| edges — "loved X → watch these 12" | 25.3% | +1.4 |
+| edges + tags | 25.8% | +1.9 |
+| edges made symmetric | 26.3% | +2.4 |
+| **symmetric edges + tags, weight 0.25** | **26.8%** | **+2.9** |
+| (recommending pure blockbusters) | 13.5% | — |
+
+**The soul layer lost.** It was the original plan, the thing this money was
+asked for, and it made recommendations measurably worse than doing nothing.
+Free-text mood descriptions embed into a soup: every film sounds like every
+other film once you strip the plot, so the nearest neighbours are whichever
+descriptions happened to use the same adjectives. Recorded next to the two
+earlier failures — local embeddings, and sequence momentum. $4.20 saved by
+finding out on 800 films instead of 5,555.
+
+**Two findings cost nothing and mattered more than the model did:**
+
+* *Density does not help.* Capping the graph at 2 edges per film scores the
+  same as 5.8 (25.3% both). Asking for twelve recommendations and paying for
+  twelve was waste; four would have done.
+* *Direction does.* Making the graph symmetric — if A recommends B, let B
+  point back at A — is a five-line change with no API involved, and it is the
+  single largest gain in the whole table (+1.0 on top of edges).
+
+**Verdict: 2.9 against a bar of 3.0.** The bar existed to stop noise being
+mistaken for signal; noise here is ±0.3 across user samples and this run grades
+every available person, so +2.9 is real. It is simply smaller than hoped, and
+it is not my decision alone to spend the rest of the money on it.
+
+Also tried and reverted: giving the mood tags their own facet kind rather than
+piggybacking on keywords. It helps the tag arm by ~0.4 but costs a point on the
+genre benchmark while the facet is empty, which it is for every title in the
+shipped catalog. It goes in *with* the data or not at all.
+
+---
+
 ## The human ruler — and what it says about spending money (2026-08-12)
 
 `npm run human`. 150 real MovieLens libraries: half of one person's

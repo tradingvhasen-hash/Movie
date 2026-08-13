@@ -12,6 +12,9 @@
     "benchmark": "tsx scripts/benchmark.ts",
     "feel": "tsx scripts/feel-test.ts",
     "human": "tsx scripts/human-test.ts",
+    "world": "tsx scripts/build-world.ts",
+    "trial": "tsx scripts/trial-enrich.ts",
+    "trial:build": "tsx scripts/trial-build.ts",
     "simulate": "tsx scripts/simulate.ts"
   },
   "dependencies": {

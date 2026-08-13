@@ -66,10 +66,58 @@ const dir = ensureData();
 const rows = (f: string) =>
   readFileSync(`${dir}/${f}`, "utf8").replace(/\r/g, "").trim().split("\n").slice(1);
 
-const catalog = decodeCatalog(
+let catalog = decodeCatalog(
   JSON.parse(readFileSync("public/catalog.json", "utf8")) as EncodedCatalog
 );
 if (process.env.NO_COWATCH) for (const t of catalog) t.related = [];
+
+/**
+ * WORLD=1 — grade inside the trial's closed world (see build-world.ts).
+ *
+ * An enrichment method covering 800 titles cannot be judged against a catalog
+ * of 5,555: most of what the engine returns would have no enrichment at all,
+ * and the comparison would measure coverage rather than quality. Inside the
+ * world every title is enriched, so the only variable left is the method.
+ */
+if (process.env.WORLD) {
+  const world = JSON.parse(readFileSync(".cache/world.json", "utf8")) as { ids: string[] };
+  const keep = new Set(world.ids);
+  catalog = catalog.filter((t) => keep.has(t.id));
+  for (const t of catalog) t.related = (t.related ?? []).filter((id) => keep.has(id));
+}
+
+/**
+ * ENRICH=<file> — overlay one method's output and grade it.
+ *
+ *   { "edges": { "<id>": ["<id>", …] },   replaces the co-watch graph
+ *     "tags":  { "<id>": ["dread", …] } } appended to keywords, so the
+ *                                         existing facet tables read them
+ *                                         with no new machinery
+ */
+if (process.env.ENRICH) {
+  const data = JSON.parse(readFileSync(process.env.ENRICH, "utf8")) as {
+    edges?: Record<string, string[]>;
+    tags?: Record<string, string[]>;
+  };
+  const inCatalog = new Set(catalog.map((t) => t.id));
+  let edged = 0;
+  let tagged = 0;
+  for (const t of catalog) {
+    const e = data.edges?.[t.id];
+    if (e) {
+      t.related = e.filter((id) => id !== t.id && inCatalog.has(id));
+      edged++;
+    }
+    const g = data.tags?.[t.id];
+    if (g?.length) {
+      t.keywords = [...t.keywords, ...g];
+      tagged++;
+    }
+  }
+  console.log(
+    `enrichment ${process.env.ENRICH}: edges on ${edged} titles, tags on ${tagged}`
+  );
+}
 
 const byTmdb = new Map<string, Title>();
 for (const t of catalog) if (t.type === "movie") byTmdb.set(String(t.tmdbId), t);
@@ -139,7 +187,7 @@ let popularHits = 0;
 let chanceSum = 0;
 let graded = 0;
 
-for (const person of shuffle(people, 20260812).slice(0, USERS)) {
+for (const person of shuffle(people, Number(process.env.SAMPLE ?? 20260812)).slice(0, USERS)) {
   const mixed = shuffle(person.lib, Number(person.id) * 7919 + 13);
   const half = Math.floor(mixed.length / 2);
   const library = mixed.slice(0, half);

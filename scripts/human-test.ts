@@ -147,9 +147,37 @@ const MAX_LIBRARY = 120;
 const PAGE = 12;
 const USERS = Number(process.env.USERS ?? 150);
 
-const people = [...libraries.entries()]
+let people = [...libraries.entries()]
   .filter(([, lib]) => lib.length >= MIN_LIBRARY)
   .map(([id, lib]) => ({ id, lib: lib.slice(0, MAX_LIBRARY) }));
+
+/**
+ * USERS_FILE — grade a roster prepared elsewhere.
+ *
+ * `ceiling-test.py` trains a collaborative model on 20,000 MovieLens people
+ * and grades it on a disjoint set. Comparing its score with ours only means
+ * something if we are graded on *the same people with the same libraries*, so
+ * it writes them out and we read them back. Anything else compares two
+ * different exams and calls it a ranking.
+ */
+if (process.env.USERS_FILE) {
+  // MovieLens has no television, so every TV title in our pool is a slot that
+  // can never be a hit. Leaving them in would hand the comparison a handicap
+  // the collaborative model does not carry.
+  catalog = catalog.filter((t) => t.type === "movie");
+  const byId = new Map(catalog.map((t) => [t.id, t]));
+  const roster = JSON.parse(readFileSync(process.env.USERS_FILE, "utf8")) as {
+    id: number;
+    lib: string[];
+  }[];
+  people = roster
+    .map((r) => ({
+      id: String(r.id),
+      lib: r.lib.map((id) => byId.get(id)).filter((t): t is Title => Boolean(t)),
+    }))
+    .filter((p) => p.lib.length >= MIN_LIBRARY);
+  console.log(`roster from ${process.env.USERS_FILE}: ${people.length} people`);
+}
 
 const pool: CandidateItem[] = catalog.map((title) => ({ title }));
 buildRarityIndex(catalog);

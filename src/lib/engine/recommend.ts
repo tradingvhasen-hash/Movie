@@ -82,7 +82,10 @@ const MMR_LAMBDA = 0.35;
 /** extra penalty per already-picked result sharing a genre */
 const GENRE_REPEAT_PENALTY = 0.16;
 /** Discover keeps a quarter of it: one window for discovery, not four */
-const DISCOVER_DIVERSITY_SCALE = 0.25;
+const DISCOVER_DIVERSITY_SCALE =
+  typeof process !== "undefined" && process.env?.DIVERSITY
+    ? Number(process.env.DIVERSITY)
+    : 0.25;
 /**
  * Where a blended score sits on the "recommend this" scale, used only to turn
  * it into the percentage shown to the user. Roughly the centre and half-width

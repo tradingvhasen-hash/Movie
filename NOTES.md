@@ -102,6 +102,45 @@ against the improved engine, not the old one.
 
 ---
 
+## The ceiling test — the answer, and it is not close (2026-08-13)
+
+`python3 scripts/ceiling-test.py`. MovieLens 32M: 200,948 real people, and
+**4,109 of our 4,368 films are covered** (the small file covered 3,091).
+Trained on 20,000 people, graded on 500 completely different ones, then our own
+engine graded on **exactly those same 500 people with the same libraries and
+the same twelve-slot page** — the whole point of the exercise.
+
+| | score | its own popularity baseline | lift |
+|---|---|---|---|
+| our engine (shipped) | 18.8% [17.7–20.0] | 13.3% | 1.41× |
+| our engine, diversity off | 19.7% [18.4–20.9] | 13.3% | 1.48× |
+| **EASE, trained on 20k people** | **41.2% [39.5–42.8]** | 21.8% | 1.89× |
+
+**Behavioural data is worth roughly 2.1× everything we have built.** The
+intervals are nowhere near touching. Eleven experiments of content modelling,
+one paid bake-off and a graph walk sit at 19; one matrix inversion over other
+people's ratings sits at 41.
+
+The diversity row matters: only 0.9 points of our gap is a deliberate product
+choice. The rest is the model.
+
+**Caveat, stated plainly.** The two popularity baselines differ (13.3 vs 21.8)
+because each script ranks fame in its own currency — TMDB votes for us,
+MovieLens rating counts for EASE, and the latter is a stronger baseline *on
+MovieLens data*. So read 1.41× vs 1.89× as the conservative comparison and
+18.8 vs 41.2 as the optimistic one. Both say the same thing.
+
+Also: EASE's long-tail line is 2.3% against our 2.6%. It is not better at
+finding obscure things — it is dramatically better at ranking the well-known
+ones correctly, which is most of what a viewer actually wants.
+
+**This closes the strategic question.** We are not in the world where content
+is nearly as good as behaviour. The next investment is the distillation —
+learning what our own metadata predicts about co-preference — not another
+pass of describing films.
+
+---
+
 ## Walking the graph (2026-08-13)
 
 Two hops instead of one, symmetric, with arriving mass divided by the target's

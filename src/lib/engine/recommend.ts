@@ -248,7 +248,10 @@ function unexploredGenres(
 /** how much a single co-watch link can add */
 const CO_WATCH_HIT = 0.22;
 /** ceiling, so a title recommended by many likes cannot swamp everything */
-const CO_WATCH_MAX = 0.85;
+const CO_WATCH_MAX =
+  typeof process !== "undefined" && process.env?.COWATCH_MAX
+    ? Number(process.env.COWATCH_MAX)
+    : 0.85;
 
 /**
  * The two surfaces want opposite things from this signal.
@@ -288,7 +291,7 @@ const CO_WATCH_DECK_SCALE = 0.3;
  * 0.15 rather than 0: a trace of it still helps tastes that really are defined
  * by category, and costs one point on the genre benchmark instead of two.
  */
-const CO_WATCH_DISCOVER_SCALE = 0.15;
+const CO_WATCH_DISCOVER_SCALE = 0.6;
 
 /** measurement only: COWATCH=0.5 npm run human. Unset in the browser. */
 const COWATCH_ENV =
@@ -342,6 +345,139 @@ export function coWatchBonus(liked: Title[]): Map<string, CoWatch> {
     }
   }
   return bonus;
+}
+
+/* ── walking the graph ──────────────────────────────────────────────────
+   `coWatchBonus` above looks exactly one step out from each liked title. That
+   is why adding edges did nothing measurable: a fourth or fifth neighbour of a
+   film you liked lands in the same small neighbourhood the first three already
+   reached, so it is more of what we had rather than more reach.
+
+   Two hops is different in kind. If A points at B and B points at C, there is
+   evidence for A→C that no single source ever wrote down — and C can sit in a
+   part of the catalog no direct edge from A touches. This is the same shape as
+   the graph recommenders (P3α / RP3β, Pinterest's Pixie) that keep beating far
+   heavier models, and at 5,555 titles it costs almost nothing.
+
+   Two details carry the whole result:
+
+   · SYMMETRY. Edges are followed in both directions. Measured earlier as five
+     lines for the largest single gain in the bake-off (25.3 → 26.3), because
+     half the useful links only existed one way round.
+
+   · DEGREE DAMPING. Arriving mass is divided by the target's own connectivity,
+     raised to GAMMA. Without it a walk of any length drains into the handful
+     of famous titles that everything links to, and the recommendations become
+     a popularity list with extra steps — which is precisely the failure that
+     forced the co-watch weight down to 0.15 in the first place. */
+
+interface Graph {
+  /** node → its neighbours and the weight of each link */
+  out: Map<string, { to: string; w: number }[]>;
+  /** node → total weight arriving at it, for damping */
+  deg: Map<string, number>;
+}
+
+const graphCache = new WeakMap<CandidateItem[], Graph>();
+
+function buildGraph(pool: CandidateItem[]): Graph {
+  const cached = graphCache.get(pool);
+  if (cached) return cached;
+
+  const out = new Map<string, { to: string; w: number }[]>();
+  const deg = new Map<string, number>();
+  const link = (a: string, b: string, w: number) => {
+    const list = out.get(a);
+    if (list) list.push({ to: b, w });
+    else out.set(a, [{ to: b, w }]);
+    deg.set(b, (deg.get(b) ?? 0) + w);
+  };
+
+  for (const c of pool) {
+    const links = c.title.related;
+    if (!links?.length) continue;
+    for (let rank = 0; rank < links.length; rank++) {
+      // a source's own ordering is information: its first pick is not its last
+      const w = 1 - (0.6 * rank) / links.length;
+      link(c.title.id, links[rank], w);
+      link(links[rank], c.title.id, w);
+    }
+  }
+
+  const graph = { out, deg };
+  graphCache.set(pool, graph);
+  return graph;
+}
+
+/** how far the walk goes. Three hops is where the returns stop. */
+const WALK_HOPS = Number(process.env.HOPS ?? 2);
+/** mass surviving each further hop, so near neighbours still outrank far ones */
+const WALK_DECAY = 0.55;
+/** strength of the damping against well-connected titles */
+const WALK_GAMMA = 0.6;
+/** nodes carried into the next hop — bounds the cost, changes nothing else */
+const WALK_FRONTIER = 600;
+/** scales the walk's raw mass into the same range the old bonus occupied */
+const WALK_GAIN = 26;
+
+export function walkBonus(pool: CandidateItem[], liked: Title[]): Map<string, CoWatch> {
+  const graph = buildGraph(pool);
+  const visits = new Map<string, CoWatch>();
+  const seeds = new Set(liked.map((t) => t.id));
+
+  // every liked title starts with the same mass, and carries its own identity
+  // along so a recommendation can still say which like produced it
+  let frontier = liked.map((t) => ({ id: t.id, mass: 1 / liked.length, from: t.id }));
+
+  for (let hop = 1; hop <= WALK_HOPS; hop++) {
+    const next = new Map<string, { mass: number; from: string; fromMass: number }>();
+
+    for (const node of frontier) {
+      const edges = graph.out.get(node.id);
+      if (!edges?.length) continue;
+      let total = 0;
+      for (const e of edges) total += e.w;
+
+      for (const e of edges) {
+        if (seeds.has(e.to)) continue; // never recommend what they gave us
+        const damp = Math.pow(graph.deg.get(e.to) ?? 1, WALK_GAMMA);
+        const share = (node.mass * (e.w / total)) / damp;
+        const prev = next.get(e.to);
+        if (!prev) {
+          next.set(e.to, { mass: share, from: node.from, fromMass: share });
+        } else {
+          prev.mass += share;
+          if (share > prev.fromMass) {
+            prev.from = node.from;
+            prev.fromMass = share;
+          }
+        }
+      }
+    }
+
+    const decay = Math.pow(WALK_DECAY, hop - 1);
+    for (const [id, v] of next) {
+      const add = v.mass * decay * WALK_GAIN;
+      const prev = visits.get(id);
+      if (!prev) {
+        visits.set(id, { score: add, from: v.from, fromStrength: add });
+      } else {
+        prev.score = Math.min(CO_WATCH_MAX, prev.score + add);
+        if (add > prev.fromStrength) {
+          prev.from = v.from;
+          prev.fromStrength = add;
+        }
+      }
+    }
+
+    if (hop === WALK_HOPS) break;
+    frontier = [...next.entries()]
+      .sort((a, b) => b[1].mass - a[1].mass)
+      .slice(0, WALK_FRONTIER)
+      .map(([id, v]) => ({ id, mass: v.mass, from: v.from }));
+  }
+
+  return visits;
 }
 
 /* ── main entry point ──────────────────────────────────────────────────── */
@@ -407,7 +543,11 @@ export function recommend(
       : W_RECOGNITION_COLD + (W_RECOGNITION_WARM - W_RECOGNITION_COLD) * confidence;
   const { facets, facetWeights, streaks, totalSwipes } = profile;
 
-  const coWatch = opts.likedTitles?.length ? coWatchBonus(opts.likedTitles) : null;
+  const coWatch = opts.likedTitles?.length
+    ? process.env?.WALK === "0"
+      ? coWatchBonus(opts.likedTitles)
+      : walkBonus(pool, opts.likedTitles)
+    : null;
   const coWatchScale =
     mode === "discover"
       ? COWATCH_ENV ?? CO_WATCH_DISCOVER_SCALE

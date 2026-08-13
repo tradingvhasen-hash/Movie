@@ -102,6 +102,41 @@ against the improved engine, not the old one.
 
 ---
 
+## Walking the graph (2026-08-13)
+
+Two hops instead of one, symmetric, with arriving mass divided by the target's
+own connectivity. Measured on the new vibe ruler:
+
+| | hard pairs | easy pairs | human ruler |
+|---|---|---|---|
+| one hop, weight 0.15 (was shipped) | 18% | 40% | 20.7% [19.2–22.1] |
+| **two hops, weight 0.6** | **23%** | **55%** | 20.4% [18.9–21.9] |
+
+Three and four hops score identically to two, so the walk is done at two.
+
+The weight is the other half of the result. The one-hop signal collapsed as it
+was turned up — 20.1% down to 13.6% on the human ruler at full strength — which
+is why it had been throttled to 0.15. The walk does not collapse: 20.2–20.6%
+flat from 0.15 to 1.0. Degree damping is why. Without it a walk drains into the
+few titles everything links to and the output is a popularity list with extra
+steps; with it, the graph can be trusted four times as much as before.
+
+**Tested and wrong: my own explanation of the density null.** I had guessed the
+`CO_WATCH_MAX = 0.85` ceiling was silently discarding edges 4-6. Raising it to
+3.0 moves the score from 25.3% to 25.5% — inside the interval, i.e. nothing.
+The real reason extra edges did nothing is that one hop from a liked title
+lands in the neighbourhood the first two edges already covered. More reach, not
+more edges, was the missing thing.
+
+Cost: median re-rank 11.8ms → 17.7ms, worst 27.3ms, guard is 40ms. The graph is
+built once per catalog and cached.
+
+The feel ruler dropped 14.6% → 13.1% on the same change. Recorded rather than
+explained away: its lists are mine, its sample is 28 measurements, and the two
+external rulers both moved the other way.
+
+---
+
 ## The bake-off — results (2026-08-13)
 
 Three methods, 800 films, one closed world, graded by all 398 real MovieLens

@@ -269,11 +269,26 @@ console.log(`catalog: ${catalog.length} titles\n`);
     likedTitles: liked,
   });
   const hits = recs.filter((r) => hasGenre(r.title, "comedy")).length;
+  /**
+   * The target was 10 when it was written, because 10 is what the co-watch
+   * signal scored and the signal was the change being guarded.
+   *
+   * That was the wrong thing to lock in. Genre purity is not the goal — a good
+   * answer to "I love Brooklyn Nine-Nine" is Modern Family, which shares no
+   * genre with half the library, and this project exists because Discover kept
+   * returning the right category with the wrong feel. Measured against 150
+   * real MovieLens libraries, the setting that scored 10/12 here recommends
+   * *worse* for actual people (13.6% vs 20.1%), so this check was rewarding
+   * the thing that hurt them.
+   *
+   * It stays as a floor, not a target: Discover must not wander off the taste
+   * altogether. 8/12 is what the engine scored before co-watch existed.
+   */
   check(
-    "Discover for a single-taste library",
-    hits >= 10,
+    "Discover stays on a single-taste library",
+    hits >= 8,
     `${hits}/12 recommendations are comedies for a ${liked.length}-comedy library ` +
-      `(target ≥10; was 8 before the co-watch signal)`
+      `(floor ≥8 — purity is not the goal; see the human ruler)`
   );
 }
 

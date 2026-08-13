@@ -265,14 +265,36 @@ const CO_WATCH_MAX = 0.85;
  * mapping the rest of your taste.
  */
 const CO_WATCH_DECK_SCALE = 0.3;
-/** Discover's share of the same signal — see the sweep in NOTES.md */
-const CO_WATCH_DISCOVER_SCALE = 1;
 
-/** measurement only: COWATCH=0.5 npm run feel. Always 1 in the browser. */
+/**
+ * Discover's share of the same signal — and it turned out to want much less of
+ * it too, for the same reason the deck did.
+ *
+ * At full strength this scored best on a panel of simulated viewers who judge
+ * by genre overlap, which is what it was tuned against. Graded instead on 150
+ * real MovieLens libraries — actual people, an answer key nobody here wrote —
+ * it is the single worst setting in the sweep:
+ *
+ *     co-watch weight   1.0    0.5    0.3    0.15    0
+ *     real people      13.6%  17.2%  18.7%  20.1%  20.0%
+ *     (recommending pure blockbusters scores 11.9%)
+ *
+ * At full strength the whole engine was barely beating a list of the most
+ * famous films in the catalog. The reason is the same tight circle the deck
+ * suffered from: co-watch links point at sequels, franchise siblings and
+ * whatever else was popular in the same season, so Discover kept answering
+ * with the right category and the wrong film.
+ *
+ * 0.15 rather than 0: a trace of it still helps tastes that really are defined
+ * by category, and costs one point on the genre benchmark instead of two.
+ */
+const CO_WATCH_DISCOVER_SCALE = 0.15;
+
+/** measurement only: COWATCH=0.5 npm run human. Unset in the browser. */
 const COWATCH_ENV =
   typeof process !== "undefined" && process.env?.COWATCH
     ? Number(process.env.COWATCH)
-    : 1;
+    : null;
 
 /**
  * Score candidates by what the people who watched your favourites went on to
@@ -387,7 +409,9 @@ export function recommend(
 
   const coWatch = opts.likedTitles?.length ? coWatchBonus(opts.likedTitles) : null;
   const coWatchScale =
-    (mode === "discover" ? CO_WATCH_DISCOVER_SCALE : CO_WATCH_DECK_SCALE) * COWATCH_ENV;
+    mode === "discover"
+      ? COWATCH_ENV ?? CO_WATCH_DISCOVER_SCALE
+      : CO_WATCH_DECK_SCALE;
 
   // centre of meaning for everything the viewer has liked
   let soulCentre: number[] | null = null;

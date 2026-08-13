@@ -45,3 +45,4 @@ seed-output.json
 
 # keep the env template
 !.env.example
+.cache/

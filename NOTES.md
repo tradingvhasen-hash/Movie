@@ -102,6 +102,47 @@ against the improved engine, not the old one.
 
 ---
 
+## The human ruler — and what it says about spending money (2026-08-12)
+
+`npm run human`. 150 real MovieLens libraries: half of one person's
+highly-rated films handed to the engine, the other half held back. Nobody in
+this project wrote any of it.
+
+    our engine            20.1%
+    pure blockbusters     11.9%   ← the line that matters
+    chance                 0.6%
+
+**Before this ruler existed we were shipping a setting that scored 13.6% —
+barely above a list of the most famous films in the catalog.** Turning
+Discover's co-watch weight from 1.0 down to 0.15 fixed it, and the same change
+had looked like a *loss* on every instrument we had before (genre benchmark
+19% → 18%, a purity check outright failing). Two rulers disagreed with one, and
+the two were written by us.
+
+### What this means for the bake-off
+
+The question on the table was whether to spend ~$3 having a model write "soul"
+text for all 5,555 titles. That plan was never tested, and the one method with
+real evidence behind it — asking the model directly for recommendations —
+already scores higher on every ruler we have. Deciding between them by argument
+would be exactly the mistake above.
+
+So: sample first, ~150 titles, several methods, judged by `npm run human`
+(external) with `npm run feel` and `npm run benchmark` as secondaries. Scale
+only what wins. Candidate methods:
+
+| method | what it produces | plugs into |
+|---|---|---|
+| direct edges | "loved X → watch these 12" | the existing `related` graph |
+| soul tags | ~200-word controlled vocabulary of mood/craft | the facet tables, natively |
+| soul text + embeddings | free prose, then vectors | a new similarity path |
+| forum mining | what people actually say about a title | either, after extraction |
+
+Note the third is the most expensive to build *and* needs machinery we do not
+have, while the second drops straight into the engine as it stands.
+
+---
+
 ## The feel ruler, and the first thing it found (2026-08-12)
 
 `npm run feel`. Seven tastes named by film rather than described by genre —

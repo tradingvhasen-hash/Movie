@@ -11,6 +11,7 @@
     "seed:dry": "tsx scripts/seed.ts --dry --pages 3",
     "benchmark": "tsx scripts/benchmark.ts",
     "feel": "tsx scripts/feel-test.ts",
+    "vibe": "tsx scripts/vibe-pairs.ts",
     "human": "tsx scripts/human-test.ts",
     "world": "tsx scripts/build-world.ts",
     "trial": "tsx scripts/trial-enrich.ts",

@@ -176,56 +176,123 @@ function shuffle<T>(xs: T[], seed: number): T[] {
 
 const famous = [...catalog].sort((a, b) => b.voteCount - a.voteCount);
 
+/**
+ * The top 500 by vote count. A hit inside this set is only weak evidence: the
+ * viewer probably would have found it anyway, and recommending famous things
+ * is the highest-scoring strategy available before any intelligence is added.
+ * The long-tail score below counts only hits from *outside* it.
+ */
+const HEAD = new Set(famous.slice(0, 500).map((t) => t.id));
+
+/**
+ * How many likes the engine is given before it has to recommend.
+ *
+ * The default hands it half the person's library, which is dozens of titles —
+ * and no real viewer gives us that before deciding whether to stay. CURVE=1
+ * reports the same score at 5, 10 and 20 likes as well, which is the part of
+ * the curve the product actually lives on.
+ */
+const CURVE = process.env.CURVE ? [5, 10, 20, 0] : [0];
+
 console.log(
   `${people.length} people with ${MIN_LIBRARY}+ of their favourites in our catalog` +
     ` · grading ${Math.min(USERS, people.length)} of them` +
     ` · co-watch ${process.env.NO_COWATCH ? "STRIPPED" : "on"}\n`
 );
 
-let engineHits = 0;
-let popularHits = 0;
-let chanceSum = 0;
-let graded = 0;
+const roster = shuffle(people, Number(process.env.SAMPLE ?? 20260812)).slice(0, USERS);
 
-for (const person of shuffle(people, Number(process.env.SAMPLE ?? 20260812)).slice(0, USERS)) {
-  const mixed = shuffle(person.lib, Number(person.id) * 7919 + 13);
-  const half = Math.floor(mixed.length / 2);
-  const library = mixed.slice(0, half);
-  const held = new Set(mixed.slice(half).map((t) => t.id));
-  if (held.size === 0) continue;
-
-  let p = emptyProfile();
-  const excl = new Set<string>();
-  for (const t of library) {
-    p = applySwipe(p, t, vf(t), "liked");
-    excl.add(t.id);
-  }
-
-  const recs = recommend(pool, p, {
-    excludeIds: excl,
-    count: PAGE,
-    seed: Number(person.id),
-    vectorFor: vf,
-    mode: "discover",
-    likedTitles: library,
-  });
-  engineHits += recs.filter((r) => held.has(r.title.id)).length / PAGE;
-
-  // baseline: hand them the most-watched titles they were not already given
-  const pop = famous.filter((t) => !excl.has(t.id)).slice(0, PAGE);
-  popularHits += pop.filter((t) => held.has(t.id)).length / PAGE;
-
-  chanceSum += held.size / catalog.length;
-  graded++;
+/** per-person scores, kept individually so the interval can be resampled */
+interface Scores {
+  engine: number[];
+  tail: number[];
+  popular: number[];
+  chance: number[];
 }
 
-const pct = (x: number) => `${((x / graded) * 100).toFixed(1)}%`;
-console.log("─".repeat(70));
-console.log(`  HUMAN SCORE (our engine)   ${pct(engineHits)}`);
-console.log(`  popularity baseline        ${pct(popularHits)}`);
-console.log(`  chance                     ${pct(chanceSum)}`);
+function grade(likeBudget: number): Scores {
+  const out: Scores = { engine: [], tail: [], popular: [], chance: [] };
+
+  for (const person of roster) {
+    const mixed = shuffle(person.lib, Number(person.id) * 7919 + 13);
+    const half = Math.floor(mixed.length / 2);
+    // budget 0 = the original half-and-half split
+    const cut = likeBudget === 0 ? half : Math.min(likeBudget, half);
+    const library = mixed.slice(0, cut);
+    const held = new Set(mixed.slice(cut).map((t) => t.id));
+    if (held.size === 0 || library.length === 0) continue;
+
+    let p = emptyProfile();
+    const excl = new Set<string>();
+    for (const t of library) {
+      p = applySwipe(p, t, vf(t), "liked");
+      excl.add(t.id);
+    }
+
+    const recs = recommend(pool, p, {
+      excludeIds: excl,
+      count: PAGE,
+      seed: Number(person.id),
+      vectorFor: vf,
+      mode: "discover",
+      likedTitles: library,
+    });
+    const hits = recs.filter((r) => held.has(r.title.id));
+    out.engine.push(hits.length / PAGE);
+    out.tail.push(hits.filter((r) => !HEAD.has(r.title.id)).length / PAGE);
+
+    // baseline: hand them the most-watched titles they were not already given
+    const pop = famous.filter((t) => !excl.has(t.id)).slice(0, PAGE);
+    out.popular.push(pop.filter((t) => held.has(t.id)).length / PAGE);
+
+    out.chance.push(held.size / catalog.length);
+  }
+  return out;
+}
+
+const mean = (xs: number[]) => xs.reduce((s, x) => s + x, 0) / Math.max(xs.length, 1);
+
+/**
+ * 95% interval by resampling the graded people with replacement.
+ *
+ * Added because several past decisions turned on gaps of a point or two, and
+ * "±0.3 across three samples" is not an interval — it is three numbers. A
+ * change that does not clear this range is not a change.
+ */
+function interval(xs: number[], rounds = 1000): [number, number] {
+  const means: number[] = [];
+  let s = 20260813 >>> 0;
+  for (let r = 0; r < rounds; r++) {
+    let sum = 0;
+    for (let i = 0; i < xs.length; i++) {
+      s = (s * 1664525 + 1013904223) >>> 0;
+      sum += xs[s % xs.length];
+    }
+    means.push(sum / xs.length);
+  }
+  means.sort((a, b) => a - b);
+  return [means[Math.floor(rounds * 0.025)], means[Math.floor(rounds * 0.975)]];
+}
+
+const pc = (x: number) => `${(x * 100).toFixed(1)}%`;
+const band = (xs: number[]) => {
+  const [lo, hi] = interval(xs);
+  return `${pc(mean(xs))}  [${pc(lo)} – ${pc(hi)}]`;
+};
+
+for (const budget of CURVE) {
+  const s = grade(budget);
+  const label = budget === 0 ? "half the library" : `${budget} likes`;
+  console.log("─".repeat(70));
+  console.log(`  after ${label}   (${s.engine.length} people)`);
+  console.log(`    engine                   ${band(s.engine)}`);
+  console.log(`    engine, long tail only   ${band(s.tail)}`);
+  console.log(`    popularity baseline      ${pc(mean(s.popular))}`);
+  console.log(`    chance                   ${pc(mean(s.chance))}`);
+}
 console.log("─".repeat(70));
 console.log(
   `\n  Beating chance is nothing. Beating the popularity line is the\n` +
-    `  only evidence that the engine understands anything at all.\n`
+    `  only evidence that the engine understands anything at all — and the\n` +
+    `  long-tail line is the only one popularity cannot inflate.\n`
 );

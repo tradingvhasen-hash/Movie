@@ -30,9 +30,13 @@ Graded on the same 500 people as the ceiling test:
     USERS_FILE=.cache/test-users.json ENRICH=.cache/enrich-distilled.json \
       npx tsx scripts/human-test.ts
 
-LICENCE: MovieLens is research-use only. It is read here at build time and
-never shipped. What ships is a neighbour table computed from our own TMDB
-metadata by a function fitted offline — no ratings, no user data, no matrix.
+LICENCE: MovieLens forbids commercial use without written permission from
+GroupLens. No ratings, no user rows and no matrix are ever shipped — but the
+fitted coefficients here *are* derived from that data, and so is the neighbour
+table they produce. Calling that "our own metadata" was a comforting way to
+describe a derived work, and it was wrong. This is a personal, non-revenue
+project and permission has been requested besides; the honest statement is
+that the dependency exists and is being closed, not that it was never there.
 """
 
 import json

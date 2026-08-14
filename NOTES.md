@@ -102,6 +102,73 @@ against the improved engine, not the old one.
 
 ---
 
+## We shipped the co-watching itself (2026-08-14)
+
+The user asked whether behavioural data could be brought in from outside so the
+site opens strong instead of waiting for its own users, and answered the licence
+question himself: MovieLens forbids commercial use *without permission*, this is
+a personal non-revenue project, and the permission request has been sent
+besides.
+
+That reframes the whole plan rather than adding to it. **The distillation exists
+only because we believed we could not ship the behavioural model** — it says so
+at the top of `distill.py`. If we can, the detour is not forced, and it costs
+something measurable: the fitted function reproduces a title's true position at
+cosine 0.737, while for the 4,109 films behaviour covers, the true position is
+simply available.
+
+`scripts/behaviour-edges.py` takes the same EASE matrix `ceiling-test.py`
+already builds — same 60,000 people, same λ, same held-out 2,000 — symmetrises
+it and exports the top 40 neighbours per film. `scripts/merge-edges.ts` then
+chooses a source per title: real co-watching where it exists, the prediction
+everywhere else.
+
+| same 500 people, same page | before | after |
+|---|---|---|
+| Discover | 25.8% | **34.1%** |
+| Discover, long tail | 8.0% | **15.2%** |
+| deck | 24.1% | **27.9%** |
+| deck, long tail | 1.9% | **3.2%** |
+| **vibe, hard pairs** | 33% | **53%** |
+| vibe, easy pairs | 55% | **75%** |
+| catalog gzipped | 1.92 MB | **1.84 MB** |
+
+The vibe line is the largest single move this project has made on its own score,
+and the catalog got *smaller* — 40 real neighbours where 47 predicted ones were.
+
+**Weights re-swept, because a better graph pulls harder.** The deck's share had
+to come *down*: at 0.6 the tunnel-vision guard failed outright (1.22x against a
+1.15x limit), so 0.5, costing half a point of accuracy inside the interval.
+Discover's went the other way, 0.6 → 1.6, where its curve lands.
+
+**What this did not touch, and it is half the product.** MovieLens has no
+television. 1,466 of our 5,555 titles — every series, every film past the
+snapshot — kept the predicted edges and gained nothing. Measured on the pair the
+user has raised three times: `The Office → Parks and Recreation` hits, and
+**`Brooklyn Nine-Nine → Modern Family` still misses**. That is now the sharpest
+statement of what the mood-tag work is for: not a general improvement, but the
+only route for the half of the catalog no behaviour covers.
+
+**Artifacts, visible by eye before any ruler ran.** Raw co-watching puts *Avatar*
+next to *The Hangover* because half the planet saw both, and it puts *Parasite*
+next to Joker, Knives Out, Jojo Rabbit and 1917 — a release year, not a feeling.
+The prediction cannot make that mistake because it never sees a calendar. Both a
+`prefer` and a `union` merge were built and graded for exactly this reason;
+they tied on hard pairs (53% each) and `prefer` won the easy floor, so the
+smaller graph shipped. *The Hangover → Rush Hour* still misses.
+
+**The genre benchmark fell, 21% → 15%, and it is noise.** Swept across deck
+weights it reads 19, 18, 15, 18 — six needles, and one flipping from "reached at
+160" to "never" moves it several points. It also rewards genre purity, which is
+what we are deliberately trading away. Reported, not used as a gate.
+
+**Licence, stated properly.** The header of `distill.py` claimed nothing shipped
+was derived from MovieLens. The fitted coefficients are derived from it, and so
+are these edges. Corrected in place. The permission request removes the question
+rather than arguing it.
+
+---
+
 ## The site was deleting the user's taste (2026-08-14)
 
 The user, after a long session: "the first fifty or sixty I liked thirty of.

@@ -383,8 +383,20 @@ const CO_WATCH_MAX =
  * the tunnel-vision guard in simulate.ts fails outright at 32. At 12 the deck
  * is both more accurate and faster to reach a new taste than with the signal
  * switched off, which is the combination worth having.
+ *
+ * Re-swept when the graph became real co-watching rather than a prediction of
+ * it. A better graph pulls harder, so the same weight now circles more:
+ *
+ *     weight            0.3   0.4   0.5   0.6
+ *     real people      26.5  27.2  27.9  28.5
+ *     swipes to reach  1.15  1.16  1.11  1.22   (guard: <=1.15x)
+ *
+ * 0.5 rather than the higher-scoring 0.6, for the reason the guard exists: the
+ * deck is where a taste is *taught*, and 0.6 fails it outright. The 0.6 point
+ * costs half a point of accuracy, inside the interval, and buys back the
+ * deck's ability to find a taste it has not been shown yet.
  */
-const CO_WATCH_DECK_SCALE = 0.6;
+const CO_WATCH_DECK_SCALE = 0.5;
 
 /**
  * Discover's share of the graph signal.
@@ -400,8 +412,19 @@ const CO_WATCH_DECK_SCALE = 0.6;
  *     real people  19.4  20.8  22.4  24.5  25.6  27.3  26.4
  *
  * A signal worth trusting wants to be trusted. The old one never was.
+ *
+ * Swept again on the behavioural graph, and it wants more still:
+ *
+ *     weight        0.6    1.0    1.6    2.4    3.2
+ *     real people  32.6   34.3   34.1   34.2   34.1
+ *     long tail    12.4   14.5   15.2   15.7   15.8
+ *
+ * Accuracy arrives by 1.0 and the long tail by 1.6, and both are flat after.
+ * 1.6 is where the curve has landed; going further would be trusting the
+ * graph more than the measurement asks for, and Discover still has to hold
+ * a single-taste library together (simulate check 8).
  */
-const CO_WATCH_DISCOVER_SCALE = 0.6;
+const CO_WATCH_DISCOVER_SCALE = 1.6;
 
 /** measurement only, deck side. Unset in the browser. */
 const DECK_ENV =

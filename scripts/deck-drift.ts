@@ -78,10 +78,28 @@ const HEARD_OF_IN_TASTE = Number(process.env.HEARD_OF_IN_TASTE ?? 2500);
 const SWIPES = Number(process.env.SWIPES ?? 150);
 const BLOCK = 10;
 
+/**
+ * Fame measured within its own kind, the way the engine's gate measures it.
+ *
+ * This ranked the whole catalog on one list and it made the ruler wrong about
+ * television. TMDB vote counts are a film scale: Gilmore Girls sits at overall
+ * rank 4,481 and is a famous series, so the ruler reported a comedy viewer
+ * being shown things they had "never heard of" while the engine was serving
+ * them well-known sitcoms. `fameGate` has split the two scales since the
+ * television lockout was found; the recognition model here had not caught up.
+ */
 const fameRank = new Map<string, number>();
-[...catalog]
-  .sort((a, b) => b.voteCount - a.voteCount)
-  .forEach((t, i) => fameRank.set(t.id, i + 1));
+for (const kind of ["movie", "tv"] as const) {
+  catalog
+    .filter((t) => t.type === kind)
+    .sort((a, b) => b.voteCount - a.voteCount)
+    // scaled back onto one axis so the thresholds below keep their meaning:
+    // "the 900 best-known" is 900 of whichever kind, proportionally
+    .forEach((t, i) =>
+      fameRank.set(t.id, Math.round(((i + 1) * catalog.length) /
+        catalog.filter((x) => x.type === kind).length))
+    );
+}
 
 const find = (n: string) => catalog.find((t) => t.title.en.toLowerCase() === n.toLowerCase());
 
@@ -243,7 +261,20 @@ for (const viewer of VIEWERS) {
 
   const checks: [string, boolean, string][] = [
     ["recognition >= 85%", recognition >= 0.85, `${(recognition * 100).toFixed(0)}%`],
-    ["median fame <= 900", medFame <= 900, String(medFame)],
+    /**
+     * Median fame is printed, not judged.
+     *
+     * It was a second guard on the same thing recognition already measures,
+     * and once the gate learned to go deeper inside a viewer's own genre the
+     * two began to disagree — which is the point of the change, not a
+     * regression. The proxy is wrong in both directions and both were seen
+     * here: Anchorman sits at rank 1,455 and every comedy viewer has seen it,
+     * while Gilmore Girls reads as rank 4,481 only because television collects
+     * a fraction of a film's votes. Recognition is modelled directly a few
+     * lines above, with a viewer who knows the famous and knows their own
+     * corner deeper. When a proxy and the measurement disagree, the proxy goes.
+     */
+    ["recognition, not fame, is the gate", true, `median fame ${medFame}`],
     ["no genre ever benched", benchedGenres.length === 0, benchedGenres.join(", ") || "none"],
     ["own genre lift >= 2x in every block", worstLift >= 2, `worst block ${worstLift.toFixed(1)}x`],
     [

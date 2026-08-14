@@ -85,7 +85,7 @@ const GENRE_REPEAT_PENALTY = 0.16;
 const DECK_DIVERSITY_SCALE =
   typeof process !== "undefined" && process.env?.DECK_DIVERSITY
     ? Number(process.env.DECK_DIVERSITY)
-    : 1;
+    : 0.25;
 
 /** Discover keeps a quarter of it: one window for discovery, not four */
 const DISCOVER_DIVERSITY_SCALE =
@@ -151,9 +151,25 @@ export type RankMode = "swipe" | "discover";
  */
 export function recognitionRate(profile: TasteProfile): number {
   const answered = profile.seenCount + profile.unseenCount;
-  // no evidence yet: assume the pool is fine rather than punish a new account
-  if (answered < 10) return 1;
+  if (answered === 0) return 0;
   return profile.seenCount / answered;
+}
+
+/**
+ * How much the rate above can be believed yet.
+ *
+ * This used to be handled inside `recognitionRate` by returning 1 when fewer
+ * than ten cards had been answered — "assume the pool is fine rather than
+ * punish a new account". That reads as generous and is the opposite: a rate of
+ * 1 relaxes the recognition weight all the way to its warm setting, so the
+ * viewer we know *least* about was the one being pushed deepest into the
+ * catalog. It is the same inversion that was fixed when this stopped following
+ * confidence, reappearing at the cold-start boundary.
+ *
+ * A new account now holds the cold setting and earns its way out of it.
+ */
+function recognitionEvidence(profile: TasteProfile): number {
+  return Math.min(1, (profile.seenCount + profile.unseenCount) / 20);
 }
 
 /**
@@ -176,10 +192,16 @@ export function recognitionRate(profile: TasteProfile): number {
  * six cards in seven — 86%. A first attempt used 20 and 15, which settles at
  * 43% recognised, and measured exactly that badly.
  */
-const TIER_BASE = 700;
+const TIER_BASE =
+  typeof process !== "undefined" && process.env?.TIER_BASE
+    ? Number(process.env.TIER_BASE)
+    : 900;
 const TIER_PER_SEEN = 5;
 const TIER_PER_UNSEEN = 30;
-const TIER_MAX = 3000;
+const TIER_MAX =
+  typeof process !== "undefined" && process.env?.TIER_MAX
+    ? Number(process.env.TIER_MAX)
+    : 3000;
 
 export function fameTierSize(profile: TasteProfile, mode: RankMode = "swipe"): number {
   if (mode === "discover") return DISCOVER_POOL;
@@ -236,14 +258,119 @@ function fameLists(pool: CandidateItem[]) {
  * series, not the 865 best-known titles. Halloween sat outside it, and the
  * ruler was blaming the ranking for not showing a card it was never offered.
  */
-export function fameGate(pool: CandidateItem[], limit: number): CandidateItem[] {
+/**
+ * How much deeper the gate reaches for a title inside the viewer's taste.
+ *
+ * A hard fame cutoff answers "would they have heard of this?" with a fact
+ * about the whole catalog, and that answer is wrong the moment a taste is
+ * known. Measured on a viewer who had just liked three broad comedies, the
+ * gate locked out Anchorman, Wedding Crashers, Knocked Up, Pineapple Express
+ * and Old School — films that viewer has certainly seen — while admitting
+ * Spirited Away, District 9 and Death Note, which they may well not have. Of
+ * the fifteen titles Discover recommended, the deck could not even see twelve,
+ * and it got *worse* as the taste sharpened: 12 of 15 reachable after one
+ * like, 1 of 15 after ten.
+ *
+ * So the gate now models recognition the way people actually work: everybody
+ * knows the famous, and everybody knows their own corner far deeper. That is
+ * the same rule the session ruler has used to decide what its simulated viewer
+ * has heard of since before this problem was found.
+ *
+ * NOT the taste door that was tried and rejected in v10. That admitted any
+ * graph neighbour at any depth and cost eight points of recognition. This is
+ * bounded — a fixed multiple of the gate, and only on the genre the viewer has
+ * demonstrably liked — so a deep obscurity stays out whether the graph likes
+ * it or not.
+ */
+const TASTE_DEPTH =
+  typeof process !== "undefined" && process.env?.TASTE_DEPTH
+    ? Number(process.env.TASTE_DEPTH)
+    : 2;
+
+/**
+ * Is this title in the viewer's own corner?
+ *
+ * Cheap on purpose — only the genre facet, which is the dimension recognition
+ * actually follows. The bar is a *mean* rather than a sign: the first version
+ * admitted any genre with positive net evidence, and after a hundred swipes
+ * almost every genre carries some, so the deep half of the gate opened for
+ * everything and session recognition fell from 93% to 81%. A viewer's corner
+ * is the handful of genres they like *consistently*, not every genre they have
+ * ever nodded at.
+ */
+const TASTE_FLOOR =
+  typeof process !== "undefined" && process.env?.TASTE_FLOOR
+    ? Number(process.env.TASTE_FLOOR)
+    : 0.4;
+/** how far below the favourite a genre may sit and still count as the corner */
+const TASTE_MARGIN =
+  typeof process !== "undefined" && process.env?.TASTE_MARGIN
+    ? Number(process.env.TASTE_MARGIN)
+    : 0.15;
+
+/**
+ * The genres the deep half of the gate opens for — the viewer's corner.
+ *
+ * Narrowed twice, both times by measurement. Admitting any genre with positive
+ * evidence took session recognition from 93% to 81%: after a hundred swipes
+ * nearly every genre carries some positive, so "deep" applied to everything.
+ * Requiring a consistent mean was not enough either. What works is the
+ * favourite and whatever ties with it, which is what "your own corner" means
+ * to a person and what the session ruler has always assumed.
+ */
+function corner(facets: FacetTables): Set<string> {
+  const table = facets.genre;
+  let best = 0;
+  const means = new Map<string, number>();
+  for (const g of Object.keys(table)) {
+    const [net, mass] = table[g];
+    if (mass <= 0) continue;
+    const mean = net / mass;
+    means.set(g, mean);
+    if (mean > best) best = mean;
+  }
+  const out = new Set<string>();
+  if (best < TASTE_FLOOR) return out;
+  for (const [g, mean] of means) {
+    if (mean >= Math.max(TASTE_FLOOR, best - TASTE_MARGIN)) out.add(g);
+  }
+  return out;
+}
+
+/**
+ * The titles the gate actually admits.
+ *
+ * Exported because instruments must not reimplement it. The session ruler
+ * measured what the deck was missing against "the top N of the catalog by
+ * votes" and reported a ranking failure that did not exist: the gate takes
+ * the top share of films and the top share of series *separately*, so at a
+ * limit of 865 it holds the 623 best-known films and the 233 best-known
+ * series, not the 865 best-known titles. Halloween sat outside it, and the
+ * ruler was blaming the ranking for not showing a card it was never offered.
+ */
+export function fameGate(
+  pool: CandidateItem[],
+  limit: number,
+  facets?: FacetTables
+): CandidateItem[] {
   const { movie, tv } = fameLists(pool);
-  const share =
-    !Number.isFinite(limit) || limit >= pool.length ? 1 : limit / Math.max(pool.length, 1);
-  const kept = [
-    ...movie.slice(0, Math.round(movie.length * share)),
-    ...tv.slice(0, Math.round(tv.length * share)),
-  ];
+  const shareOf = (n: number) =>
+    !Number.isFinite(n) || n >= pool.length ? 1 : n / Math.max(pool.length, 1);
+
+  const mine = facets ? corner(facets) : null;
+  const take = (list: CandidateItem[]) => {
+    const base = Math.round(list.length * shareOf(limit));
+    if (!mine || mine.size === 0) return list.slice(0, base);
+    const deep = Math.round(list.length * shareOf(limit * TASTE_DEPTH));
+    return [
+      ...list.slice(0, base),
+      ...list
+        .slice(base, deep)
+        .filter((c) => c.title.genres.some((g) => mine.has(g.toLowerCase()))),
+    ];
+  };
+
+  const kept = [...take(movie), ...take(tv)];
   // back into fame order. Concatenating the two lists left every film ahead of
   // every series, and the exploration pass takes the first twelve candidates
   // of a genre from this array — so it could never pick a series at all.
@@ -714,7 +841,9 @@ export function recommend(
    * viewer demonstrates they recognise what they are being shown.
    */
   const recognised = recognitionRate(profile);
-  const relax = Math.min(1, Math.max(0, (recognised - 0.6) / 0.35));
+  const relax =
+    recognitionEvidence(profile) *
+    Math.min(1, Math.max(0, (recognised - 0.6) / 0.35));
   const wRecognition =
     mode === "discover"
       ? W_RECOGNITION_DISCOVER
@@ -743,7 +872,11 @@ export function recommend(
    *
    * The gate stands alone.
    */
-  const gated = fameGate(pool, fameTierSize(profile, mode));
+  const gated = fameGate(
+    pool,
+    fameTierSize(profile, mode),
+    mode === "swipe" ? profile.facets : undefined
+  );
   const coWatchScale =
     mode === "discover"
       ? COWATCH_ENV ?? CO_WATCH_DISCOVER_SCALE

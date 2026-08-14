@@ -102,6 +102,125 @@ against the improved engine, not the old one.
 
 ---
 
+## The gate was locking the viewer's taste out of the deck (2026-08-14)
+
+The user, an hour after the behavioural graph shipped: **"Discover maybe got
+better — maybe. But the cards got worse!"** Every ruler here disagreed with him.
+He was right.
+
+After liking The Hangover, Superbad and Step Brothers:
+
+| Discover | the deck |
+|---|---|
+| Role Models 73% · Pineapple Express 73% · Anchorman 72% · Wedding Crashers 67% · Old School 65% | 21 Jump Street 62% · **Slumdog Millionaire** · **Death Note** · **Iron Man** · **Spirited Away** · **Interstellar** · **Harry Potter** |
+
+The reason line printed on most of the right-hand column was one word: `2000s`.
+The only thing connecting them to his taste was the decade.
+
+### The cause, measured
+
+**Twelve of the fifteen titles Discover recommended were outside the deck's
+gate entirely** — not ranked low, not visible at all:
+
+| | film rank | gate = top 562 films |
+|---|---|---|
+| Anchorman | 1144 | locked out |
+| Wedding Crashers | 1115 | locked out |
+| Knocked Up | 1255 | locked out |
+| Old School | 2576 | locked out |
+
+And it got *worse* as the taste sharpened — of Discover's fifteen, the deck
+could reach 12 after one like, 4 after three, **1 after ten**. The better we
+understood him, the more completely the gate blocked the answer.
+
+The gate exists to keep cards recognisable, and it was excluding Anchorman
+while admitting Spirited Away and District 9. **Fame across the whole catalog
+is a bad proxy for "have you heard of it" the moment a taste is known.**
+
+### The fix
+
+The gate now models recognition the way people work: everybody knows the
+famous, and everybody knows their own corner far deeper. Base widened 700 →
+900, and doubled again for titles in the genres the viewer likes *consistently*
+— their favourite and whatever ties with it, not every genre they have nodded
+at. Deck diversity also dropped from full strength to a quarter; it was set
+when the ranking was weak and had been quietly interleaving one comedy with
+four blockbusters.
+
+**Not the taste door rejected in v10.** That admitted any graph neighbour at
+any depth and cost eight points of recognition. This is bounded to a multiple
+of the gate and to the viewer's own genre, and recognition does not move.
+
+| | before | after |
+|---|---|---|
+| deck vs 500 real people | 27.7% | **30.4%** |
+| deck, long tail | 3.2% | **6.4%** |
+| cold deck, own genre in 20 (comedy/horror/scifi) | 5 / 6 / 9 | **7 / 9 / 10** |
+| can reach Discover's picks (horror) | 6/15 | **9/15** |
+| session recognition | 93% / 93% | **93% / 93%** |
+| Discover · vibe hard pairs | 34.2% · 60% | 34.2% · 60% |
+
+The first four cards for that comedy viewer are now 21 Jump Street, **Anchorman,
+Pineapple Express**, Ted.
+
+### A second bug the same probe found
+
+`recognitionRate` returned 1 when fewer than ten cards had been answered —
+"assume the pool is fine rather than punish a new account". A rate of 1 relaxes
+the recognition weight to its *warmest* setting, so the viewer we knew least
+about was pushed deepest into the catalog. Same inversion as the one fixed
+yesterday, reappearing at the cold-start boundary. A new account now holds the
+cold setting and earns its way out.
+
+### And a ruler that was wrong about television
+
+The session ruler decided what its viewer had heard of using rank across the
+whole catalog. TMDB vote counts are a film scale, so Gilmore Girls reads as
+rank 4,481 and the ruler was reporting "never heard of it" while the engine
+served well-known sitcoms. `fameGate` has split the two scales since the
+television lockout was found; the recognition model had not caught up. Fixed,
+and the same correction applied to the new ruler.
+
+The `median fame <= 900` check went with it — a proxy for the thing recognition
+already measures directly, and wrong in both directions: Anchorman at 1,455 is
+known to every comedy viewer, Gilmore Girls at 4,481 is known to most people.
+It is printed now, not judged. **That is a check being removed after it failed,
+which deserves the scrutiny: recognition is measured a few lines above with an
+explicit model of the viewer, and it stayed at 93%.**
+
+### What still fails, unfixed
+
+- **The cold-deck own-genre target (60% of the first twenty) is missed** — 7,
+  9 and 10 of 20 against a target of 12. Reaching it needs the deck's graph
+  weight at 1.6, and there the tunnel-vision guard reads **3.0x**: the deck
+  stops being able to find a taste it has not been shown. Not shipped.
+- **The tunnel-vision guard regressed anyway**, 1.11x → 1.28x against a 1.15x
+  limit, from the gate alone. A deeper pool inside your corner means more
+  on-taste candidates, so reaching one specific other title takes longer. Part
+  arithmetic, part real. Reported rather than tuned away.
+- Comedy can still only reach 5 of Discover's 15; those sit past rank 2,900,
+  beyond any gate that keeps recognition at 93%.
+
+### Why no ruler caught this
+
+- the 500-people ruler builds one page from **half a full library** — it has no
+  notion of "three likes"
+- the session ruler **exempts the opening blocks**, and that exemption is a
+  line written by hand: *"the floor skips the opening… no drift can have
+  happened yet"*
+- the vibe pairs grade Discover, not the deck
+
+The gap he complained about was precisely the gap excused from judgement.
+`scripts/cold-deck.ts` grades it now, and its sharpest number needs no
+interpretation: Discover and the deck rank the same catalog with the same
+taste, so anything Discover finds that the deck cannot see is a gate problem by
+definition.
+
+**Fifth time in this project that the ruler was the fault, and the second time
+the user saw with his eyes what no number here could.**
+
+---
+
 ## Television finally has behaviour behind it (2026-08-14)
 
 The user has raised the same example since the first week: *"I love Brooklyn

@@ -102,6 +102,59 @@ against the improved engine, not the old one.
 
 ---
 
+## The distillation — what shipped (2026-08-13)
+
+`python3 scripts/distill.py`, then `npx tsx scripts/apply-edges.ts`.
+
+The ceiling test said behaviour is worth twice our content engine, and that we
+could not ship the behavioural model — wrong licence, and it only knows the
+4,054 films it was trained on. So we shipped a function instead of a model:
+
+    20,000 people's co-watching  →  a 256-dimension position per film
+    our own TMDB metadata        →  a ridge fit predicting that position
+    the fit                      →  run over all 5,555 titles, TV included
+
+Predicted position matches the real one at **cosine 0.737** on the films where
+both exist. Every title gets 40 neighbours, unioned with TMDB's own links so
+the obvious pairs are not lost.
+
+**Nothing about "feel" is written down anywhere.** No mood vocabulary, no
+adjectives, no prose. That is why it worked where four earlier attempts did
+not: the target is measured rather than authored.
+
+Graded on the 500 people from the ceiling test:
+
+| | score | long tail | vibe (hard) |
+|---|---|---|---|
+| before | 18.8% [17.7–20.0] | 2.6% | 23% |
+| **after** | **27.0% [25.5–28.4]** | **6.1%** | **30%** |
+| the ceiling (unshippable) | 41.2% | 2.3% | — |
+| popularity floor | 13.3% | — | — |
+
+The long-tail line more than doubling is the part that cannot be faked by
+fame. And the shipped engine now beats the *ceiling model* on long tail, which
+says the two are good at different things.
+
+The weight went from 0.15 to 32 — absurd next to the old number, and correct:
+the sweep climbs all the way (19.4 → 27.3 between 0.6 and 32). The old graph
+was TMDB's franchise links and was throttled almost off for good reason; this
+one is worth trusting. The deck was swept too and still wants 0.3.
+
+**Cost: the catalog went from 1.33 MB to 1.92 MB gzipped**, which every visitor
+downloads. Density now genuinely helps (12 edges scores 24.0%, 20 scores 25.5%,
+47 scores 27.0%), so the size buys something. It also strengthens the case in
+the scale checklist for moving the catalog server-side before 50,000 titles.
+
+**Known weakness, visible in the output:** Parasite's neighbours came back as
+eight Korean dramas. The model learned "Korean" as a strong predictor, which is
+language leaking in as taste. Recorded, not fixed.
+
+Genre benchmark: 18% → 17%. That panel rewards genre purity, which is what we
+are deliberately moving away from — and it is a robot persona against 500 real
+people.
+
+---
+
 ## The ceiling test — the answer, and it is not close (2026-08-13)
 
 `python3 scripts/ceiling-test.py`. MovieLens 32M: 200,948 real people, and

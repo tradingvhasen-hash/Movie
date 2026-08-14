@@ -273,28 +273,27 @@ const CO_WATCH_MAX =
 const CO_WATCH_DECK_SCALE = 0.3;
 
 /**
- * Discover's share of the same signal — and it turned out to want much less of
- * it too, for the same reason the deck did.
+ * Discover's share of the graph signal.
  *
- * At full strength this scored best on a panel of simulated viewers who judge
- * by genre overlap, which is what it was tuned against. Graded instead on 150
- * real MovieLens libraries — actual people, an answer key nobody here wrote —
- * it is the single worst setting in the sweep:
+ * This number looks absurd next to the 0.15 it replaced, and the reason is
+ * that the graph underneath it is a different object. It used to be TMDB's
+ * "also watched" list, which points at sequels and same-season releases; at
+ * full strength it dragged the engine down to 13.6% on real people, so it was
+ * throttled almost off. It is now the distilled graph — where 200,000 people's
+ * behaviour implies each title sits — and the sweep runs the other way:
  *
- *     co-watch weight   1.0    0.5    0.3    0.15    0
- *     real people      13.6%  17.2%  18.7%  20.1%  20.0%
- *     (recommending pure blockbusters scores 11.9%)
+ *     weight        0.6    2     4     8    16    32    64
+ *     real people  19.4  20.8  22.4  24.5  25.6  27.3  26.4
  *
- * At full strength the whole engine was barely beating a list of the most
- * famous films in the catalog. The reason is the same tight circle the deck
- * suffered from: co-watch links point at sequels, franchise siblings and
- * whatever else was popular in the same season, so Discover kept answering
- * with the right category and the wrong film.
- *
- * 0.15 rather than 0: a trace of it still helps tastes that really are defined
- * by category, and costs one point on the genre benchmark instead of two.
+ * A signal worth trusting wants to be trusted. The old one never was.
  */
-const CO_WATCH_DISCOVER_SCALE = 0.6;
+const CO_WATCH_DISCOVER_SCALE = 32;
+
+/** measurement only, deck side. Unset in the browser. */
+const DECK_ENV =
+  typeof process !== "undefined" && process.env?.DECK_COWATCH
+    ? Number(process.env.DECK_COWATCH)
+    : null;
 
 /** measurement only: COWATCH=0.5 npm run human. Unset in the browser. */
 const COWATCH_ENV =
@@ -554,7 +553,7 @@ export function recommend(
   const coWatchScale =
     mode === "discover"
       ? COWATCH_ENV ?? CO_WATCH_DISCOVER_SCALE
-      : CO_WATCH_DECK_SCALE;
+      : DECK_ENV ?? CO_WATCH_DECK_SCALE;
 
   // centre of meaning for everything the viewer has liked
   let soulCentre: number[] | null = null;

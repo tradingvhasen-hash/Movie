@@ -202,6 +202,55 @@ way `vibe-pairs.ts` defines its pairs, rather than by the engine grading itself.
 **Two hypotheses, both mine, both measured, both wrong.** The collapse is real
 and reproduced; its cause is still open.
 
+### Where the remaining decline actually comes from (2026-08-14)
+
+Third logged session, after the graph weight went to 0.8:
+
+| | run 1 | run 2 | run 3 |
+|---|---|---|---|
+| right / up | 71 | 89 | **93** |
+| right / left | 54 | 111 | **108** |
+
+Settled. And the wrong-feel signature is gone: the probe at swipe 150 that
+previously served High School Musical, Charlie's Angels and Twilight now serves
+American Wedding, Little Fockers and American Pie.
+
+What replaced it is the failure the user described first — famous and
+unrelated. Dawn of the Dead, Wonder Woman, Saw and 1917 were served while Dumb
+and Dumber, Coming to America, Trading Places and Legally Blonde were withheld.
+So every remaining dial was swept, and **none of them is the answer**:
+
+    fame weight     0.9/0.55 → 0.35/0.15    155 → 152   (neutral, second time)
+    taste weight    1.6 → 5                 worse
+    exploration     off                     no change
+    diversity       off                     no change
+    both off        upper bound             64 / 94 against 63 / 92
+    walk frontier   600 → 3000              byte-identical
+    walk hops       2 → 3                   byte-identical
+
+**Then the arithmetic that ends the question.** Lift is what the deck adds over
+the pool it is drawing from:
+
+| block | on taste /50 | reachable | pool | base rate | **lift** |
+|---|---|---|---|---|---|
+| 1-50 | 33 | 63 | 1,165 | 5.4% | **12.2x** |
+| 51-100 | 26 | 22 | 1,415 | 1.6% | **33.4x** |
+| 101-150 | 20 | 40 | 1,665 | 2.4% | **16.7x** |
+| 151-200 | 13 | 32 | 1,915 | 1.7% | **15.6x** |
+
+**The engine ends the session ranking better than it started, not worse.** The
+card count falls because the taste runs out: 95 of the 131 hand-written titles
+are consumed by swipe 200, while the pool it must find them in grows from 1,165
+to 1,915. Thirteen on-taste cards from a pool where 1.7% are on-taste is not a
+failing deck.
+
+So the decline that has driven three days of work is now, finally, a catalog
+problem. **5,555 titles cannot hold two hundred swipes of one specific taste.**
+Everything above this line was a real bug; below it is arithmetic, and the fix
+is the 50,000-title catalog that the scale checklist has always assumed.
+
+---
+
 ### High School Musical, and the day's conclusion being wrong (2026-08-14)
 
 The user logged the same two sessions again after the gate work:

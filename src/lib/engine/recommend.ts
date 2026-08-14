@@ -154,16 +154,49 @@ export function fameTierSize(profile: TasteProfile, mode: RankMode = "swipe"): n
   return FAME_TIERS[FAME_TIERS.length - 1].size;
 }
 
-/** pool → the same items ordered by vote count, computed once per catalog */
-const fameOrder = new WeakMap<CandidateItem[], CandidateItem[]>();
+/**
+ * Pool ordered by fame — but fame measured *within its own kind*.
+ *
+ * TMDB vote counts are a film scale. A famous series collects a fraction of
+ * the votes a mid-tier film does, so ranking everything on one list quietly
+ * deleted television from the deck: of 1,187 series in the catalog, 42 sat
+ * inside the top 800, against 21% of the catalog being series.
+ *
+ * What that meant in practice, reported by a user and then confirmed here:
+ * someone who says they love Brooklyn Nine-Nine and asks for more of the same
+ * cannot be shown The Office (rank 1,018), How I Met Your Mother (928) or
+ * Modern Family (1,751) — nor Brooklyn Nine-Nine itself (1,463). The three
+ * answers any person would give were locked out of the first forty cards by
+ * arithmetic, and no amount of taste modelling could reach them.
+ *
+ * So the gate now takes the same *share* of each kind. A tier of 800 out of
+ * 5,555 is the top 14%, and it stays the top 14% of films and the top 14% of
+ * series rather than the top 14% of one merged list. Both lists are still
+ * ordered by fame inside themselves, so nothing obscure gets in.
+ */
+const fameOrder = new WeakMap<CandidateItem[], { movie: CandidateItem[]; tv: CandidateItem[] }>();
 
-function byFame(pool: CandidateItem[]): CandidateItem[] {
-  let sorted = fameOrder.get(pool);
-  if (!sorted) {
-    sorted = [...pool].sort((a, b) => b.title.voteCount - a.title.voteCount);
-    fameOrder.set(pool, sorted);
+function fameLists(pool: CandidateItem[]) {
+  let lists = fameOrder.get(pool);
+  if (!lists) {
+    const sorted = [...pool].sort((a, b) => b.title.voteCount - a.title.voteCount);
+    lists = {
+      movie: sorted.filter((c) => c.title.type !== "tv"),
+      tv: sorted.filter((c) => c.title.type === "tv"),
+    };
+    fameOrder.set(pool, lists);
   }
-  return sorted;
+  return lists;
+}
+
+function byFame(pool: CandidateItem[], limit: number): CandidateItem[] {
+  const { movie, tv } = fameLists(pool);
+  if (!Number.isFinite(limit) || limit >= pool.length) return [...movie, ...tv];
+  const share = limit / Math.max(pool.length, 1);
+  return [
+    ...movie.slice(0, Math.round(movie.length * share)),
+    ...tv.slice(0, Math.round(tv.length * share)),
+  ];
 }
 
 /** pool → every genre in it, computed once per catalog */
@@ -191,9 +224,16 @@ function allGenres(pool: CandidateItem[]): string[] {
  * have no evidence about, tapering once the picture is filled in.
  */
 export function exploreRatioFor(profile: TasteProfile): number {
+  if (process.env?.EXPLORE) return Number(process.env.EXPLORE);
   if (profile.ratedSwipes === 0) return 0;
   const warm = Math.min(1, profile.totalSwipes / 60);
-  return 0.25 - 0.13 * warm;
+  // Halved from 0.25. A quarter of the deck spent on probes was set when the
+  // ranking had little else to offer; now that the graph carries real signal,
+  // measured on 500 real libraries, that quarter costs 2.4 points of accuracy
+  // (25.7% with no probing, 23.3% with a quarter). Exploration still earns its
+  // place — the tunnel-vision check exists for exactly this — but it no longer
+  // gets to spend one card in four proving it.
+  return 0.12 - 0.06 * warm;
 }
 
 /**
@@ -270,7 +310,29 @@ const CO_WATCH_MAX =
  * Interstellar from 165 to 233 — the deck circles inside one family instead of
  * mapping the rest of your taste.
  */
-const CO_WATCH_DECK_SCALE = 0.3;
+/**
+ * The deck's share of the graph — and the reason it is not Discover's 32.
+ *
+ * At 0.3 (where it sat while Discover moved to 32) the deck was ignoring the
+ * signal entirely: fame contributed up to 0.9 to a card's score and the graph
+ * at most 0.26, so someone who had just said they love Brooklyn Nine-Nine was
+ * shown Interstellar, Spirited Away and Schindler's List. Reported by a user,
+ * then reproduced exactly by scripts/deck-probe.ts.
+ *
+ * Graded on 500 real libraries in swipe mode — a ruler that did not exist
+ * until that complaint, because every earlier ruler graded Discover only:
+ *
+ *     weight     0.3    2     8    12    16    32
+ *     accuracy  19.3  20.0  22.4  22.8  23.8  23.3
+ *     reach     0.90x       0.95x 0.87x 1.13x 1.23x   (guard: <=1.15x)
+ *
+ * 12 rather than the higher-scoring 16 or 32: the deck is where a taste is
+ * *taught*, and above roughly 16 it starts circling its own suggestions —
+ * the tunnel-vision guard in simulate.ts fails outright at 32. At 12 the deck
+ * is both more accurate and faster to reach a new taste than with the signal
+ * switched off, which is the combination worth having.
+ */
+const CO_WATCH_DECK_SCALE = 12;
 
 /**
  * Discover's share of the graph signal.
@@ -536,7 +598,7 @@ export function recommend(
   const rng = makeRng(seed + profile.totalSwipes * 2654435761);
 
   const mode = opts.mode ?? "swipe";
-  const gated = byFame(pool).slice(0, fameTierSize(profile, mode));
+  const gated = byFame(pool, fameTierSize(profile, mode));
 
   const confidence = tasteConfidence(profile);
   const wRecognition =

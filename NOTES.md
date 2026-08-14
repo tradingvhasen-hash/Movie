@@ -102,6 +102,64 @@ against the improved engine, not the old one.
 
 ---
 
+## The deck was never graded, and it showed (2026-08-14)
+
+A user tried the site after the distillation shipped and said the cards had not changed: "I love Brooklyn Nine-Nine — anyone would say The Office, Modern
+Family, How I Met Your Mother, and not one of them was suggested."
+
+He was right, and the reason is that **every ruler in this repo graded Discover
+only**. The deck kept the settings the robot-persona benchmark gave it — the
+instrument we had already established has the least authority — and nobody
+had ever asked 500 real people what they thought of it.
+
+`scripts/deck-probe.ts` reproduced the complaint in one command. After liking
+Brooklyn Nine-Nine the deck offered Interstellar, Spirited Away, Pulp Fiction,
+The Dark Knight and Schindler's List, every card scoring ~56%.
+
+**Two causes, and the second is worse than the first.**
+
+*The weight.* Discover moved to 32 and the deck was left at 0.3, so fame
+contributed up to 0.9 to a card while the whole graph contributed at most 0.26.
+
+*The fame gate was measuring television on a film's ruler.* TMDB vote counts
+are a film scale; a famous series collects a fraction of what a mid-tier film
+does. Ranking one merged list meant **42 of 1,187 series sat inside the top
+800**, against series being 21% of the catalog:
+
+| | rank | in the first 40 cards? |
+|---|---|---|
+| The Office | 1,018 | locked out |
+| How I Met Your Mother | 928 | locked out |
+| Modern Family | 1,751 | locked out |
+| Brooklyn Nine-Nine itself | 1,463 | locked out |
+
+The three answers any human would give were unreachable by arithmetic. The
+gate now takes the same *share* of each kind — the top 14% of films and the top
+14% of series — which puts 171 series in the first tier instead of 42.
+
+Graded on 500 real libraries in swipe mode, a ruler that did not exist before
+this complaint:
+
+| | deck | Discover |
+|---|---|---|
+| before | 19.3% [18.1–20.5] | 27.0% |
+| **after** | **22.8% [21.5–24.1]** | 27.0% |
+
+The deck weight is 12, not the higher-scoring 16 or 32, because the deck is
+where a taste is *taught*: above ~16 it circles its own suggestions and the
+tunnel-vision guard fails outright at 32. At 12 the deck is both more accurate
+and *faster* to reach a new taste than with the signal off (0.87×).
+
+Exploration also halved, 0.25 → 0.12 decaying to 0.06. A quarter of the deck
+spent on probes was set when the ranking had nothing better to offer; measured
+now it costs 2.4 points (25.7% with no probing against 23.3% with a quarter).
+
+Side effect worth noting: the genre benchmark went 17% → 26% overall and
+25% → 40% on genre-defined tastes. That panel grades the *deck*, which is
+exactly what changed, and it had been reading low for the same reason.
+
+---
+
 ## The distillation — what shipped (2026-08-13)
 
 `python3 scripts/distill.py`, then `npx tsx scripts/apply-edges.ts`.

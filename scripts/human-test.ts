@@ -262,7 +262,11 @@ function grade(likeBudget: number): Scores {
       count: PAGE,
       seed: Number(person.id),
       vectorFor: vf,
-      mode: "discover",
+      // MODE=swipe grades the deck instead of Discover. Until now every
+      // ruler here graded Discover only, which is how the deck kept its
+      // settings from the robot-persona benchmark and ended up showing
+      // Interstellar to someone who had just said they love a sitcom.
+      mode: (process.env.MODE as "swipe" | "discover") ?? "discover",
       likedTitles: library,
     });
     const hits = recs.filter((r) => held.has(r.title.id));

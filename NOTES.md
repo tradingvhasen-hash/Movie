@@ -102,6 +102,67 @@ against the improved engine, not the old one.
 
 ---
 
+## Television finally has behaviour behind it (2026-08-14)
+
+The user has raised the same example since the first week: *"I love Brooklyn
+Nine-Nine — anyone would say The Office, Modern Family, How I Met Your Mother,
+and not one of them was suggested."* Every ruler here confirmed the miss and
+nothing fixed it, because MovieLens has no television and describing titles
+instead had just failed a direct test (`tag-probe.py`).
+
+Wikipedia publishes every article-to-article click pair above ten occurrences,
+monthly, under CC0. `scripts/wiki-edges.py` maps our catalog through Wikidata's
+TMDB properties — never by name, since "The Office" alone matches four
+different series — and reads the July 2026 dump.
+
+    3,495 of 5,555 titles have an English article
+    17,042 click pairs inside the catalog, 12,944 distinct connections
+    3,133 titles get neighbours — 909 of them television
+
+**Brooklyn Nine-Nine → Parks and Recreation, New Girl, The Rookie, The Office,
+The Good Place, Modern Family, Community, Superstore.**
+
+Two ways of folding it in were built and graded. Appending it behind the
+existing graph is worth little; **leading with it wherever there is no
+behaviour** — every series, every film past the MovieLens snapshot — is worth a
+great deal, because there it is not competing with a better signal, it is
+replacing a guess.
+
+| | shipped | + wiki appended | **+ wiki leading** |
+|---|---|---|---|
+| vibe, hard pairs | 53% | 55% | **60%** |
+| vibe, easy pairs | 75% | 80% | **80%** |
+| Discover, 500 people | 34.1% | — | 34.2% |
+| deck, 500 people | 27.9% | — | 27.7% |
+
+The film numbers do not move, which is the point: wiki leads on 948 titles, all
+of them ones behaviour never covered.
+
+**The pairs this project exists for, at last:**
+
+    Brooklyn Nine-Nine → Modern Family        both directions
+    Friends → How I Met Your Mother           both directions
+    The Office → Parks and Recreation         both directions
+    The Hangover → Rush Hour                  still missed
+
+The last one is a film pair, and there behaviour rules: 60,000 people's
+co-watching says they are not the same night in. That may be true and our
+intuition wrong, or it may be the release-year clustering visible elsewhere in
+the raw graph. Unresolved, and recorded as unresolved.
+
+**The deck weight came down again, 0.5 → 0.45.** The tunnel-vision guard read
+1.16x against its 1.15x limit, and the guard times four specific needles — one
+flipping moves it several points — so the pass is taken with margin rather than
+at the line. Costs 0.2 points of deck accuracy.
+
+**What is still thin.** 2,060 titles have no English article matched at all, and
+those with neighbours average 8.1 against behaviour's 40. Reading is also not
+watching: a click can be curiosity, a cast member, a franchise. This is the
+weakest of our three sources and it is carrying television alone — which is an
+argument for the Amazon answer, not a reason to be pleased.
+
+---
+
 ## Permission granted — and two experiments it killed (2026-08-14)
 
 GroupLens granted commercial permission. Every licence header is corrected, and

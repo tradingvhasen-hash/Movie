@@ -387,16 +387,20 @@ const CO_WATCH_MAX =
  * Re-swept when the graph became real co-watching rather than a prediction of
  * it. A better graph pulls harder, so the same weight now circles more:
  *
- *     weight            0.3   0.4   0.5   0.6
- *     real people      26.5  27.2  27.9  28.5
- *     swipes to reach  1.15  1.16  1.11  1.22   (guard: <=1.15x)
+ *     weight            0.3   0.4  0.45   0.5   0.6
+ *     real people      26.5  27.2  27.7  27.9  28.5
+ *     swipes to reach  1.15  1.09  1.09  1.16  1.22   (guard: <=1.15x)
  *
- * 0.5 rather than the higher-scoring 0.6, for the reason the guard exists: the
- * deck is where a taste is *taught*, and 0.6 fails it outright. The 0.6 point
- * costs half a point of accuracy, inside the interval, and buys back the
- * deck's ability to find a taste it has not been shown yet.
+ * 0.45 rather than the higher-scoring 0.6, for the reason the guard exists:
+ * the deck is where a taste is *taught*, and the top of that sweep fails it
+ * outright. The cost is under a point of accuracy, well inside the interval,
+ * and it buys back the deck's ability to find a taste it has not been shown.
+ *
+ * The guard itself is noisy — it times four specific needles, and one of them
+ * flipping moves the ratio by several points — so the pass is taken with a
+ * margin rather than at the line.
  */
-const CO_WATCH_DECK_SCALE = 0.5;
+const CO_WATCH_DECK_SCALE = 0.45;
 
 /**
  * Discover's share of the graph signal.

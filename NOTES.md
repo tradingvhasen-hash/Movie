@@ -102,6 +102,48 @@ against the improved engine, not the old one.
 
 ---
 
+## The signal was dying as you swiped (2026-08-14)
+
+Reported by the user, and the shape of the report was the whole diagnosis:
+"the first ten to fifteen cards were connected and really matched my taste,
+then I swiped fifty or sixty more and none of them had anything to do with what
+I picked."
+
+Every ruler here grades a single page from a fixed library, so a decay *over a
+session* was invisible to all of them. `scripts/deck-drift.ts` swipes instead,
+and reports the graph's contribution to the cards in blocks of ten:
+
+| swipes | on taste | graph signal on the cards |
+|---|---|---|
+| 1-10 | 40% | **0.011** |
+| 31-40 | 90% | 0.004 |
+| 71-80 | 80% | **0.002** |
+
+**An 80% collapse.** The walk starts with one unit of mass split across
+everything the viewer has liked — five likes give each seed a fifth, fifty give
+each a fiftieth — so the signal that knows Brooklyn Nine-Nine belongs with The
+Office faded out exactly as the viewer taught us more. Meanwhile the keyword
+model is scaled by confidence and therefore *rises*, so it quietly took over.
+
+That is why the genre column stays high while the user says nothing matches:
+after sixty swipes the deck was still returning comedies, just not *their*
+comedies. Right category, wrong taste — the exact failure this project exists
+to fix, reappearing at swipe sixty.
+
+The fix is one paragraph of arithmetic: rescale the walk so its strongest
+candidate always scores 1. The graph's job is to rank, not to hold an opinion
+about how much someone has swiped. Weights re-tuned on the new scale — both
+surfaces land at 0.6, and the deck has a sharp cliff at 0.7 where the
+tunnel-vision guard fails.
+
+| | before | after |
+|---|---|---|
+| graph signal at swipe 80 | 0.002 | 0.272 |
+| deck accuracy | 22.8% | **24.4%** |
+| vibe (hard pairs) | 30% | **33%** |
+
+---
+
 ## The deck was never graded, and it showed (2026-08-14)
 
 A user tried the site after the distillation shipped and said the cards had not changed: "I love Brooklyn Nine-Nine — anyone would say The Office, Modern

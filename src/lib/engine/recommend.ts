@@ -332,7 +332,7 @@ const CO_WATCH_MAX =
  * is both more accurate and faster to reach a new taste than with the signal
  * switched off, which is the combination worth having.
  */
-const CO_WATCH_DECK_SCALE = 12;
+const CO_WATCH_DECK_SCALE = 0.6;
 
 /**
  * Discover's share of the graph signal.
@@ -349,7 +349,7 @@ const CO_WATCH_DECK_SCALE = 12;
  *
  * A signal worth trusting wants to be trusted. The old one never was.
  */
-const CO_WATCH_DISCOVER_SCALE = 32;
+const CO_WATCH_DISCOVER_SCALE = 0.6;
 
 /** measurement only, deck side. Unset in the browser. */
 const DECK_ENV =
@@ -481,8 +481,6 @@ const WALK_DECAY = 0.55;
 const WALK_GAMMA = 0.6;
 /** nodes carried into the next hop — bounds the cost, changes nothing else */
 const WALK_FRONTIER = 600;
-/** scales the walk's raw mass into the same range the old bonus occupied */
-const WALK_GAIN = 26;
 
 export function walkBonus(pool: CandidateItem[], liked: Title[]): Map<string, CoWatch> {
   const graph = buildGraph(pool);
@@ -521,12 +519,12 @@ export function walkBonus(pool: CandidateItem[], liked: Title[]): Map<string, Co
 
     const decay = Math.pow(WALK_DECAY, hop - 1);
     for (const [id, v] of next) {
-      const add = v.mass * decay * WALK_GAIN;
+      const add = v.mass * decay;
       const prev = visits.get(id);
       if (!prev) {
         visits.set(id, { score: add, from: v.from, fromStrength: add });
       } else {
-        prev.score = Math.min(CO_WATCH_MAX, prev.score + add);
+        prev.score += add;
         if (add > prev.fromStrength) {
           prev.from = v.from;
           prev.fromStrength = add;
@@ -539,6 +537,33 @@ export function walkBonus(pool: CandidateItem[], liked: Title[]): Map<string, Co
       .sort((a, b) => b[1].mass - a[1].mass)
       .slice(0, WALK_FRONTIER)
       .map(([id, v]) => ({ id, mass: v.mass, from: v.from }));
+  }
+
+  /**
+   * Rescale so the strongest candidate always scores 1.
+   *
+   * Without this the signal quietly dies as a library grows, because the walk
+   * starts with one unit of mass split across everything the viewer has liked:
+   * five likes give each seed a fifth, fifty likes give each a fiftieth, and
+   * the visits at the far end shrink with them. Measured over a simulated
+   * session, the graph's contribution to the cards on screen fell from 0.011
+   * in the first ten swipes to 0.002 by the eightieth — an 80% collapse — while
+   * the keyword model, which is scaled by confidence and therefore *rises*,
+   * silently took over. That is exactly what a user described: the first ten
+   * cards felt hand-picked and by the sixtieth they were merely the right
+   * genre.
+   *
+   * The graph's job is to rank, not to have an opinion about how much someone
+   * has swiped. Its scale is now fixed and its weight lives entirely in the
+   * one constant per surface.
+   */
+  let peak = 0;
+  for (const v of visits.values()) if (v.score > peak) peak = v.score;
+  if (peak > 0) {
+    for (const v of visits.values()) {
+      v.score /= peak;
+      v.fromStrength /= peak;
+    }
   }
 
   return visits;

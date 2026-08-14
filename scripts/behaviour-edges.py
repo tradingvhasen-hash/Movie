@@ -11,10 +11,10 @@ catalog. It was built that way for one reason, written at the top of that file:
 we believed we could not ship the behavioural model itself.
 
 That belief rested on the MovieLens licence, which forbids commercial use
-*without permission*. The site is a personal, non-revenue project, and the
-permission request has been sent besides. So the detour is no longer forced,
-and it costs something real: the fitted function reproduces a title's true
-position at cosine 0.737. For the 4,109 films behaviour actually covers, the
+*without permission*. Permission was requested and granted (2026-08-14), so the
+detour is no longer forced — and it costs something real: fitted and scored on
+disjoint sets of films, that function reproduces a title's position at cosine
+0.599 (the 0.737 quoted elsewhere was measured in-sample). For the 4,109 films behaviour actually covers, the
 true position is simply available.
 
 WHAT THIS DOES NOT SOLVE

@@ -102,6 +102,76 @@ against the improved engine, not the old one.
 
 ---
 
+## Permission granted — and two experiments it killed (2026-08-14)
+
+GroupLens granted commercial permission. Every licence header is corrected, and
+the honest sentence stays alongside it: what ships is a derived work, and
+calling the shipped table "computed from our own metadata" was the comfortable
+description rather than the accurate one. The permission is what settles it.
+
+Two things were held back behind that licence. Both were measured the moment it
+lifted, and **both are negative.**
+
+### More people do not help — the curve was already flat
+
+We trained on 60,000 of the 144,286 usable people because this was measurement
+rather than product. Retrained on 142,000:
+
+| people trained on | Discover | long tail |
+|---|---|---|
+| 60,000 (shipped) | **34.1%** | 15.2% |
+| 142,000 | 33.2% | 15.3% |
+
+Inside the interval, and if anything lower. Nothing to ship. Worth knowing
+because it removes "just use more data" from the list of things to try.
+
+### Human-written tags add nothing — and this cancels the next planned step
+
+MovieLens ships two million tags written by real people, and the most-used ones
+read like the shopping list we were about to pay a model to invent:
+`atmospheric`, `surreal`, `visually appealing`, `dark comedy`,
+`thought-provoking`, `cinematography`, `quirky`, `stylized`, `dark`.
+
+The plan — ours, and the outside reviewer's — was to buy mood and craft tags and
+feed them to the distillation as regression features, on the reasoning that our
+columns carry no craft signal. `scripts/tag-probe.py` tests that reasoning with
+the vocabulary already on disk, fitted on one set of films and scored on a
+disjoint set:
+
+| features predicting the behavioural position | cosine |
+|---|---|
+| our metadata (what ships today) | **0.599** |
+| human tags alone | 0.489 |
+| both together | 0.600 (±0.003) |
+
+**Two million human tags add one thousandth of a point**, inside the noise of
+three seeds. And the tags the fit leans on hardest are `action`, `comedy`,
+`funny`, `romance`, `animation`, `sci-fi` — genre words we already have. The
+craft words it was supposed to be about (`atmospheric`, `cinematography`,
+`surreal`) sit far down the list.
+
+The plan was to spend $15 and a week having a model write these. It would have
+bought the same nothing, and it is cancelled. Stated fairly: this tests tags as
+linear features against a 256-dimension behavioural target, which is exactly the
+formulation that was proposed — it does not prove every possible use of mood
+vocabulary is worthless, only the one we were about to build.
+
+**And a correction it forced.** Our fit quality is quoted as cosine 0.737
+throughout; that is in-sample. Held out properly it is **0.599**. The
+generalisation gap was never measured before, and the shipped number was
+flattering.
+
+### What this leaves
+
+Television still has no behaviour, and the description route to fixing it just
+failed a direct test. The remaining honest leads are behavioural: **Amazon
+Reviews 2023**, which covers TV and is waiting on a licence answer, and the
+**Wikipedia clickstream**, which is free and covers TV. Same lesson as the
+ceiling test, arriving a third time: describing titles does not work, and
+watching people does.
+
+---
+
 ## We shipped the co-watching itself (2026-08-14)
 
 The user asked whether behavioural data could be brought in from outside so the

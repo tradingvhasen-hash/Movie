@@ -35,9 +35,12 @@ WHAT IT DOES
   5. Exports the same test people to .cache/test-users.json so our own engine
      can be graded on them too — USERS_FILE=.cache/test-users.json npm run human
 
-LICENCE: MovieLens is free for research and forbids commercial use without
-written permission from GroupLens. This is offline evaluation, the data is
-never shipped or bundled, and nothing derived from it is in the product.
+LICENCE: MovieLens forbids commercial use without written permission from
+GroupLens. That permission was requested and granted (2026-08-14), so the
+question is settled rather than argued. The raw data is still never shipped or
+bundled — what ships is a neighbour table derived from it, which is a derived
+work, and saying otherwise was the comfortable description rather than the
+accurate one.
 """
 
 import json

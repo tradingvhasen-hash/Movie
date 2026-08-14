@@ -202,6 +202,76 @@ way `vibe-pairs.ts` defines its pairs, rather than by the engine grading itself.
 **Two hypotheses, both mine, both measured, both wrong.** The collapse is real
 and reproduced; its cause is still open.
 
+### The user stopped a ruler being built, and he was right (2026-08-14)
+
+The plan was to build a ruler from MovieLens' low ratings, since every
+instrument here feeds the engine likes only. He stopped it:
+
+> *"Most works, even after two hundred swipes, are still famous and still
+> highly rated. They are just not similar to the taste. I swipe left on The
+> Dark Knight — one of the highest-rated films in the world — because it is not
+> the taste I am testing. It is not about the rating. It is about how related
+> it is to the taste."*
+
+That is a correct objection and it kills the instrument. **You only rate what
+you watched, and you watch what you expected to like.** A MovieLens rating of
+1.5 means "I saw it and it disappointed me" — a judgement about quality. A left
+swipe here means "I have seen it and it is not my taste", which is what The
+Dark Knight is for a comedy viewer. Training or grading on one to fix the other
+measures the wrong thing. The script was deleted before it ran.
+
+**And the score composition proves his complaint exactly.** After ten broad
+comedy likes:
+
+| | taste | fame | quality | total |
+|---|---|---|---|---|
+| **The Dark Knight** | +0.18 | **+0.89** | +0.20 | **1.28** |
+| Role Models | +0.36 | +0.65 | +0.12 | 1.13 |
+| Pineapple Express | +0.25 | +0.71 | +0.12 | 1.08 |
+
+The highest-scoring card in the deck is the one he named, and fame is why: it
+separates those titles by 0.24 while taste separates them by 0.18. Worse, The
+Dark Knight's taste score is *positive*. A viewer who has only ever liked
+things has no negative evidence anywhere, so every title sharing an era, a
+language or a popular actor scores above zero. **The engine cannot say "this is
+not for you", only "this is less for you" — and then fame decides.**
+
+Two obvious repairs, both swept, both wrong:
+
+    amplify taste   W_FACETS 1.6 → 3 → 5   29 9 6 6 → 28 6 10 4 → 28 7 3 2
+    reduce fame     WARM 0.55 → 0.1        no movement at any setting
+
+At five the deck locks onto whatever the tables currently believe and never
+recovers. Lowering fame does nothing because the *gate* already guarantees fame
+— the weight was double-counting something already enforced.
+
+**What worked was supply again, for the third time today.** His taste lives
+deeper than the gate reaches: Role Models sits at film rank 2,541, Old School
+2,576, Napoleon Dynamite 2,520, while the corner reached about 1,450. Sweeping
+that depth:
+
+| corner depth | up-heavy session | left-heavy session | recognition |
+|---|---|---|---|
+| 2 | 50 | 87 | 93% / 93% |
+| **2.5** | **54** | **88** | **91% / 89%** |
+| 3 | 61 | 85 | 89% / 84% |
+| 4 | 69 | 81 | 85% / 75% |
+
+2.5 rather than the higher-scoring 3 or 4: past it the horror viewer stops
+recognising what they are shown, and 900 × 2.5 lands near the 2,500 mark that
+the session ruler has always used as "how deep a fan knows their own corner".
+
+Deck accuracy on 500 real people goes 30.4% → **30.9%**, its long tail 6.4% →
+**7.2%**. Discover, the vibe pairs and every drift target unchanged.
+
+**The pattern of the whole day, stated plainly: every weighting change measured
+null, and every supply change worked.** Three separate attempts to make the
+engine *think* differently about a rejection did nothing, while three changes to
+what the deck is allowed to *see* did everything. The ranking was never the
+problem.
+
+---
+
 ### Why blame reweighting keeps doing nothing (2026-08-14)
 
 Three attempts today at the same idea — make a rejection land on the value that

@@ -19,6 +19,23 @@ export interface CandidateItem {
    The facet score carries the taste signal and is scaled by confidence, so
    early on the quality and recognizability priors dominate and the deck
    stays full of titles the user has a real chance of having watched. */
+/**
+ * Swept again when a user asked why famous, off-taste films keep appearing —
+ * The Dark Knight for someone who has liked ten broad comedies. The score
+ * composition confirmed him exactly: fame contributed +0.89 to that card
+ * against +0.65 for Role Models, while the taste term separated them by only
+ * 0.18. But *amplifying* taste is not the answer. On the 200-swipe ruler:
+ *
+ *     1.6 (shipped)   29  9  6  6  ·  30 19 16 22
+ *     3               28  6 10  4  ·  31 18 18 19
+ *     5               28  7  3  2  ·  31 18  6  2
+ *
+ * At five the deck locks onto whatever the tables currently believe and stops
+ * recovering. Lowering the fame weight instead was swept too (0.55 → 0.1) and
+ * moved nothing. The lever that worked was neither: it was how deep the gate
+ * reaches inside the viewer's own corner — a supply problem, not a weighting
+ * one, which is the third time today that has been the answer.
+ */
 const W_FACETS = 1.6;
 /**
  * Weight of the meaning signal, when meaning-vectors are supplied.
@@ -285,7 +302,7 @@ function fameLists(pool: CandidateItem[]) {
 const TASTE_DEPTH =
   typeof process !== "undefined" && process.env?.TASTE_DEPTH
     ? Number(process.env.TASTE_DEPTH)
-    : 2;
+    : 2.5;
 
 /**
  * Is this title in the viewer's own corner?

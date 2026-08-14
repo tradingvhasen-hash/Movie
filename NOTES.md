@@ -202,6 +202,59 @@ way `vibe-pairs.ts` defines its pairs, rather than by the engine grading itself.
 **Two hypotheses, both mine, both measured, both wrong.** The collapse is real
 and reproduced; its cause is still open.
 
+### High School Musical, and the day's conclusion being wrong (2026-08-14)
+
+The user logged the same two sessions again after the gate work:
+
+| | before | after |
+|---|---|---|
+| right / up | 37 · 12 · 17 · 5 = 71 | 40 · 26 · 12 · 11 = **89** |
+| right / left | 33 · 15 · 3 · 3 = 54 | 39 · 28 · 27 · 17 = **111** |
+
+Real, and confirmed by the only judge who can tell whether a card is his taste.
+But it still fades, and the supply columns say it is not exhaustion: at the end
+of the up-heavy run **28 titles of his taste sat inside the gate, unshown, and
+the deck served 2 in that block.** Supply was fixed; something else was picking.
+
+The probe at swipe 150, for a viewer who had liked only broad comedies:
+
+| the deck serves | taste | | the deck withholds | taste |
+|---|---|---|---|---|
+| **High School Musical** | +0.77 | | Meet the Parents | +0.56 |
+| **Charlie's Angels** | +0.78 | | Groundhog Day | +0.49 |
+| **Twilight: Breaking Dawn** | +0.62 | | Mean Girls | +0.47 |
+
+**The facet tables had decided High School Musical was more his taste than
+Groundhog Day.** They learned "comedy, teenagers, friends" literally and applied
+it without a sense of feel — the right category and the wrong tone, which is the
+exact failure this whole project was started to fix, reappearing at card 150.
+
+The graph does not make that mistake — The Hangover's neighbours are not High
+School Musical — it was simply too quiet to overrule the tables at a deck weight
+of 0.45. Re-swept now that the gate no longer starves the deck:
+
+| deck graph weight | 0.45 | **0.8** | 1.2 | 1.6 |
+|---|---|---|---|---|
+| session, up-heavy | 54 | **63** | 67 | 73 |
+| session, left-heavy | 88 | **92** | 91 | 89 |
+| 500 real people | 30.9% | **32.0%** | — | — |
+| long tail | 7.2% | **9.9%** | — | — |
+| tunnel-vision guard | 1.47x | **1.39x** | 3.21x | 3.55x |
+
+**Everything improves at once, including the guard it used to trade against.**
+A deck that trusts real co-watching wanders *less*, because it has stopped
+following tables that have drifted. Above 0.8 the guard breaks outright.
+
+**And this corrects the conclusion written a few hours earlier.** "Every
+weighting change measured null and every supply change worked" was true of the
+evidence at the time and is now wrong: this weighting change is the largest
+single gain of the day. The reason it failed before is that the deck was
+starving — with nothing good inside the gate, no weight on the graph could help.
+Fix the supply and the weight starts to matter. **The order was the finding, not
+the ranking's innocence.**
+
+---
+
 ### The user stopped a ruler being built, and he was right (2026-08-14)
 
 The plan was to build a ruler from MovieLens' low ratings, since every

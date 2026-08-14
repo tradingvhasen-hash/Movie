@@ -567,7 +567,32 @@ const CO_WATCH_MAX =
  * flipping moves the ratio by several points — so the pass is taken with a
  * margin rather than at the line.
  */
-const CO_WATCH_DECK_SCALE = 0.45;
+/**
+ * Re-swept once the gate stopped starving the deck, and the answer moved.
+ *
+ * A user's own 200-swipe log showed the deck still fading, and the probe found
+ * why: at swipe 150 the facet tables scored *High School Musical* at +0.77 and
+ * *Charlie's Angels* at +0.78 for a broad-comedy viewer, against +0.49 for
+ * Groundhog Day and +0.56 for Meet the Parents. The tables had learned "comedy,
+ * teenagers, friends" literally — the right category and the wrong feel, which
+ * is the failure this project exists to fix, reappearing at card 150.
+ *
+ * The graph does not make that mistake; The Hangover's neighbours are not High
+ * School Musical. It was simply too quiet to overrule the tables.
+ *
+ *     weight     0.45   0.8   1.2   1.6
+ *     session      54    63    67    73   (up-heavy strategy)
+ *                  88    92    91    89   (left-heavy)
+ *     500 people 30.9  32.0     -     -
+ *     long tail   7.2   9.9     -     -
+ *     guard      1.47  1.39  3.21  3.55   (limit 1.15)
+ *
+ * 0.8 improves every ruler at once, including the tunnel-vision guard it was
+ * previously trading against — a deck that trusts real co-watching wanders
+ * *less*, because it is no longer following tables that have drifted. Above
+ * that the guard breaks outright.
+ */
+const CO_WATCH_DECK_SCALE = 0.8;
 
 /**
  * Discover's share of the graph signal.

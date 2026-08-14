@@ -412,6 +412,88 @@ console.log(`catalog: ${catalog.length} titles\n`);
   );
 }
 
+/* ── 11. "I have not seen it" must never delete a taste ───────────────── */
+{
+  /**
+   * The worst bug this engine has had, written as a check so it cannot come
+   * back.
+   *
+   * The skip-streak detector benched any facet value skipped three times in a
+   * row, and `genre` was one of the facets it was allowed to bench. A viewer
+   * swiping up on unfamiliar comedies — "never heard of this one" — was read
+   * as "this viewer dislikes comedy", and comedy left the deck for forty
+   * cards. The user's words were "the taste gradually starts disappearing".
+   *
+   * The check is written the way the failure happened: a real comedy taste
+   * first, then a run of honest "not seen" answers on comedies too obscure to
+   * recognise. Their taste must survive it.
+   */
+  const comedies = [...pool]
+    .filter((c) => hasGenre(c.title, "comedy"))
+    .sort((a, b) => b.title.voteCount - a.title.voteCount)
+    .map((c) => c.title);
+  // a real broad-comedy library, not "the top comedies by votes" — that list
+  // is Deadpool and Thor: Ragnarok, which is a superhero viewer
+  const library = [
+    "The Hangover", "Superbad", "Anchorman: The Legend of Ron Burgundy",
+    "Step Brothers", "Bridesmaids", "21 Jump Street", "Ted", "Dumb and Dumber",
+    "Zoolander", "Tropic Thunder",
+  ]
+    .map((n) => catalog.find((t) => t.title.en.toLowerCase() === n.toLowerCase()))
+    .filter((t): t is Title => Boolean(t));
+  // comedies far enough down the catalog that not having seen them is honest
+  const unfamiliar = comedies.slice(1500).slice(0, 30);
+
+  /**
+   * The measure is *lift*, not share.
+   *
+   * Share cannot separate the two things that move it. Answering "not seen"
+   * thirty times correctly narrows the pool to better-known titles, and the
+   * better-known end of this catalog is less comedy-heavy — so the comedy
+   * share falls even when the ranking is behaving perfectly. Lift over what
+   * the pool itself offers isolates the ranking, which is the thing at risk.
+   */
+  const gateBase = (profile: TasteProfile, shown: Title[]) => {
+    const seen = new Set(shown.map((t) => t.id));
+    const inGate = [...catalog]
+      .sort((a, b) => b.voteCount - a.voteCount)
+      .slice(0, fameTierSize(profile))
+      .filter((t) => !seen.has(t.id));
+    return inGate.filter((t) => hasGenre(t, "comedy")).length / Math.max(inGate.length, 1);
+  };
+
+  const measure = (skips: Title[]) => {
+    let profile = emptyProfile();
+    const shown: Title[] = [];
+    for (const t of library) {
+      profile = applySwipe(profile, t, vectorFor(t), "liked");
+      shown.push(t);
+    }
+    for (const t of skips) {
+      profile = applySwipe(profile, t, vectorFor(t), "not_seen");
+      shown.push(t);
+    }
+    const next = peek(profile, shown, 20);
+    const share = next.filter((t) => hasGenre(t, "comedy")).length / Math.max(next.length, 1);
+    const benched = Object.keys(profile.streaks.cooldown)
+      .filter((k) => profile.streaks.cooldown[k] > profile.totalSwipes)
+      .filter((k) => catalog.some((t) => t.genres.some((g) => g.toLowerCase() === k)));
+    return { lift: share / Math.max(gateBase(profile, shown), 1e-6), benched };
+  };
+
+  const clean = measure([]);
+  const after = measure(unfamiliar);
+  const kept = after.lift / Math.max(clean.lift, 1e-6);
+
+  check(
+    "a taste survives 30 unfamiliar titles inside it",
+    after.benched.length === 0 && kept >= 0.9 && after.lift >= 1.4,
+    `comedy lift ${clean.lift.toFixed(2)}× before the skips, ${after.lift.toFixed(2)}× after ` +
+      `(${pct(kept)} kept, target ≥90% and ≥1.40×); benched genres: ` +
+      `${after.benched.join(", ") || "none"} (target none)`
+  );
+}
+
 /* ── summary ──────────────────────────────────────────────────────────── */
 const failed = results.filter((r) => !r.pass);
 console.log(

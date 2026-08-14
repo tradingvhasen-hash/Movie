@@ -267,6 +267,39 @@ export function facetScore(
       }
       sum += tokenWeight(table, kind, token);
     }
+
+    /**
+     * TRIED AND REJECTED: letting a title's best value outweigh its worst.
+     *
+     * A viewer who loves horror and rejects everything else teaches the tables
+     * that drama, science fiction and comedy are all bad, and the horror left
+     * in the pool is mostly hybrid — Interview with the Vampire is
+     * horror/drama, Alien3 is horror/scifi. Summed, a strong horror score plus
+     * a punished co-genre can go negative, which looked like an obvious cause
+     * of a taste fading late in a session.
+     *
+     * Two forms were measured: damping every non-best value, and damping only
+     * the negative ones when a positive is present. Neither moved anything —
+     * the deck ranking, 500 real libraries, and both simulated sessions were
+     * identical to four decimal places of usefulness.
+     *
+     * Tried a second time with a sharper instrument, because the reasoning
+     * above still looked sound: the session ruler now measures how far the
+     * deck lifts a viewer's genre above what the pool offers, which the
+     * earlier share-based version could not separate from the catalog running
+     * dry. It made things clearly worse. A horror viewer's lift across the
+     * session, last third against first:
+     *
+     *     full negative evidence (shipped)   123%
+     *     half the worst value damped         71%
+     *     worst value ignored entirely        53%
+     *
+     * Damping the negative lets in hybrids whose other half the viewer has
+     * rejected a hundred times, and those crowd out the titles that are
+     * actually theirs. The measured cause of the horror running out was the
+     * catalog: 45 horror titles inside the recognisable pool against 169
+     * comedies, and a 150-swipe session consumes them.
+     */
     const raw = Math.tanh(sum / Math.sqrt(list.length));
     perKind[kind] = raw;
     weighted += weights[kind] * raw;
@@ -278,10 +311,48 @@ export function facetScore(
 
 /* ── writing the tables ───────────────────────────────────────────────── */
 
-export function signalFor(action: SwipeAction): number {
-  if (action === "liked") return LIKE_SIGNAL;
-  if (action === "disliked") return DISLIKE_SIGNAL;
-  return SKIP_SIGNAL;
+/**
+ * How much of a skip's evidence each facet is allowed to keep.
+ *
+ * The second half of the bug that benching was the first half of. Removing
+ * `genre` from the streak detector stopped the deck from *banning* a viewer's
+ * own taste, but every swipe-up still wrote -0.35 against every genre on the
+ * card. Thirty honest "never heard of it" answers on obscure comedies
+ * therefore outweighed ten comedy likes, and the taste faded out — measured,
+ * comedies fell to 5 of the next 20 with no genre benched at all.
+ *
+ * The reasoning is the same as the streak fix, and applies with more force
+ * here because it is graded rather than a one-off bench. A skip says "this
+ * title is not famous enough for me to have seen it". Charging that to
+ * `superhero` — a keyword one title in a hundred carries — singles out
+ * something real after a few repetitions. Charging it to `comedy`, which a
+ * fifth of the catalog carries, is charging it to the viewer's world.
+ *
+ * A genre is only learned from titles the viewer has actually watched: a
+ * dislike still writes the full -1. Not seeing something is not an opinion
+ * about its category.
+ */
+const SKIP_SCALE: Record<FacetKind, number> = {
+  story: 1,
+  genre:
+    typeof process !== "undefined" && process.env?.SKIP_GENRE
+      ? Number(process.env.SKIP_GENRE)
+      : 0,
+  cast: 1,
+  director: 1,
+  era: 1,
+  language: 1,
+};
+
+/** the evidence one swipe writes, per facet */
+export function facetSignals(action: SwipeAction): Record<FacetKind, number> {
+  const base =
+    action === "liked" ? LIKE_SIGNAL : action === "disliked" ? DISLIKE_SIGNAL : SKIP_SIGNAL;
+  const out = {} as Record<FacetKind, number>;
+  for (const kind of FACET_KINDS) {
+    out[kind] = action === "not_seen" ? base * SKIP_SCALE[kind] : base;
+  }
+  return out;
 }
 
 const round3 = (x: number) => Math.round(x * 1000) / 1000;
@@ -293,13 +364,14 @@ const round3 = (x: number) => Math.round(x * 1000) / 1000;
 export function applyFacets(
   tables: FacetTables,
   tokens: TitleTokens,
-  signal: number
+  signals: Record<FacetKind, number>
 ): FacetTables {
   const next = { ...tables };
-  const mass = Math.abs(signal);
   for (const kind of FACET_KINDS) {
     const list = tokens[kind];
-    if (list.length === 0) continue;
+    const signal = signals[kind];
+    if (list.length === 0 || signal === 0) continue;
+    const mass = Math.abs(signal);
     const table = { ...next[kind] };
     for (const token of list) {
       const prev = table[token];
@@ -316,13 +388,14 @@ export function applyFacets(
 export function revertFacets(
   tables: FacetTables,
   tokens: TitleTokens,
-  signal: number
+  signals: Record<FacetKind, number>
 ): FacetTables {
   const next = { ...tables };
-  const mass = Math.abs(signal);
   for (const kind of FACET_KINDS) {
     const list = tokens[kind];
-    if (list.length === 0) continue;
+    const signal = signals[kind];
+    if (list.length === 0 || signal === 0) continue;
+    const mass = Math.abs(signal);
     const table = { ...next[kind] };
     for (const token of list) {
       const prev = table[token];
@@ -412,8 +485,30 @@ export function emptyStreaks(): StreakState {
   return { runs: {}, cooldown: {} };
 }
 
-/** facets a skip streak is allowed to bench — the ones a user thinks in */
-const STREAK_KINDS: FacetKind[] = ["story", "genre", "cast"];
+/**
+ * Facets a skip streak may bench — narrow ones only, and deliberately not
+ * `genre`.
+ *
+ * This included `genre` and it was the worst bug in the engine's history. A
+ * swipe-up means "I have not seen this", which is a fact about how well known
+ * that one title is, not an opinion about a category. But three unfamiliar
+ * comedies in a row were read as "this viewer dislikes comedy", and comedy was
+ * removed from the deck for the next forty cards.
+ *
+ * Measured over a simulated session, the viewer's own genre collapsed from 9
+ * cards in 10 to 2, and for a horror viewer to 0 — with horror, thriller *and*
+ * drama benched at once. A user described it before any instrument here did:
+ * "the taste gradually starts disappearing and becomes scattered."
+ *
+ * The mechanism was built for a real complaint — thirty superhero films in a
+ * row — and that complaint is about `superhero`, a keyword one title in a
+ * hundred carries. Benching it costs the viewer nothing. Benching `action`
+ * deletes a fifth of their world on three data points.
+ *
+ * `cast` stays: an actor is narrow, and "not this person again" is a real
+ * thing to want.
+ */
+const STREAK_KINDS: FacetKind[] = ["story", "cast"];
 
 /**
  * Track runs of consecutive skips.

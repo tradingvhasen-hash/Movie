@@ -102,6 +102,128 @@ against the improved engine, not the old one.
 
 ---
 
+## The site was deleting the user's taste (2026-08-14)
+
+The user, after a long session: "the first fifty or sixty I liked thirty of.
+After that most of them I don't know — and plenty of them I do know, they're
+famous, but they are not the taste I was testing. The taste gradually starts
+disappearing and becomes scattered."
+
+The second half of that sentence is the whole diagnosis, and it took a
+correction from them to hear it. This was not only a recognition problem. The
+taste itself was being dismantled, by two mechanisms I wrote myself.
+
+### 1. A swipe-up was benching the viewer's own genre
+
+`trackStreak` benches any facet value skipped three times in a row, for forty
+swipes, and `genre` was on the list of facets it could bench. So three
+unfamiliar comedies in a row — three honest "never heard of it" answers — were
+read as "this viewer dislikes comedy", and comedy left the deck.
+
+Measured over a simulated session, before the fix:
+
+| swipes | comedy in the block | benched |
+|---|---|---|
+| 41-50 | **9** / 10 | — |
+| 51-60 | **3** / 10 | **comedy** |
+| 111-120 | **2** / 10 | **comedy** |
+
+A horror viewer had `horror`, `thriller` *and* `drama` benched at once, and
+saw 0 of 10.
+
+The mechanism was built for a real complaint — "I skipped thirty superhero
+films and it keeps showing them" — and that complaint is about `superhero`, a
+keyword one title in a hundred carries. Benching it costs nothing. Benching
+`action` deletes a fifth of the viewer's world on three data points.
+`STREAK_KINDS` is now `["story", "cast"]`.
+
+### 2. And the graded version of the same mistake
+
+Removing genre from the bench was not enough, because every swipe-up still
+wrote -0.35 against every genre on the card. Thirty "never heard of it"
+answers therefore outweighed ten likes. Measured as *lift* — how far the deck
+raises a viewer's genre above what the pool itself offers:
+
+| skip evidence charged to genre | comedy lift after 30 unfamiliar comedies |
+|---|---|
+| full (before) | 1.66x → **1.09x** |
+| none (shipped) | 1.66x → **1.64x** |
+
+A genre is now learned only from titles the viewer has actually watched: a
+dislike still writes the full -1. Not having seen something is not an opinion
+about its category.
+
+### 3. The pool only ever widened
+
+`FAME_TIERS` stepped 800 → 1,800 → 3,000 on a swipe counter and never came
+back. `seenCount` and `unseenCount` had both been stored for a month and never
+read. It is now a ledger — every title actually seen earns depth, every "never
+heard of it" pays some back — and the ratio is arithmetic, not taste: the pool
+stops moving when 5 x seen equals 30 x unseen, which settles at a viewer
+recognising six cards in seven. A first attempt at 20 and 15 settles at 43%,
+and measured exactly that badly. `W_RECOGNITION` now follows the measured
+recognition rate instead of confidence, which had it caring *less* whether you
+had heard of a film the better it knew you.
+
+### What it cost
+
+Stated plainly, because it is a trade and not a free win. Baseline is the
+previous commit, measured with the identical command:
+
+| | before | after |
+|---|---|---|
+| session recognition (comedy / horror viewer) | 65% | **93% / 89%** |
+| genre lift held, last third vs first | comedy collapsed | **133% / 194%** |
+| genres ever benched | comedy, horror, thriller, drama | **none** |
+| deck vs 500 real libraries | 23.9% | 24.1% |
+| deck, long tail only | 2.4% | **1.9%** |
+| needle benchmark | 22% | **21%** |
+| Discover | 25.8% | 25.8% |
+| vibe, hard pairs | 33% | 33% |
+
+The long tail and the needle benchmark are worse on purpose. A tighter gate
+cannot reach a title at catalog rank #2,468 — `Ride Along` went from 161 swipes
+to never — and that is the same tightening that took recognition from 65% to
+93%. The user's complaint was that they had not heard of the cards; this is the
+bill for fixing it.
+
+### Two experiments, measured and rejected
+
+**A door in the gate for the viewer's own taste.** A horror fan knows obscure
+horror, so admit any title the graph puts near something they liked, however
+obscure. With the simulated viewer given exactly that property, recognition
+fell 93% → 83% and the genre share it was meant to rescue fell too. The graph's
+neighbours at that depth are not the ones a fan knows; they are simply obscure.
+
+**Letting a genre's best value outweigh its worst.** The horror left in the
+pool is mostly hybrid, and a punished co-genre can drag a strong horror score
+negative. Tried once with the share ruler (no effect), then again with the lift
+ruler because the reasoning still looked sound. It is clearly worse: horror
+lift held 123% at full negative evidence, 71% at half damping, 53% at none.
+Damping lets in hybrids whose other half the viewer has rejected a hundred
+times.
+
+### And a fault in the ruler, not the engine
+
+The session ruler reported the deck ignoring nine horror titles sitting in the
+gate. It was not. The gate admits the top share of films and the top share of
+series *separately* — at a limit of 865 that is the 623 best-known films and
+the 233 best-known series, not the 865 best-known titles — and all nine were
+outside it. The ruler had reimplemented the gate by guessing. `fameGate` is now
+exported and instruments call it. Once they did, every target passed.
+
+Which leaves the real limit, and no ranking change reaches it: the gate a new
+viewer sees holds about 190 comedies and about 30 horror titles. A horror
+viewer exhausts every horror film the gate will admit by card 120. That is a
+catalog problem, and only more titles fix it.
+
+**The lesson, for the third time:** every ruler here grades one page from a
+fixed library, and a user lives a whole session. `scripts/deck-drift.ts` is the
+instrument that should have existed, and two of the four faults in this entry
+were still invisible until it was pointed at the right pool.
+
+---
+
 ## The signal was dying as you swiped (2026-08-14)
 
 Reported by the user, and the shape of the report was the whole diagnosis:

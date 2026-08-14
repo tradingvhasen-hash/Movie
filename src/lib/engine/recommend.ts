@@ -81,6 +81,12 @@ const W_RECOGNITION_DISCOVER = 0.12;
 const MMR_LAMBDA = 0.35;
 /** extra penalty per already-picked result sharing a genre */
 const GENRE_REPEAT_PENALTY = 0.16;
+/** measurement knob for the deck's share, swept in scripts/deck-drift.ts */
+const DECK_DIVERSITY_SCALE =
+  typeof process !== "undefined" && process.env?.DECK_DIVERSITY
+    ? Number(process.env.DECK_DIVERSITY)
+    : 1;
+
 /** Discover keeps a quarter of it: one window for discovery, not four */
 const DISCOVER_DIVERSITY_SCALE =
   typeof process !== "undefined" && process.env?.DIVERSITY
@@ -110,12 +116,6 @@ const FINALIST_POOL = 60;
    the user proves how much they watch, but even the widest tier is the top
    3,000 of the catalog by vote count — "99% of these I've never heard of"
    is a pool problem, and this is where it is fixed. */
-const FAME_TIERS = [
-  { untilSwipes: 40, size: 800 },
-  { untilSwipes: 150, size: 1800 },
-  { untilSwipes: Infinity, size: 3000 },
-];
-
 /**
  * Discovery is the opposite problem to swiping.
  *
@@ -141,17 +141,53 @@ const DISCOVER_POOL = Infinity;
 
 export type RankMode = "swipe" | "discover";
 
+/**
+ * How much of what we have shown this viewer they had actually seen.
+ *
+ * The engine has stored both halves of this since the swipe-up was taught to
+ * teach, and never once read them. Every widening of the pool was driven by a
+ * swipe counter — "they have swiped a lot, they must watch a lot" — while the
+ * viewer was answering "never heard of it" over and over and nothing listened.
+ */
+export function recognitionRate(profile: TasteProfile): number {
+  const answered = profile.seenCount + profile.unseenCount;
+  // no evidence yet: assume the pool is fine rather than punish a new account
+  if (answered < 10) return 1;
+  return profile.seenCount / answered;
+}
+
+/**
+ * How deep into the catalog the deck may reach.
+ *
+ * This was three fixed steps on a swipe counter — 800 titles, then 1,800 after
+ * forty rated swipes, then 3,000 — and it only ever widened. A viewer who kept
+ * answering "never heard of it" was pushed deeper anyway, and the median card
+ * sank from the 200th best-known title to the 1,200th over a session.
+ *
+ * It is now a ledger. Every title the viewer has actually seen earns a little
+ * more depth; every "never heard of it" pays some of it back. That reacts on
+ * the next card rather than after a threshold, and it cannot run away: the
+ * pool a viewer ends up with is the one they demonstrated they can follow.
+ */
+/**
+ * The ratio of these two is the whole design, and it is arithmetic rather than
+ * taste: the pool stops moving when TIER_PER_SEEN x seen equals
+ * TIER_PER_UNSEEN x unseen, so a ratio of six settles at a viewer recognising
+ * six cards in seven — 86%. A first attempt used 20 and 15, which settles at
+ * 43% recognised, and measured exactly that badly.
+ */
+const TIER_BASE = 700;
+const TIER_PER_SEEN = 5;
+const TIER_PER_UNSEEN = 30;
+const TIER_MAX = 3000;
+
 export function fameTierSize(profile: TasteProfile, mode: RankMode = "swipe"): number {
   if (mode === "discover") return DISCOVER_POOL;
-  for (const tier of FAME_TIERS) {
-    // rated swipes, not every swipe: the tier's whole claim is "this viewer
-    // has proved how much they watch", and a swipe-up proves the opposite.
-    // It also keeps the onboarding grid — which teaches from dozens of tiles
-    // the viewer passed over — from fast-forwarding a brand-new account into
-    // titles it has never heard of.
-    if (profile.ratedSwipes < tier.untilSwipes) return tier.size;
-  }
-  return FAME_TIERS[FAME_TIERS.length - 1].size;
+  const earned =
+    TIER_BASE + TIER_PER_SEEN * profile.seenCount - TIER_PER_UNSEEN * profile.unseenCount;
+  // however far it contracts, always leave a healthy margin of unswiped titles
+  const answered = profile.seenCount + profile.unseenCount;
+  return Math.min(TIER_MAX, Math.max(earned, answered + 300));
 }
 
 /**
@@ -189,14 +225,30 @@ function fameLists(pool: CandidateItem[]) {
   return lists;
 }
 
-function byFame(pool: CandidateItem[], limit: number): CandidateItem[] {
+/**
+ * The titles the gate actually admits.
+ *
+ * Exported because instruments must not reimplement it. The session ruler
+ * measured what the deck was missing against "the top N of the catalog by
+ * votes" and reported a ranking failure that did not exist: the gate takes
+ * the top share of films and the top share of series *separately*, so at a
+ * limit of 865 it holds the 623 best-known films and the 233 best-known
+ * series, not the 865 best-known titles. Halloween sat outside it, and the
+ * ruler was blaming the ranking for not showing a card it was never offered.
+ */
+export function fameGate(pool: CandidateItem[], limit: number): CandidateItem[] {
   const { movie, tv } = fameLists(pool);
-  if (!Number.isFinite(limit) || limit >= pool.length) return [...movie, ...tv];
-  const share = limit / Math.max(pool.length, 1);
-  return [
+  const share =
+    !Number.isFinite(limit) || limit >= pool.length ? 1 : limit / Math.max(pool.length, 1);
+  const kept = [
     ...movie.slice(0, Math.round(movie.length * share)),
     ...tv.slice(0, Math.round(tv.length * share)),
   ];
+  // back into fame order. Concatenating the two lists left every film ahead of
+  // every series, and the exploration pass takes the first twelve candidates
+  // of a genre from this array — so it could never pick a series at all.
+  kept.sort((a, b) => b.title.voteCount - a.title.voteCount);
+  return kept;
 }
 
 /** pool → every genre in it, computed once per catalog */
@@ -623,13 +675,23 @@ export function recommend(
   const rng = makeRng(seed + profile.totalSwipes * 2654435761);
 
   const mode = opts.mode ?? "swipe";
-  const gated = byFame(pool, fameTierSize(profile, mode));
 
   const confidence = tasteConfidence(profile);
+  /**
+   * How hard to pull toward titles the viewer has heard of.
+   *
+   * This used to relax as *confidence* rose, which reads as "the better we
+   * know your taste, the less we care whether you have heard of the film" —
+   * exactly backwards, and one of the two reasons the deck sank from the 200th
+   * best-known title to the 1,200th over a session. It now relaxes only as the
+   * viewer demonstrates they recognise what they are being shown.
+   */
+  const recognised = recognitionRate(profile);
+  const relax = Math.min(1, Math.max(0, (recognised - 0.6) / 0.35));
   const wRecognition =
     mode === "discover"
       ? W_RECOGNITION_DISCOVER
-      : W_RECOGNITION_COLD + (W_RECOGNITION_WARM - W_RECOGNITION_COLD) * confidence;
+      : W_RECOGNITION_COLD + (W_RECOGNITION_WARM - W_RECOGNITION_COLD) * relax;
   const { facets, facetWeights, streaks, totalSwipes } = profile;
 
   const coWatch = opts.likedTitles?.length
@@ -637,6 +699,24 @@ export function recommend(
       ? coWatchBonus(opts.likedTitles)
       : walkBonus(pool, opts.likedTitles)
     : null;
+
+  /**
+   * TRIED AND REJECTED: a door in the gate for the viewer's own taste.
+   *
+   * The tight gate that keeps cards recognisable can also run a taste dry — a
+   * horror viewer held near 600 titles eventually exhausts the horror inside
+   * it. The obvious remedy is to admit any title the graph puts close to
+   * something they already liked, however obscure, on the theory that a fan
+   * recognises their own corner more deeply than the catalog at large.
+   *
+   * Measured, with the simulated viewer given exactly that property, it made
+   * every number worse: recognition 93% to 83%, and the genre share it was
+   * meant to rescue fell rather than rose. The graph's neighbours at that
+   * depth are not the ones a fan knows; they are simply obscure.
+   *
+   * The gate stands alone.
+   */
+  const gated = fameGate(pool, fameTierSize(profile, mode));
   const coWatchScale =
     mode === "discover"
       ? COWATCH_ENV ?? CO_WATCH_DISCOVER_SCALE
@@ -693,7 +773,7 @@ export function recommend(
   // recommendation grid is just an off-topic suggestion.
   const exploreRatio =
     opts.exploreRatio ?? (mode === "discover" ? 0 : exploreRatioFor(profile));
-  const divScale = mode === "discover" ? DISCOVER_DIVERSITY_SCALE : 1;
+  const divScale = mode === "discover" ? DISCOVER_DIVERSITY_SCALE : DECK_DIVERSITY_SCALE;
   const exploreSlots = Math.min(count - 1, Math.round(count * exploreRatio));
   const mainSlots = Math.max(1, count - exploreSlots);
 

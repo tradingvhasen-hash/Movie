@@ -7,7 +7,7 @@ import {
   facetScore,
   pruneFacets,
   revertFacets,
-  signalFor,
+  facetSignals,
   titleTokens,
   trackStreak,
   updateFacetWeights,
@@ -150,7 +150,7 @@ export function applySwipe(
   action: SwipeAction
 ): TasteProfile {
   const tokens = titleTokens(title);
-  const signal = signalFor(action);
+  const signals = facetSignals(action);
 
   // measured before the update, so a facet cannot "predict" the very example
   // it is about to learn
@@ -160,7 +160,7 @@ export function applySwipe(
 
   const next: TasteProfile = {
     ...profile,
-    facets: pruneFacets(applyFacets(profile.facets, tokens, signal)),
+    facets: pruneFacets(applyFacets(profile.facets, tokens, signals)),
     facetWeights: updateFacetWeights(
       profile.facetWeights,
       before.perKind,
@@ -214,11 +214,11 @@ export function revertSwipe(
   action: SwipeAction
 ): TasteProfile {
   const tokens = titleTokens(title);
-  const signal = signalFor(action);
+  const signals = facetSignals(action);
 
   const next: TasteProfile = {
     ...profile,
-    facets: revertFacets(profile.facets, tokens, signal),
+    facets: revertFacets(profile.facets, tokens, signals),
     // an undone swipe should not keep a theme benched
     streaks: { runs: {}, cooldown: profile.streaks.cooldown },
     totalSwipes: Math.max(0, profile.totalSwipes - 1),

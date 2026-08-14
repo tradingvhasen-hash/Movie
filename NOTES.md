@@ -102,6 +102,73 @@ against the improved engine, not the old one.
 
 ---
 
+## Rejecting a card erases the taste that chose it (2026-08-14)
+
+The user documented his own session in blocks of fifty, twice, with two
+different swiping strategies, and the log is the best piece of evidence this
+project has been given:
+
+|  | 1-50 | 51-100 | 101-150 | 151-200 |
+|---|---|---|---|---|
+| right / up (never left) | 37 | 12 | 17 | 5 |
+| right / left (never up) | 33 | 15 | 3 | 3 |
+
+Two strategies that touch completely different machinery, and the same
+collapse. That agreement is the finding: the fame ledger contracts on "never
+heard of it" and does nothing on a dislike, so it behaves oppositely in the two
+runs — it cannot be the cause. And he added the detail that settles the rest:
+**Discover stayed good throughout.** The engine still understood him.
+
+`scripts/long-session.ts` reproduces the shape — 30/21/18/15 and 32/24/24/13 —
+by defining "on taste" as Discover's own top 300 for the seed profile, frozen
+at the start. Genre share cannot see this: a viewer whose taste is *broad
+comedy* is served comedy the whole way and the session ruler reports lift
+holding at 108%.
+
+### It is not exhaustion. The engine changes its mind.
+
+At swipe 200 the gate still held **110 unswiped titles from that reference
+set** and the deck served 13 in the last fifty. And Discover's own top 300,
+recomputed as the session went on, drifted away from where it started:
+
+    swipe  50 — 103 of 300 shared with the original
+    swipe 100 —  88
+    swipe 150 —  72   ·  220 of the original never shown at all
+
+### The mechanism, measured
+
+Comedy's learned affinity across 150 swipes, for a viewer who is liking
+comedies the entire time:
+
+| swipe | net evidence | observation mass | affinity |
+|---|---|---|---|
+| 50 | 9 | 25 | 0.36 |
+| 100 | 11 | 39 | 0.28 |
+| 150 | 7 | 55 | **0.13** |
+
+**A 64% collapse in the engine's belief that he likes comedy, while he says so
+over and over.** The net signal never falls; the mass drowns it.
+
+The cause is credit assignment. A dislike charges every token on the card,
+including the token that is the reason the viewer is here. Shown *Ride Along*
+— a comedy, but not his — he swipes left, and the tables record `comedy: -1`.
+He did not reject it *because* it was a comedy; he rejected it *despite* that.
+
+And it explains why his two runs agree. With left-swipes the genre erodes,
+1.00 → 0.13. With swipe-ups the genre is protected — that was yesterday's fix,
+`SKIP_SCALE.genre = 0`, and it holds at 1.00 across the whole run — but the
+story keywords erode in its place. Two leaks, one felt collapse.
+
+**This is a feedback loop, which is the worst kind of fault:** a wrong card
+provokes a rejection, the rejection erases part of the taste, and the next card
+is worse. Every fifty swipes damages the fifty that follow, which is why no
+amount of ranking work upstream survives past the first block.
+
+Not yet fixed. Recorded now because the ruler that found it is worth keeping
+whatever the fix turns out to be.
+
+---
+
 ## The gate was locking the viewer's taste out of the deck (2026-08-14)
 
 The user, an hour after the behavioural graph shipped: **"Discover maybe got

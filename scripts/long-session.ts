@@ -1,38 +1,50 @@
 /**
- * TWO HUNDRED SWIPES — the session a user actually documented, reproduced.
+ * TWO HUNDRED SWIPES — the session a user documented, graded against a taste
+ * written by hand.
  *
  *   npx tsx scripts/long-session.ts
  *
- * A user logged his own session in blocks of fifty, twice, with two different
- * swiping strategies:
+ * The user logged his own session in blocks of fifty, twice, with two
+ * different strategies:
  *
  *                            1-50   51-100  101-150  151-200
  *   right / up (no left)      37      12       17        5
  *   right / left (no up)      33      15        3        3
  *
- * The two runs agree, and that agreement is the finding. One of them never
- * swipes up at all, so the fame ledger — which contracts on "never heard of
- * it" — cannot be the cause: it behaves completely differently in the two
- * runs while the collapse is identical. Something the two share is doing it.
+ * The agreement between the two runs is the finding. One never swipes up at
+ * all, so the fame ledger — which contracts on "never heard of it" — cannot be
+ * the cause: it behaves completely differently in the two runs while the
+ * collapse is identical.
  *
- * WHAT "ON TASTE" MEANS HERE, AND WHY IT IS NOT THE GENRE
+ * WHY THE TASTE IS A LIST OF NAMES
  *
- * The session ruler counts a card as on-taste if it carries the viewer's
- * genre, and by that measure nothing collapses — lift holds at 108% across
- * 150 swipes. But the user's taste is not "comedy", it is a particular kind of
- * comedy, and a catalog holding 169 recognisable comedies may hold only forty
- * of *his*. A ruler that counts genre cannot tell the difference between a
- * deck that is still finding his taste and one that has fallen back to the
- * category.
+ * The first version of this ruler defined "on taste" as Discover's top 300 for
+ * the seed profile, frozen. That was the engine grading its own homework in a
+ * subtler form than usual: the engine's idea of a viewer legitimately sharpens
+ * as they swipe, so part of the measured drop was the reference going stale
+ * rather than the deck going wrong — and it duly measured a gentler decline
+ * than the user lived.
  *
- * So on-taste is defined here by the engine's own best judgement, taken once
- * at the start and then frozen: Discover's top N for the seed profile.
- * Discover has no fame gate, so it ranks the whole catalog — it is the closest
- * thing to "what a good recommender would pick for this person", and it is
- * exactly what the user said stayed good while the deck fell apart.
+ * A person's taste does not drift while they use the site for an hour. So the
+ * taste here is 131 named titles, written out by hand the way `vibe-pairs.ts`
+ * writes its pairs, and never touched by the engine. The genre facet cannot
+ * substitute for it either: the catalog holds 169 recognisable comedies and
+ * only a fraction are *this* comedy, which is exactly the difference between
+ * a deck still finding a taste and one that has fallen back to the category.
  *
- * The question this answers: is the deck running out of his taste, or losing
- * track of it?
+ * WHAT THE THIRD COLUMN SETTLES
+ *
+ * "still reachable" counts titles from the list that the viewer has not been
+ * shown and that the fame gate would currently admit. If the hit rate falls
+ * while that number stays high, the deck has stopped *finding* the taste. If
+ * they fall together, it has run out — a catalog problem, not a ranking one.
+ * The two need completely different work, and no earlier instrument here could
+ * tell them apart.
+ *
+ * Judgement call, stated: Deadpool, Kingsman and Free Guy are on the list.
+ * They are action first and comedy second, and a viewer who names The Hangover
+ * and Superbad plausibly enjoys them. Dropping them moves the numbers by about
+ * a card per block and does not change any conclusion.
  */
 import { readFileSync } from "node:fs";
 import { decodeCatalog, type EncodedCatalog } from "../src/lib/data/catalog-codec";
@@ -63,39 +75,57 @@ const vf = (t: Title) => {
   return v;
 };
 
-const find = (n: string) =>
-  catalog.find((t) => t.title.en.toLowerCase() === n.toLowerCase());
+const byName = new Map<string, Title>();
+for (const t of catalog) byName.set(t.title.en.toLowerCase(), t);
+const find = (n: string) => byName.get(n.toLowerCase());
 
 const SWIPES = Number(process.env.SWIPES ?? 200);
 const BLOCK = 50;
-/** how wide "the engine's own judgement" is drawn */
-const TASTE_SET = Number(process.env.TASTE_SET ?? 300);
 
-const SEED = ["The Hangover", "Superbad", "Step Brothers"];
-const seeds = SEED.map(find).filter((t): t is Title => Boolean(t));
+/** the taste, written out rather than inferred */
+const TASTE = `The Hangover|The Hangover Part II|The Hangover Part III|Superbad|Step Brothers|
+Anchorman: The Legend of Ron Burgundy|Anchorman 2: The Legend Continues|
+Talladega Nights: The Ballad of Ricky Bobby|Zoolander|Zoolander 2|Tropic Thunder|
+DodgeBall: A True Underdog Story|Old School|Wedding Crashers|Bridesmaids|
+The 40 Year Old Virgin|Knocked Up|Pineapple Express|This Is the End|ted|Ted 2|
+We're the Millers|Horrible Bosses|Horrible Bosses 2|21 Jump Street|22 Jump Street|
+Role Models|I Love You, Man|Forgetting Sarah Marshall|Get Him to the Greek|Neighbors|
+Neighbors 2: Sorority Rising|Blockers|Game Night|Spy|The Other Guys|The Nice Guys|
+Central Intelligence|Ride Along|Ride Along 2|Dumb and Dumber|Dumb and Dumber To|
+Zombieland|Zombieland: Double Tap|Shaun of the Dead|Hot Fuzz|The World's End|
+Napoleon Dynamite|Mean Girls|Legally Blonde|Bring It On|American Pie|American Pie 2|
+American Wedding|Road Trip|EuroTrip|Harold & Kumar Go to White Castle|Super Troopers|
+Adventureland|Sex Drive|Project X|21 & Over|Bad Teacher|Bad Moms|A Bad Moms Christmas|
+Sisters|The Heat|Identity Thief|Tammy|Trainwreck|Girls Trip|Booksmart|Good Boys|
+The Big Sick|Palm Springs|Vacation|National Lampoon's Vacation|Caddyshack|Animal House|
+Ghostbusters|Coming to America|Trading Places|Beverly Hills Cop|Beverly Hills Cop II|
+The Naked Gun|Airplane!|Blazing Saddles|Young Frankenstein|Spaceballs|Groundhog Day|
+Liar Liar|The Mask|Ace Ventura: Pet Detective|Ace Ventura: When Nature Calls|
+The Cable Guy|Me, Myself & Irene|There's Something About Mary|Meet the Parents|
+Meet the Fockers|Little Fockers|Along Came Polly|Blades of Glory|The Campaign|Get Hard|
+Daddy's Home|Daddy's Home 2|Instant Family|Tag|Office Space|Clerks|Mallrats|
+Jay and Silent Bob Strike Back|
+Borat: Cultural Learnings of America for Make Benefit Glorious Nation of Kazakhstan|
+Brüno|The Dictator|Elf|Popstar: Never Stop Never Stopping|Sausage Party|Why Him?|
+Long Shot|Free Guy|Deadpool|Deadpool 2|Kingsman: The Secret Service|
+Hot Tub Time Machine|Due Date|Paul|The Interview|Pitch Perfect|Pitch Perfect 2|Easy A`
+  .split("|")
+  .map((s) => s.trim())
+  .filter(Boolean);
 
-/** the frozen reference: what Discover would pick, before any swiping */
-let ref = emptyProfile();
-const refShown = new Set<string>();
-for (const t of seeds) {
-  ref = applySwipe(ref, t, vf(t), "liked");
-  refShown.add(t.id);
-}
-const onTaste = new Set(
-  recommend(pool, ref, {
-    excludeIds: refShown,
-    count: TASTE_SET,
-    seed: 7,
-    vectorFor: vf,
-    likedTitles: seeds,
-    mode: "discover",
-  }).map((r) => r.title.id)
-);
+const taste = TASTE.map(find).filter((t): t is Title => Boolean(t));
+const tasteIds = new Set(taste.map((t) => t.id));
+
+/** the three the user picked from the onboarding grid */
+const seeds = ["The Hangover", "Superbad", "Step Brothers"]
+  .map(find)
+  .filter((t): t is Title => Boolean(t));
+
 console.log(
-  `taste defined as Discover's top ${TASTE_SET} for ${seeds.length} seed likes\n`
+  `taste: ${taste.length} named titles, ${TASTE.length - taste.length} not in the catalog\n` +
+    `seeded with ${seeds.map((t) => t.title.en).join(", ")}\n`
 );
 
-/** the two strategies the user actually used */
 const STRATEGIES: { name: string; miss: SwipeAction }[] = [
   { name: "right / up   (no left)", miss: "not_seen" },
   { name: "right / left (no up)", miss: "disliked" },
@@ -111,7 +141,7 @@ for (const strategy of STRATEGIES) {
     shown.add(t.id);
   }
 
-  const blocks: { hit: number; gate: number; left: number }[] = [];
+  const blocks: { hit: number; gate: number; reachable: number; unswiped: number }[] = [];
   let swipes = 0;
   let hit = 0;
 
@@ -127,7 +157,7 @@ for (const strategy of STRATEGIES) {
     if (batch.length === 0) break;
 
     for (const rec of batch) {
-      const good = onTaste.has(rec.title.id);
+      const good = tasteIds.has(rec.title.id);
       if (good) hit++;
       const action: SwipeAction = good ? "liked" : strategy.miss;
       if (good) liked.push(rec.title);
@@ -136,23 +166,28 @@ for (const strategy of STRATEGIES) {
       swipes++;
 
       if (swipes % BLOCK === 0) {
-        // how much of the taste the gate can still reach at this moment
         const gate = fameTierSize(p, "swipe");
-        const inGate = fameGate(pool, gate, p.facets).map((c) => c.title.id);
-        const left = inGate.filter((id) => onTaste.has(id) && !shown.has(id)).length;
-        blocks.push({ hit, gate, left });
+        const inGate = new Set(fameGate(pool, gate, p.facets).map((c) => c.title.id));
+        blocks.push({
+          hit,
+          gate,
+          reachable: taste.filter((t) => !shown.has(t.id) && inGate.has(t.id)).length,
+          unswiped: taste.filter((t) => !shown.has(t.id)).length,
+        });
         hit = 0;
       }
     }
   }
 
   console.log(`${strategy.name}\n`);
-  console.log("   block     on taste /50    gate    of the taste still reachable");
+  console.log(
+    "   block      on taste /50     gate    of the taste: reachable / unswiped"
+  );
   blocks.forEach((b, i) => {
     console.log(
-      `  ${String(i * BLOCK + 1).padStart(4)}-${String((i + 1) * BLOCK).padEnd(5)}` +
-        `${String(b.hit).padStart(10)}${String(b.gate).padStart(10)}` +
-        `${String(b.left).padStart(28)}`
+      `  ${String(i * BLOCK + 1).padStart(4)}-${String((i + 1) * BLOCK).padEnd(6)}` +
+        `${String(b.hit).padStart(9)}${String(b.gate).padStart(11)}` +
+        `${`${b.reachable} / ${b.unswiped}`.padStart(30)}`
     );
   });
   console.log();

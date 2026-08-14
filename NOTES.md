@@ -202,6 +202,59 @@ way `vibe-pairs.ts` defines its pairs, rather than by the engine grading itself.
 **Two hypotheses, both mine, both measured, both wrong.** The collapse is real
 and reproduced; its cause is still open.
 
+### Found it — with the taste written out by hand
+
+Rebuilding the ruler around 131 named titles instead of the engine's own
+opinion reproduced the user's session almost exactly, and one column settled
+it. "Reachable" counts titles from his taste that he has not been shown and
+that the fame gate would currently admit:
+
+| | 1-50 | 51-100 | 101-150 | 151-200 | reachable / unswiped at the end |
+|---|---|---|---|---|---|
+| right / up | 27 | 4 | 1 | 5 | **8 / 101** |
+| right / left | 30 | 15 | 6 | 11 | 13 / 66 |
+
+**He was not running out. Ninety-three titles of his taste were unswiped and
+locked outside the gate**, and the gate held eight of them.
+
+Two separate mechanisms, one felt result:
+
+**1. The taste locked itself out.** The deep half of the gate opens for the
+viewer's "corner", and the corner required a genre affinity above an absolute
+0.4. But a viewer swiping through his own genre rejects most of it — the
+comedies he does not care for are still comedies — so `comedy` falls from 0.36
+to 0.13 while he is liking comedies. Below the bar the corner emptied and the
+deep gate closed. **Rejecting most of a genre is what having a specific taste
+looks like from the inside, and it was being read as not having the taste at
+all.** The corner is now relative: the best genre and whatever ties with it,
+provided it is liked at all and carries enough evidence that one swipe cannot
+claim it.
+
+**2. The corner shrank with the ledger.** A viewer who answers "never heard of
+it" often has the whole pool narrowed, correctly — but their *own corner* is
+the part they do know, and it was contracting along with everything else, down
+to a gate of 360. The corner's depth is now anchored to the base gate rather
+than the contracted one.
+
+| after both | 1-50 | 51-100 | 101-150 | 151-200 |
+|---|---|---|---|---|
+| right / up | 29 | **9** | **6** | **6** |
+| right / left | 30 | **19** | **16** | **22** |
+
+And reachable stops collapsing: 8 → 40/31/25/19 in the first strategy, 13 → 52/46/41/28 in
+the second. He now *consumes* his taste — unswiped falls 98 → 41 — instead of
+being locked out of it.
+
+Nothing else moved: deck 30.4%, Discover 34.2%, vibe 60%, session recognition
+93%/93%, the drift targets all still met.
+
+**What is left, and it is not an engine problem.** The first strategy still
+declines. In it the user swiped *up* on everything that was not his taste —
+but the card means "I have not watched this", and the engine believes it,
+narrowing the pool to what he apparently recognises. He was using the gesture
+to mean "not interested". That is a wording problem on the card, not a ranking
+one, and it is the next thing to fix.
+
 ---
 
 ## The gate was locking the viewer's taste out of the deck (2026-08-14)

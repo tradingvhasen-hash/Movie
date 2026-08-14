@@ -298,10 +298,6 @@ const TASTE_DEPTH =
  * is the handful of genres they like *consistently*, not every genre they have
  * ever nodded at.
  */
-const TASTE_FLOOR =
-  typeof process !== "undefined" && process.env?.TASTE_FLOOR
-    ? Number(process.env.TASTE_FLOOR)
-    : 0.4;
 /** how far below the favourite a genre may sit and still count as the corner */
 const TASTE_MARGIN =
   typeof process !== "undefined" && process.env?.TASTE_MARGIN
@@ -318,21 +314,40 @@ const TASTE_MARGIN =
  * favourite and whatever ties with it, which is what "your own corner" means
  * to a person and what the session ruler has always assumed.
  */
+/**
+ * Your corner is your *favourite* genre, not a genre that clears a bar.
+ *
+ * This asked for an absolute mean above 0.4, and that turned the mechanism off
+ * exactly when it was needed. A viewer swiping through his own genre rejects
+ * most of it — the comedies he does not care for are still comedies — so
+ * `comedy` falls from 0.36 to 0.13 across 150 swipes even while he is liking
+ * comedies. Below the bar the corner emptied, the deep half of the gate closed,
+ * and 93 of the 131 titles in his hand-written taste sat unswiped and
+ * unreachable. **The taste locked itself out.**
+ *
+ * Rejecting most of a genre is what having a specific taste looks like from the
+ * inside, and it says nothing about whether the genre is still yours. What
+ * identifies a corner is that nothing else comes close, so the test is
+ * relative: the best genre, plus whatever ties with it, provided it is liked at
+ * all and there is enough evidence that one lucky swipe cannot claim it.
+ */
+const CORNER_MASS = 3;
+
 function corner(facets: FacetTables): Set<string> {
   const table = facets.genre;
-  let best = 0;
+  let best = -Infinity;
   const means = new Map<string, number>();
   for (const g of Object.keys(table)) {
     const [net, mass] = table[g];
-    if (mass <= 0) continue;
+    if (mass < CORNER_MASS) continue;
     const mean = net / mass;
     means.set(g, mean);
     if (mean > best) best = mean;
   }
   const out = new Set<string>();
-  if (best < TASTE_FLOOR) return out;
+  if (best <= 0) return out;
   for (const [g, mean] of means) {
-    if (mean >= Math.max(TASTE_FLOOR, best - TASTE_MARGIN)) out.add(g);
+    if (mean >= best - TASTE_MARGIN) out.add(g);
   }
   return out;
 }
@@ -361,7 +376,15 @@ export function fameGate(
   const take = (list: CandidateItem[]) => {
     const base = Math.round(list.length * shareOf(limit));
     if (!mine || mine.size === 0) return list.slice(0, base);
-    const deep = Math.round(list.length * shareOf(limit * TASTE_DEPTH));
+    // anchored to the base rather than the contracted gate. The ledger
+    // narrows the pool when a viewer keeps answering "never heard of it", and
+    // that is right about the catalog at large — but their own corner is the
+    // part they *do* know, and it should not shrink with it. Without this a
+    // viewer who swipes up a lot ends up with a gate of 400 holding 8 of the
+    // 131 titles in their taste.
+    const deep = Math.round(
+      list.length * shareOf(Math.max(limit, TIER_BASE) * TASTE_DEPTH)
+    );
     return [
       ...list.slice(0, base),
       ...list

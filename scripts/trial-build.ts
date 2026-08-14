@@ -89,8 +89,16 @@ async function main() {
     return;
   }
 
-  // soul → local embeddings → nearest neighbours as edges
-  const { pipeline } = (await import("@huggingface/transformers")) as {
+  // soul → local embeddings → nearest neighbours as edges.
+  //
+  // The embedder is an optional peer, not a dependency: this arm lost the
+  // bake-off (23.1% against a 23.9% baseline) and nobody should have to
+  // install a machine-learning runtime to build the website. The specifier is
+  // held in a variable so the type checker does not try to resolve a package
+  // that is deliberately absent — it was a literal import, and it broke the
+  // GitHub Pages deploy for four commits before anyone looked.
+  const EMBEDDER = process.env.EMBEDDER ?? "@huggingface/transformers";
+  const { pipeline } = (await import(EMBEDDER)) as {
     pipeline: (task: string, model: string) => Promise<
       (text: string[], opts: { pooling: string; normalize: boolean }) => Promise<{
         tolist: () => number[][];

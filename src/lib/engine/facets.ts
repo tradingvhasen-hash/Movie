@@ -272,11 +272,66 @@ function rarityOf(kind: FacetKind, token: string): number {
  * 18 15. Also nothing.
  */
 
+/**
+ * How sharply rarity is applied to a *rejection*, as an exponent on the same
+ * curve. 1 is the symmetric behaviour this has always had.
+ *
+ * Proposed by the user, and the reasoning is sound enough to test properly:
+ * "if a film has the word comedy, and comedy is in three thousand films, it
+ * should not count much against it — what should count is what makes this one
+ * special." Rarity already scales both directions, but the curve is gentle:
+ * `comedy` reads 0.67 against a one-off keyword's 1.0, so a rejection still
+ * charges the genre at two-thirds strength.
+ *
+ * There is a real asymmetry to justify sharpening only the negative side. A
+ * like on a comedy is evidence about comedy — you chose it. A dislike is much
+ * weaker evidence about comedy, because we mostly *show* you comedies once we
+ * think you like them, so nearly every rejection you can make is a comedy. And
+ * the space of reasons to reject is far larger than the space of reasons to
+ * choose: pace, cast, era, humour that does not land. Broad values carry
+ * almost none of that; narrow ones carry most of it.
+ *
+ * Textbook IDF was tried once and was worse — but that was applied to
+ * everything at once, never to rejections alone.
+ *
+ * MEASURED, AND IT IS A WASH. On the 200-swipe ruler, per fifty:
+ *
+ *     exponent 1 (shipped)   29  9  6  6  ·  30 19 16 22
+ *     exponent 2             29 10  8  7  ·  30 18 17 19
+ *     exponent 3             29 10  9  5  ·  29 19 21 17
+ *
+ * The swipe-up strategy gains about four cards across two hundred; the
+ * swipe-left strategy loses about three. The 500-people ruler and the vibe
+ * pairs cannot see it at all — both feed the engine likes only, so no negative
+ * evidence is ever written. It stays off, with the knob and the reasoning kept
+ * because the idea is sound and the instrument that could prove it does not
+ * exist yet: a ruler built from real people's *dislikes*.
+ *
+ * This is the third attempt today at making a rejection land on the right
+ * value, after damping blame by how much a value was already endorsed (also
+ * nothing). The pattern in the failures is itself the finding, and it is
+ * written up under "why blame reweighting keeps doing nothing" in NOTES.
+ */
+const NEG_RARITY =
+  typeof process !== "undefined" && process.env?.NEG_RARITY
+    ? Number(process.env.NEG_RARITY)
+    : 1;
+
 /** A token's learned affinity in roughly [-1, 1], shrunk toward 0 when thin */
 function tokenWeight(table: FacetTable, kind: FacetKind, token: string): number {
   const entry = table[token];
   if (!entry) return 0;
-  return (entry[0] / (entry[1] + TOKEN_K)) * rarityOf(kind, token);
+  const rarity = rarityOf(kind, token);
+  if (NEG_RARITY === 1) return (entry[0] / (entry[1] + TOKEN_K)) * rarity;
+
+  // mass is the sum of |signal| and net their sum, so the two halves come
+  // straight out of what is already stored — no migration, and undo is
+  // untouched because nothing about writing changes
+  const [net, mass] = entry;
+  const positive = (mass + net) / 2;
+  const negative = (mass - net) / 2;
+  const adjusted = positive * rarity - negative * Math.pow(rarity, NEG_RARITY);
+  return adjusted / (mass + TOKEN_K);
 }
 
 export interface FacetScore {

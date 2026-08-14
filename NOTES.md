@@ -202,6 +202,51 @@ way `vibe-pairs.ts` defines its pairs, rather than by the engine grading itself.
 **Two hypotheses, both mine, both measured, both wrong.** The collapse is real
 and reproduced; its cause is still open.
 
+### Why blame reweighting keeps doing nothing (2026-08-14)
+
+Three attempts today at the same idea — make a rejection land on the value that
+actually caused it — and two of the three did nothing at all.
+
+The user put the case sharply: *"if a film has the word comedy, and comedy is
+in three thousand films, it should not count much against it. What should count
+is what makes this one special."* He also believed rarity applied only to
+likes. It does not — `applyFacets` writes raw signal in both directions and
+`tokenWeight` scales the accumulated total, so rarity has always been
+symmetric. But the curve is gentle: `comedy` reads 0.67 against a one-off
+keyword's 1.0, so a rejection does charge the genre at two-thirds strength, and
+his conclusion survives his premise being wrong.
+
+Sharpening rarity on the negative side only was implemented as an exponent and
+swept. Per fifty swipes:
+
+    exponent 1 (shipped)   29  9  6  6  ·  30 19 16 22
+    exponent 2             29 10  8  7  ·  30 18 17 19
+    exponent 3             29 10  9  5  ·  29 19 21 17
+
+Four cards gained on one strategy, three lost on the other. The 500-people
+ruler and the vibe pairs read *identically* at every setting, and the reason is
+worth writing down: **both feed the engine likes only.** No ruler here has ever
+graded what a dislike does. That is a hole, not a result.
+
+**The pattern across all three attempts.** Damping blame by prior endorsement:
+nothing. Sharpening rarity on rejections: a wash. Anchoring the corner's depth
+so the gate stops shrinking: **that one worked, and it was not about blame at
+all — it was about supply.**
+
+The likely explanation is that `updateFacetWeights` already compensates. It
+learns which facet predicts a viewer's swipes, so when `comedy` stops
+discriminating, genre's *importance* falls and the narrower facets carry the
+ranking on their own. The engine routes around a poisoned value without being
+told to. Which means reweighting the poison changes little — and it also means
+the affinity collapse measured earlier (0.36 → 0.13) mattered through the
+*gate*, where there was no such compensation, and not through the ranking.
+
+**What would actually test this: a ruler built from real people's dislikes.**
+MovieLens has them — every rating below 4 is currently thrown away. Until that
+exists, any further work on blame is unfalsifiable, and it should not be built.
+
+---
+
 ### Found it — with the taste written out by hand
 
 Rebuilding the ruler around 131 named titles instead of the engine's own

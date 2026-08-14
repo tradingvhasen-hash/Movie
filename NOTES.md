@@ -164,8 +164,43 @@ provokes a rejection, the rejection erases part of the taste, and the next card
 is worse. Every fifty swipes damages the fifty that follow, which is why no
 amount of ranking work upstream survives past the first block.
 
-Not yet fixed. Recorded now because the ruler that found it is worth keeping
-whatever the fix turns out to be.
+### The fix that followed from that, and did not work
+
+Positive and negative evidence are both recoverable from what is already
+stored — mass is the sum of magnitudes and net their sum, so
+`positive = (mass + net) / 2` — so a rejection's weight on a value could be
+shrunk by how much that value had already been endorsed, at read time, leaving
+the counters and undo exact. Swept over the 200-swipe ruler:
+
+    blame off        30 21 18 15  ·  32 24 24 13
+    half-life 3      29 21 18 12  ·  31 23 21 14
+    half-life 6      29 20 18 14  ·  31 23 20 14
+    half-life 12     28 22 17 16  ·  32 25 18 14
+
+**Nothing.** The likely reason is that `updateFacetWeights` already routes
+around a facet that has stopped predicting: as `comedy` decays, genre's
+*importance* decays with it and the narrower facets carry the ranking. The
+affinity collapse is real, measured and reproducible — and it is not what the
+deck's decline is made of.
+
+Freezing the fame gate was measured in the same pass, on the theory that the
+pool dilutes faster than the taste inside it grows. It does dilute: the gate
+widens 1,165 → 1,915 across the session while the reachable taste falls 149 →
+110. At 0, 2 and 5 titles earned per rated card: `30 21 20 12` · `30 21 18 15`.
+Also nothing. Both reverted, both documented in place.
+
+### And a flaw in this ruler, stated before anyone else finds it
+
+"On taste" here is Discover's top 300 **frozen at the seed profile**, and the
+engine's idea of the viewer legitimately sharpens as they swipe. So part of the
+block-one-to-block-two drop is the reference going stale rather than the deck
+going wrong — the user's own reference does not drift, and his drop was
+steeper than this ruler's. The instrument is directionally right and
+quantitatively soft, and the honest next step is a taste defined by hand, the
+way `vibe-pairs.ts` defines its pairs, rather than by the engine grading itself.
+
+**Two hypotheses, both mine, both measured, both wrong.** The collapse is real
+and reproduced; its cause is still open.
 
 ---
 

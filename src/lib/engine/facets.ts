@@ -216,6 +216,62 @@ function rarityOf(kind: FacetKind, token: string): number {
 
 /* ── reading the tables ───────────────────────────────────────────────── */
 
+/**
+ * How much of a rejection a value is actually to blame for.
+ *
+ * A user logged two hundred swipes and the deck's hit rate fell 37, 12, 17, 5
+ * per fifty. Measured, the cause was not the pool running dry — 110 titles the
+ * engine itself rated as his were still inside the gate, and 220 more had never
+ * been shown. It was this table forgetting: `comedy` fell from an affinity of
+ * 0.36 to 0.13 over 150 swipes *while he was liking comedies the whole time*.
+ * The net evidence held at 7-11; the observation mass grew 25 → 55 and drowned
+ * it.
+ *
+ * The reason is credit assignment. Shown a comedy that is not his kind, he
+ * swipes left, and every value on that card takes the full -1 — including the
+ * one that is the reason he is here. He rejected it *despite* being a comedy,
+ * not *because* of it.
+ *
+ * Charging it symmetrically is not merely unkind, it is statistically wrong,
+ * and the reason is the deck itself: we do not show a random sample. We show
+ * mostly comedies, so nearly every rejection he can possibly make is a comedy.
+ * Under that exposure, a run of rejected comedies does not mean the genre is
+ * uninformative — it means the genre is necessary and not sufficient, and the
+ * discrimination lives in the narrower values. The negatives carry almost no
+ * information about the value we over-showed, and the tables were reading them
+ * as if they carried all of it.
+ *
+ * So a rejection's weight on a value shrinks with how much that value has
+ * already been endorsed. Nothing about *writing* changes — the stored counters
+ * stay exact and undo stays exact — only how they are read.
+ *
+ * NOT the "best value outweighs worst" experiment rejected twice: that damped
+ * values against each other when scoring a title, and left the tables to rot.
+ * This is about who a rejection is charged to in the first place.
+ *
+ * TRIED, AND IT CHANGED NOTHING. The fix was built and swept: positive and
+ * negative evidence are both recoverable from the stored pair — mass is the sum
+ * of magnitudes and net their sum, so positive = (mass + net) / 2 — and a
+ * rejection's weight was shrunk by how much the value had already been
+ * endorsed, at read time so that undo stayed exact. Across the 200-swipe ruler,
+ * at half-lives of 3, 6 and 12:
+ *
+ *     off          30 21 18 15  ·  32 24 24 13
+ *     half-life 6  29 20 18 14  ·  31 23 20 14
+ *
+ * Nothing. The likely reason is that `updateFacetWeights` already routes around
+ * a facet that has stopped predicting: as `comedy` decays, genre's *importance*
+ * decays with it and the narrower facets carry the ranking. The affinity
+ * collapse is real and measured, and it is not what the deck's decline is made
+ * of.
+ *
+ * Freezing the fame gate was measured in the same pass, on the theory that the
+ * pool was being diluted faster than the taste inside it grew — the gate does
+ * widen from 1,165 to 1,915 across the session while the reachable taste falls
+ * 149 to 110. At 0, 2 and 5 titles earned per rated card: 30 21 20 12 · 30 21
+ * 18 15. Also nothing.
+ */
+
 /** A token's learned affinity in roughly [-1, 1], shrunk toward 0 when thin */
 function tokenWeight(table: FacetTable, kind: FacetKind, token: string): number {
   const entry = table[token];

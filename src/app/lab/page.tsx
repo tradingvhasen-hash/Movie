@@ -88,6 +88,36 @@ export default function LabPage() {
     setTimeout(() => setCopied(false), 1600);
   };
 
+  /**
+   * Export every swipe as a file.
+   *
+   * The engine guesses "have you watched this?" from a global vote count — one
+   * answer for all of humanity. Meanwhile a session like this one produces
+   * hundreds of labelled examples of exactly that question for one specific
+   * person, and not one of them is used. Nothing can be built on that until
+   * the labels leave the browser: the swipes live in local storage, and the
+   * cloud copy skips any title the seeded catalog does not contain, which is
+   * currently all of them.
+   *
+   * Ids and actions only. No titles, no timestamps beyond the order, nothing
+   * that is not needed to answer the question.
+   */
+  const exportSwipes = () => {
+    const rows = swipeOrder
+      .map((id) => swipes[id])
+      .filter(Boolean)
+      .map((sw) => ({ id: sw.titleId, a: sw.action, at: sw.at }));
+    const blob = new Blob([JSON.stringify({ swipes: rows }, null, 0)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `dhawq-swipes-${rows.length}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <motion.div
       variants={staggerContainer(0.05)}
@@ -211,6 +241,15 @@ export default function LabPage() {
           className="rounded-full border border-line px-4 py-2 text-sm font-semibold text-ink-dim transition-colors hover:text-ink disabled:opacity-40"
         >
           {copied ? "Copied" : "Copy the numbers"}
+        </button>
+
+        <button
+          type="button"
+          onClick={exportSwipes}
+          disabled={overall.total === 0}
+          className="rounded-full border border-accent/40 px-4 py-2 text-sm font-semibold text-accent transition-colors hover:bg-accent/10 disabled:opacity-40"
+        >
+          Export {overall.total} swipes
         </button>
 
         {!confirming ? (

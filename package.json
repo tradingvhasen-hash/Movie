@@ -19,7 +19,8 @@
     "trial:build": "tsx scripts/trial-build.ts",
     "simulate": "tsx scripts/simulate.ts",
     "roundtrip": "tsx scripts/round-trip.ts",
-    "replay": "tsx scripts/replay.ts"
+    "replay": "tsx scripts/replay.ts",
+    "harvest": "tsx scripts/harvest.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.2",

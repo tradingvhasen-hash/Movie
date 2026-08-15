@@ -102,6 +102,118 @@ against the improved engine, not the old one.
 
 ---
 
+## The first instrument that measures the actual goal (2026-08-15)
+
+The user stated the goal plainly, and it is not the one anything here was
+measuring: **within about a week, a person should be able to get every film
+they have ever watched into the site.** Once it knows that, it knows them.
+
+Every ruler in this repo grades recommendation quality — given what you like,
+are the next twenty cards good. Not one measures how much of a person's
+history the site can pull out of them. So weeks of work have been better and
+better answers to a question nobody asked, which is exactly why three
+consecutive real 400-swipe sessions came out looking identical to him.
+
+His own three sessions, 1,288 cards, measured for the first time:
+
+    block 1-50     41 watched per 50    3,061 titles/hour at that rate
+    block 101-150  22                   1,577
+    block 201-250  12                     853
+    block 301-350   4                     220
+
+**A sevenfold collapse in eight minutes.** At the marginal rate, 2,000 titles
+would take five hours and the rate is still falling, so in practice it never
+arrives.
+
+### The ruler
+
+`scripts/harvest.ts` with `scripts/build-histories.py`. A MovieLens user with
+250+ of our films *is* a watch history — they rated it, so they watched it —
+and MovieLens wrote it, so the oracle cannot be bent to flatter us. The
+session runs for real: deck picks, person answers from their history, profile
+updates. Two numbers:
+
+  - **harvest** — how many of their real history the site got out of them
+  - **ceiling** — how many the gate could ever have offered, at any length
+
+When harvest sits below ceiling the ranking is at fault. When ceiling is low,
+no ranking can help and the fault is reachability. First reading, 15 people,
+500 cards: **harvest 43.5%, ceiling 63.0%**, and the same declining shape as
+his real session (71.9 found in the first hundred, 33.1 in the fifth).
+
+### It contradicted my plan within the hour
+
+I had announced ruler → reachability → catalog → edges → interface, on the
+argument that the gate's ceiling of rank 1,769 locks out the user's own films
+at ranks 1,890 to 3,131. Swept against the new ruler:
+
+| gate | ceiling | harvest (300 cards) |
+|---|---|---|
+| `TIER_BASE` 900 (shipped) | 55.6% | **33.5%** |
+| 1,800 | 68.5% | 32.8% |
+| 3,000 | 75.5% | 32.2% |
+| `TASTE_DEPTH` 5 | 70.2% | 32.7% |
+
+Widening the gate raises the ceiling by twenty points and harvest **does not
+move**. Repeated at 800 cards in case the session was too short to exhaust the
+narrow pool: 301.2 against 300.5. Identical.
+
+So "delete the gate" — the reviewer's second recommendation — does not improve
+the goal, and neither would my own Phase 1. The reachable supply is already
+larger than the ranking can use.
+
+### Except for exactly the people this is built for
+
+That population is mainstream: the median film in their history sits near rank
+500, so almost none of it was ever outside the gate. Selecting the twenty
+whose history sits deepest — median rank 1,185 to 2,093, straddling and
+passing the ceiling of 1,769 — flips the sign:
+
+| gate | ceiling | harvest (500 cards) |
+|---|---|---|
+| shipped | 58.3% | 217.8 |
+| wide | 64.7% | **230.8** |
+
+**+6%.** Real, in the right direction, and small. Measuring only the first
+population would have said the gate is harmless; only the second would have
+overstated it. Both are kept for that reason.
+
+### What actually binds, and it is arithmetic
+
+A card asks about exactly one title. Harvesting H titles therefore needs at
+least H interactions — no ranking, gate, graph or model can beat one title per
+interaction. At the 59% hit rate the ruler measures, 2,000 titles is 3,390
+cards; at the 35% his real sessions average, 5,714; at the 8% his sessions
+*end* at, 25,000.
+
+That is not a modelling problem and cannot be fixed by one. It is the reason
+the reviewer's grid argument is right even though his numbers are not: his
+"one question per 2.5 seconds" understates the user, who swipes at 1.1s, so
+the speed gain is nearer 2-3x than 5x. The gain that matters is different —
+**a card the viewer has not seen costs a full swipe, a poster in a grid they
+do not tap costs a glance.** Make a miss nearly free and the reason for the
+gate disappears with it.
+
+### Verified from the reviewer's message
+
+Every falsifiable claim in it, checked against the code and the data:
+
+| claim | verdict |
+|---|---|
+| taste door tops out at rank 1,769 | **exact** — `shareOf(900x2.5)` = 0.4050 x 4,368 |
+| his seven films at 1,890-3,131 | **exact**, all beyond it |
+| the graph already links Let's Be Cops → We're the Millers, Neighbors, Central Intelligence | **true**, and its own keywords are `robbery, corruption, police` |
+| catalog is `en 4,814 · hi 6 · ar 2` | **true** — two Arabic titles on an Arabic-first product |
+| delete the gate | **refuted above** |
+
+The third is the one that changes the diagnosis most, and I never thought to
+check it: **the vibe answer is already computed and stored in our own file.**
+Rush Hour-for-Hangover is not an unsolved modelling problem here. It is a
+reachability and weighting problem, and the behavioural graph solved it days
+ago.
+
+---
+
 ## The gate stopped asking the world and started asking you (2026-08-15)
 
 The user proposed growing the catalog from 5,555 titles to 50,000: "only 100

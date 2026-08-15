@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
+import AccountPanel from "@/components/AccountPanel";
 import TitleTile from "@/components/TitleTile";
 import { DeleteButton } from "@/components/ui";
 import { FilmIcon, HeartIcon, ThumbsDownIcon } from "@/components/ui/Icons";
@@ -68,6 +69,11 @@ export default function LibraryPage() {
       <motion.p variants={FADE_UP} className="mt-1 text-sm text-ink-dim">
         {t("library.subtitle")}
       </motion.p>
+
+      {/* signing in is optional and lives here rather than in the nav: this is
+          the page about a person's own data, and it is the only place the
+          question "where does this go?" naturally comes up */}
+      <AccountPanel />
 
       {/* filters — the active pill slides between options */}
       <LayoutGroup id="library-filters">

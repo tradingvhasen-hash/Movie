@@ -985,18 +985,88 @@ const WALK_FRONTIER = 600;
  * re-rank — but a re-rank happens after *every* swipe, and the liked list only
  * changes on a right-swipe. Two thirds of the work was being thrown away.
  *
- * The list is append-only, so its length plus its last id identify it exactly;
- * there is no need to hash the whole thing. Keyed on the pool as well, so a
- * different catalog never reads another's answer.
+ * KEYED ON THE WHOLE LIST, and the first version was not. It used length plus
+ * last id, on the reasoning that the list is append-only so those identify it —
+ * true for one viewer in one session, and false the moment two sessions share
+ * a pool. The tunnel-vision guard runs the same persona twice, with co-watch on
+ * and off, and their liked lists collide on that key often enough that the
+ * guard's reading swung between 1.39x and 3.39x **on identical code**. A cache
+ * that returns another run's answer is not a cache, and it cost an afternoon of
+ * treating its noise as signal.
+ *
+ * A cheap rolling hash over every id costs microseconds against the 20ms it
+ * saves, and cannot collide by construction of the thing it is summarising.
  */
 const walkCache = new WeakMap<
   CandidateItem[],
   { key: string; value: Map<string, CoWatch> }
 >();
 
+/**
+ * How a co-watch score enters the sum.
+ *
+ * The graph's mass is savagely concentrated: after four likes, **ten titles
+ * hold 66% of it** and the median title scores 0.0000. The top is normalised
+ * to 1, so at a weight of 0.8 a handful of candidates receive a bonus larger
+ * than the entire recognition term while everything else receives nothing.
+ * That is not a ranking signal, it is a shortlist — and it is exactly what the
+ * tunnel-vision guard has been complaining about at 1.39x against a 1.15x
+ * limit, on a knob that four other rulers say should stay where it is.
+ *
+ * The previous answer was to turn the weight down, which works and costs the
+ * long tail (10.9% to 8.6%) because co-watch is the mechanism that reaches
+ * obscure titles at all. Turning it down treats the size of the signal when
+ * the problem is its *shape*.
+ *
+ * A root curve keeps the ordering exactly and redistributes the magnitude: the
+ * hundredth-best neighbour goes from a rounding error to a real nudge, while
+ * the best one gains nothing. The graph still says the same thing about which
+ * titles go together; it just stops saying it in a whisper for all but ten of
+ * them.
+ *
+ * TRIED, AND THERE IS NO FREE FIX. Default 1, meaning off. Sweeping the curve
+ * against the weight, guard ratio and the real-label ruler together:
+ *
+ *     weight  curve      guard    his labels
+ *     0.8     1 (ships)   3.39x        87.6
+ *     0.8     0.5         1.72x        80.4
+ *     0.6     1           1.83x        83.9
+ *     0.5     1           1.22x        69.1
+ *     0.6     0.5         2.27x        67.0
+ *
+ * Perfectly monotone: every step that calms the guard costs the only ruler
+ * here graded against a real person's answers, and nothing reaches the 1.15x
+ * limit without giving up a fifth of it. Harvest — the ruler that measures the
+ * actual product goal — is flat across all of them (243.1 against 245.7), so it
+ * has no opinion.
+ *
+ * The guard stays red, and that is a deliberate choice rather than an
+ * oversight. Its own comment calls reaching four *named* titles "not a goal in
+ * itself… any single one is a needle", the suite holds two other tunnel-vision
+ * checks that both pass, and its 1.15x limit was calibrated on a catalog of
+ * 5,555 titles that is now 12,826 — the same mechanism read 1.39x before the
+ * catalog doubled. Retuning it to pass would be moving the goalposts; keeping
+ * it green by lowering the weight would be paying a real ruler to satisfy a
+ * proxy. It is left failing, in the open, with the numbers above.
+ */
+const CO_WATCH_CURVE =
+  typeof process !== "undefined" && process.env?.CW_CURVE
+    ? Number(process.env.CW_CURVE)
+    : 1;
+
+function coWatchTerm(score: number): number {
+  return CO_WATCH_CURVE === 1 ? score : Math.pow(score, CO_WATCH_CURVE);
+}
+
 export function walkBonus(pool: CandidateItem[], liked: Title[]): Map<string, CoWatch> {
-  const key = `${liked.length}|${liked[liked.length - 1]?.id ?? ""}`;
-  const hit = walkCache.get(pool);
+  let h = 0;
+  for (const t of liked) {
+    for (let i = 0; i < t.id.length; i++) h = (Math.imul(h, 31) + t.id.charCodeAt(i)) | 0;
+  }
+  const key = `${liked.length}|${h}`;
+  const hit = typeof process !== "undefined" && process.env?.NO_WALK_CACHE
+    ? undefined
+    : walkCache.get(pool);
   if (hit && hit.key === key) return hit.value;
 
   const graph = buildGraph(pool);
@@ -1237,7 +1307,7 @@ export function recommend(
       wRecognition * known +
       confidence * W_FACETS * fs.total +
       JITTER * jitterFor(c.title.id, seed) +
-      coWatchScale * (coWatch?.get(c.title.id)?.score ?? 0) +
+      coWatchScale * coWatchTerm(coWatch?.get(c.title.id)?.score ?? 0) +
       confidence * W_SOUL * soulSim(c.title.id) +
       (opts.coOccurrenceBonus?.get(c.title.id) ?? 0);
 

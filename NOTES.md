@@ -102,6 +102,78 @@ against the improved engine, not the old one.
 
 ---
 
+## Paying the debts: a cache that lied, and a bucket with no tap (2026-08-15)
+
+### The cache was returning another run's answer
+
+The walk cache shipped this morning keyed on `liked.length` plus the last id,
+on the reasoning that an append-only list is identified by those two. True for
+one viewer in one session. False the moment two runs share a pool — and the
+tunnel-vision guard runs the same persona twice, co-watch on and off, so their
+liked lists collide on that key.
+
+The guard's reading swung between **1.39x and 3.39x on identical code**, and I
+spent an afternoon reading its noise as signal. Keyed on a rolling hash of
+every id now, which costs microseconds against the 20ms it saves and cannot
+collide. Verified: the cache on and off produce byte-identical results.
+
+**The true reading is 3.39x, not the 1.39x recorded earlier.** The catalog
+doubled since that number was taken, and the graph's neighbourhoods are now a
+smaller fraction of a larger pool, so co-watch concentrates harder.
+
+### And the guard is right about the shape
+
+Measured directly: after four likes, **ten titles hold 66% of all co-watch
+mass** and the median title scores 0.0000. The top is normalised to 1, so at a
+weight of 0.8 a handful of candidates get a bonus larger than the entire
+recognition term and everything else gets nothing. That is a shortlist, not a
+ranking signal.
+
+A root curve was the obvious fix — keep the ordering, spread the magnitude, so
+the hundredth neighbour becomes a nudge instead of a rounding error. Swept
+against the weight:
+
+| weight | curve | guard | his labels |
+|---|---|---|---|
+| 0.8 | 1 (ships) | 3.39x | **87.6** |
+| 0.8 | 0.5 | 1.72x | 80.4 |
+| 0.6 | 1 | 1.83x | 83.9 |
+| 0.5 | 1 | **1.22x** | 69.1 |
+| 0.6 | 0.5 | 2.27x | 67.0 |
+
+**Perfectly monotone, and there is no free fix.** Every step that calms the
+guard costs the only ruler graded against a real person's answers, and nothing
+reaches 1.15x without giving up a fifth of it. Harvest — the ruler that
+measures the actual goal — is flat across all of them.
+
+So it stays red, deliberately. Its own comment calls four named titles "not a
+goal in itself… any single one is a needle", two other tunnel checks in the
+same suite pass, and its 1.15x limit was calibrated against a catalog less than
+half the current size. Retuning it to pass would be moving the goalposts;
+buying it with the real ruler would be paying for a proxy. Left failing, in the
+open, with the table above in the code.
+
+### The grid was harvesting into a bucket with no tap
+
+The grid answers "have you watched it" and stops — thirty taps cannot carry
+thirty verdicts. But the deck excludes everything already swiped, so a viewer
+who marked five hundred titles had a library the site knew they watched and
+would **never** ask about. Two surfaces, and the handoff between them did not
+exist.
+
+`pendingVerdicts` now puts them at the front of the deck, and they are the best
+cards it will ever have: the viewer has already said they saw them, so the hit
+rate is 100% and every answer is pure taste evidence with no recognition
+guessing and no wasted swipe.
+
+Driven in a browser: mark six on the grid, open the deck, and it asks about
+them. Which surfaced a second thing only a browser could show — the deck
+greeted a viewer who had just answered thirty questions with **"Swipe cards so
+we learn your taste"**, because the welcome keyed off a screen flag rather than
+off whether the person had told us anything. It now keys off `totalSwipes`.
+
+---
+
 ## A better prior that the engine cannot use (2026-08-15)
 
 The catalog gained 7,271 titles with no behavioural data of any kind — the

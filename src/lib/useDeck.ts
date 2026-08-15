@@ -39,6 +39,32 @@ async function fetchRemoteBatch(count: number): Promise<Title[] | null> {
 }
 
 /** local mode: run the engine over the bundled catalog */
+/**
+ * Titles the grid harvested but nobody has an opinion on yet.
+ *
+ * The grid answers "have you watched it" and deliberately stops there — thirty
+ * taps cannot carry thirty verdicts. So a viewer who marks five hundred titles
+ * has a library the site knows they watched and knows nothing about, and until
+ * now the deck could never ask, because it excludes everything already swiped.
+ * The two surfaces were harvesting into a bucket with no tap on it.
+ *
+ * These come first, and they are the best cards the deck will ever have: the
+ * viewer has already told us they saw them, so the hit rate is 100% and every
+ * answer is pure taste evidence. It is also the cheapest verdict available —
+ * no recognition guessing, no gate, no wasted swipe.
+ */
+function pendingVerdicts(exclude: Set<string>): Title[] {
+  const state = useDhawq.getState();
+  const out: Title[] = [];
+  for (const sw of Object.values(state.swipes)) {
+    if (sw.action !== "seen" || exclude.has(sw.titleId)) continue;
+    const title = sw.title ?? getLocalItem(sw.titleId)?.title;
+    if (title) out.push(title);
+  }
+  // newest first: what you tapped a minute ago is easier to have an opinion on
+  return out.reverse();
+}
+
 function computeLocalBatch(excludeExtra: string[] = []): Title[] {
   const pool = getLocalCatalog();
   const state = useDhawq.getState();
@@ -49,13 +75,17 @@ function computeLocalBatch(excludeExtra: string[] = []): Title[] {
     .map((s) => s.title ?? getLocalItem(s.titleId)?.title)
     .filter((t): t is Title => Boolean(t));
 
-  return recommend(pool, state.profile, {
+  const pending = pendingVerdicts(new Set(excludeExtra)).slice(0, BATCH);
+  if (pending.length >= BATCH) return pending;
+
+  const rest = recommend(pool, state.profile, {
     excludeIds: exclude,
-    count: BATCH,
+    count: BATCH - pending.length,
     seed: state.seed,
     vectorFor: vectorOf,
     likedTitles,
   }).map((r) => r.title);
+  return [...pending, ...rest];
 }
 
 /** run work when the browser is idle, with a short deadline as a fallback */

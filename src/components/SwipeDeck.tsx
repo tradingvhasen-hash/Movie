@@ -15,7 +15,15 @@ import type { SwipeAction } from "@/lib/types";
 
 export default function SwipeDeck() {
   const { queue, hydrated, swipeTop, undo, canUndo, refill } = useDeck();
-  const onboardingSeen = useDhawq((s) => s.onboardingSeen);
+  /**
+   * Someone who came in through the grid has already answered thirty
+   * questions, and greeting them with "Swipe cards so we learn your taste"
+   * tells them the site was not paying attention. The welcome is for people
+   * who have told us nothing, which is a fact about the profile rather than a
+   * flag about which screen they happened to open first.
+   */
+  const answered = useDhawq((s) => s.profile.totalSwipes);
+  const onboardingSeen = useDhawq((s) => s.onboardingSeen) || answered > 0;
   const setOnboardingSeen = useDhawq((s) => s.setOnboardingSeen);
   const resetAll = useDhawq((s) => s.resetAll);
 

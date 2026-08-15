@@ -308,17 +308,15 @@ const fameOrder = new WeakMap<CandidateItem[], { movie: CandidateItem[]; tv: Can
 function fameLists(pool: CandidateItem[]) {
   let lists = fameOrder.get(pool);
   if (!lists) {
-    // GATE_REACH=1 orders the queue by the model's reach estimate instead of
-    // the vote count. This is where reach should matter most if it matters at
-    // all: the gate is what decides an Egyptian film with eighty TMDB votes
-    // sits at rank 8,000 and is never offered to anyone.
-    const byReach = typeof process !== "undefined" && process.env?.GATE_REACH === "1";
-    const sorted = [...pool].sort((a, b) =>
-      byReach
-        ? reachPrior(b.title) - reachPrior(a.title) ||
-          b.title.voteCount - a.title.voteCount
-        : b.title.voteCount - a.title.voteCount
-    );
+    /**
+     * TRIED: ordering this by the model's reach estimate rather than the vote
+     * count. That is where reach should matter most if it matters anywhere —
+     * the gate is what decides an Egyptian film with eighty TMDB votes sits at
+     * rank 8,000 and is never offered to anyone. Measured, harvest moved by
+     * **nothing at all** (243.1 either way), and the branch is gone rather than
+     * left as a knob nobody will turn.
+     */
+    const sorted = [...pool].sort((a, b) => b.title.voteCount - a.title.voteCount);
     lists = {
       movie: sorted.filter((c) => c.title.type !== "tv"),
       tv: sorted.filter((c) => c.title.type === "tv"),
@@ -1064,9 +1062,7 @@ export function walkBonus(pool: CandidateItem[], liked: Title[]): Map<string, Co
     for (let i = 0; i < t.id.length; i++) h = (Math.imul(h, 31) + t.id.charCodeAt(i)) | 0;
   }
   const key = `${liked.length}|${h}`;
-  const hit = typeof process !== "undefined" && process.env?.NO_WALK_CACHE
-    ? undefined
-    : walkCache.get(pool);
+  const hit = walkCache.get(pool);
   if (hit && hit.key === key) return hit.value;
 
   const graph = buildGraph(pool);

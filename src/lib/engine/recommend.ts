@@ -8,6 +8,7 @@ import {
 } from "./facets";
 import {
   isCalibrating,
+  seenTrust,
   tasteConfidence,
   watchLikelihood,
   type TasteProfile,
@@ -385,19 +386,90 @@ function corner(facets: FacetTables): Set<string> {
  * series, not the 865 best-known titles. Halloween sat outside it, and the
  * ruler was blaming the ranking for not showing a card it was never offered.
  */
+/**
+ * How much wider than the gate to look before choosing who gets in.
+ *
+ * The gate's ordering was global fame, which is a claim about humanity and
+ * was measured against one real viewer at AUC 0.453 — worse than a coin. The
+ * ranking already stopped believing it (`watchLikelihood`); the gate still
+ * did, so the deck could rank beautifully over a pool chosen by the wrong
+ * question. A viewer's own corner reached in via `TASTE_DEPTH`, but that is a
+ * genre filter standing in for a model we now actually have.
+ *
+ * So the gate considers this many gate-fulls of the fame-ordered list and
+ * keeps the ones *this person* is most likely to have watched. Not the whole
+ * catalog: fame is a weak signal, not a worthless one, and reading the bottom
+ * of a 5,555-title list through a model built on a hundred swipes would let
+ * one shared keyword drag something genuinely obscure into the deck.
+ *
+ * With no swipes yet `watchLikelihood` returns the fame prior unchanged, so
+ * this reduces *exactly* to the old gate at cold start and personalises at
+ * precisely the rate the evidence justifies — the same measured trust curve,
+ * with no second constant to tune.
+ */
+const GATE_WIDTH =
+  typeof process !== "undefined" && process.env?.GATE_WIDTH
+    ? Number(process.env.GATE_WIDTH)
+    : 3;
+
+/**
+ * TRIED AND REJECTED: reserving part of the gate for the fame order.
+ *
+ * Personalising the gate and the co-watch graph both answer "more of what this
+ * person already chose", so the obvious worry is that they compound and the
+ * pool closes in. Reserving a share of every gate for titles chosen by fame
+ * alone would guarantee a frontier for exploration and the graph to reach into,
+ * however confident the exposure model became.
+ *
+ * Built, and it earns nothing. The tunnel-vision guard reads 1.39x at a reserve
+ * of half the gate, three quarters, and none at all — identical to three
+ * decimal places, because that guard's persona never swipes up, so its answers
+ * carry no exposure information, `seenTrust` is zero and the personal gate is
+ * not running at all. And on the real-label ruler the reserve is a straight
+ * cost:
+ *
+ *     reserve none      82.7      (30 seeds)
+ *     reserve a quarter 78.9
+ *     reserve a half    75.5
+ *
+ * The compounding it was built for is not there to prevent. What made the
+ * guard move was `answerBalance`, which correctly stops trusting an exposure
+ * model built from a viewer who answered the same way every time — and the
+ * 1.39x it exposed is what the engine read *before* any of this shipped.
+ */
+
 export function fameGate(
   pool: CandidateItem[],
   limit: number,
-  facets?: FacetTables
+  facets?: FacetTables,
+  profile?: TasteProfile
 ): CandidateItem[] {
   const { movie, tv } = fameLists(pool);
   const shareOf = (n: number) =>
     !Number.isFinite(n) || n >= pool.length ? 1 : n / Math.max(pool.length, 1);
 
+  // zero when the viewer has taught us nothing, so the work is skipped
+  // entirely on the first cards rather than computed and thrown away
+  const personal = profile && seenTrust(profile) > 0 ? profile : null;
+  const reorder = (list: CandidateItem[], keep: number) => {
+    if (!personal || keep >= list.length) return list.slice(0, keep);
+    const window = list.slice(0, Math.min(list.length, Math.round(keep * GATE_WIDTH)));
+    const scored = window.map((c) => ({
+      c,
+      w: watchLikelihood(
+        personal,
+        titleTokens(c.title),
+        recognizability(c.title.voteCount)
+      ),
+    }));
+    scored.sort((a, b) => b.w - a.w);
+    return scored.slice(0, keep).map((s) => s.c);
+  };
+
   const mine = facets ? corner(facets) : null;
   const take = (list: CandidateItem[]) => {
     const base = Math.round(list.length * shareOf(limit));
-    if (!mine || mine.size === 0) return list.slice(0, base);
+    if (!mine || mine.size === 0) return reorder(list, base);
     // anchored to the base rather than the contracted gate. The ledger
     // narrows the pool when a viewer keeps answering "never heard of it", and
     // that is right about the catalog at large — but their own corner is the
@@ -408,7 +480,7 @@ export function fameGate(
       list.length * shareOf(Math.max(limit, TIER_BASE) * TASTE_DEPTH)
     );
     return [
-      ...list.slice(0, base),
+      ...reorder(list, base),
       ...list
         .slice(base, deep)
         .filter((c) => c.title.genres.some((g) => mine.has(g.toLowerCase()))),
@@ -592,10 +664,28 @@ const CO_WATCH_MAX =
  *     long tail   7.2   9.9     -     -
  *     guard      1.47  1.39  3.21  3.55   (limit 1.15)
  *
- * 0.8 improves every ruler at once, including the tunnel-vision guard it was
- * previously trading against — a deck that trusts real co-watching wanders
- * *less*, because it is no longer following tables that have drifted. Above
- * that the guard breaks outright.
+ * 0.8 is the best setting on every ruler here, and above it the guard breaks
+ * outright.
+ *
+ * CORRECTION, and the error was mine. This paragraph used to claim 0.8
+ * "improves every ruler at once, including the tunnel-vision guard" — while
+ * the table directly above it records that guard at 1.39 against a limit of
+ * 1.15. It has never passed at this weight. The mistake went unnoticed because
+ * the exposure model briefly masked it: that guard's persona never swipes up,
+ * and until `answerBalance` shipped, a viewer who had answered "watched" to
+ * everything was still trusted, which happened to widen the pool and read 1.05.
+ * Removing that false trust was correct and restored the true reading.
+ *
+ * So: 0.8 costs this guard and always has. The alternative is 0.6, which passes
+ * it at 1.10 and costs the long tail (10.9% to 8.6%), a cold-deck target, and
+ * the real-label ruler (82.7 to 77.4 over 30 seeds) — because co-watch is the
+ * mechanism that reaches obscure titles at all. Four rulers prefer 0.8 and one
+ * prefers 0.6.
+ *
+ * 0.8 stays, and the failure is recorded rather than papered over. The guard
+ * itself needs a look it has not had: reaching four *named* titles is a needle
+ * hunt by its own admission, and its absolute numbers now say the deck finds
+ * them in 305 swipes where the build that set the 1.15 limit took 547.
  */
 const CO_WATCH_DECK_SCALE = 0.8;
 
@@ -945,7 +1035,8 @@ export function recommend(
   const gated = fameGate(
     pool,
     fameTierSize(profile, mode),
-    mode === "swipe" ? profile.facets : undefined
+    mode === "swipe" ? profile.facets : undefined,
+    profile
   );
   const coWatchScale =
     mode === "discover"

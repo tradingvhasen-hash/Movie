@@ -12,7 +12,7 @@ import {
   titleTokens,
   trackStreak,
   updateFacetWeights,
-  SEEN_WEIGHTS,
+  seenScore,
   type FacetTables,
   type FacetWeights,
   type StreakState,
@@ -374,9 +374,43 @@ export const SEEN_CONFIDENCE_K = 8;
  */
 const SEEN_MAX_TRUST = 0.75;
 
+/**
+ * How much a viewer's answers actually *separate* anything.
+ *
+ * Volume is not information. Someone who has answered "I watched it" to all
+ * two hundred cards has taught the exposure model nothing about exposure —
+ * every token is positive, including the fallback, so ranking by it is
+ * ranking by nothing. Worse than nothing, in fact: the tables are then a
+ * blurred copy of the taste tables, so letting the gate select on them
+ * double-counts taste and quietly narrows the pool. A ruler caught exactly
+ * that — a persona that never swipes up took 2.5x as long to reach four named
+ * titles, which is the signature of a deck that has stopped exploring.
+ *
+ * The same is true at the other end, and that one was caught first: a viewer
+ * who has recognised nothing has also said nothing that separates one title
+ * from another.
+ *
+ * So trust scales with the balance of the two answers, `4p(1-p)`, which is 1
+ * when they are evenly split and falls to 0 as either takes over. Not a fudge
+ * factor and not tuned — it is the variance of the very thing being predicted,
+ * and a predictor of a constant is worth nothing however much of it there is.
+ * On the real 449-swipe session (37% watched) it reads 0.93, so the case this
+ * was all built for is barely touched.
+ */
+function answerBalance(profile: TasteProfile): number {
+  const answered = profile.seenCount + profile.unseenCount;
+  if (answered === 0) return 0;
+  const p = profile.seenCount / answered;
+  return 4 * p * (1 - p);
+}
+
 export function seenTrust(profile: TasteProfile): number {
   const evidence = profile.totalSwipes;
-  return SEEN_MAX_TRUST * (evidence / (evidence + SEEN_CONFIDENCE_K));
+  return (
+    SEEN_MAX_TRUST *
+    (evidence / (evidence + SEEN_CONFIDENCE_K)) *
+    answerBalance(profile)
+  );
 }
 
 /**
@@ -396,7 +430,7 @@ export function watchLikelihood(
   const w = seenTrust(profile);
   if (w <= 0) return fame;
   // facetScore is [-1, 1]; a probability-shaped term is what the ranking adds
-  const personal = 0.5 + 0.5 * facetScore(profile.seenFacets, SEEN_WEIGHTS, tokens).total;
+  const personal = 0.5 + 0.5 * seenScore(profile.seenFacets, tokens);
   return (1 - w) * fame + w * personal;
 }
 

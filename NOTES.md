@@ -102,6 +102,114 @@ against the improved engine, not the old one.
 
 ---
 
+## The gate stopped asking the world and started asking you (2026-08-15)
+
+The user proposed growing the catalog from 5,555 titles to 50,000: "only 100
+to 200 works suit my taste out of 5,000." Measured before answering, because
+this question got a wrong answer from me once before.
+
+**Every one of the 165 titles he liked is already in the catalog and already
+inside the gate.** Not one is missing. The catalog holds 1,816 comedies, 909
+of them reachable. Supply is roughly five times what he consumes.
+
+And expansion would have added **nothing**. The gate takes the top N by vote
+count; at its widest a film needs 2,366 votes to enter, and the *least* famous
+film already in the catalog has 1,176. Every one of 45,000 new titles would
+have sorted below the floor and never appeared. 2,555 of our 5,555 titles are
+already unreachable. The bottleneck was never supply.
+
+### The fix
+
+The ranking stopped believing global fame when `watchLikelihood` shipped. The
+gate still believed it, so the deck could rank beautifully over a pool chosen
+by a question we had measured at AUC 0.453. It now takes three gate-fulls of
+the fame-ordered list and keeps the ones *this viewer* is most likely to have
+watched. At zero swipes `watchLikelihood` returns the fame prior unchanged, so
+this reduces exactly to the old gate at cold start and personalises at the rate
+the evidence already justifies — no second constant.
+
+### Two faults the AUC probe could not have found
+
+**An unknown value was being read as good.** For taste, an unseen token scores
+0 — no evidence, no preference — and that is right. For exposure it is badly
+wrong: a viewer who answers "never heard of it" forty times writes a negative
+against everything he sees, so every *observed* value is negative while an
+unobserved one sits at 0, above them all. Titles built entirely from keywords
+he had never met floated to the top, and the deck served a 2,407-vote film to
+someone who had recognised nothing. `seenScore` now falls back to the viewer's
+own rate for that facet, so a person who has watched nothing gets a negative
+for the unknown too and the ordering collapses back to fame — which is exactly
+right, because he has told us nothing to personalise with.
+
+**Volume is not information.** A persona that never swipes up took 2.5x as long
+to reach four named titles. Its exposure tables held nothing but "watched", so
+they were a blurred copy of the taste tables, and letting the gate select on
+them double-counted taste and quietly narrowed the pool. `seenTrust` now scales
+by `4p(1-p)`, the balance of the two answers — 1 when evenly split, 0 as either
+takes over. Not a fudge: it is the variance of the thing being predicted, and a
+predictor of a constant is worth nothing however much of it there is. His real
+session (37% watched) reads 0.93, so the case this was built for is untouched.
+
+Both faults live *outside* the set of cards the deck chose to show, and
+`seen-probe.ts` only ranks cards inside it. The blind spot named in
+`SEEN_CONFIDENCE_K`'s comment turned out to be real, and it was found by
+instruments that walk the pool rather than grade a list.
+
+### Also tried, also rejected
+
+**Reserving part of the gate for the fame order**, so the exposure model could
+never claim the whole pool. The guard reads 1.39x at a reserve of half, three
+quarters, and none — identical, because that guard's persona has zero
+`answerBalance` and the personal gate is not running at all. On the real-label
+ruler the reserve is a straight cost: 82.7 → 78.9 → 75.5. Removed.
+
+### The result
+
+| ruler | before the gate change | after |
+|---|---|---|
+| **replay — real labels, 30 seeds** | 66.9 | **82.7** |
+| replay, control (old labels only) | 71.0 | **78.2** |
+| long session, swipe-up strategy | 63 | **80** |
+| 500 people, deck | 32.0% | 32.0% |
+| 500 people, long tail | 9.9% | 9.9% |
+| Discover · vibe hard pairs | 34.2% · 60% | unchanged |
+| `drift` · `roundtrip` | pass | pass |
+
+**+24% on the honest ruler**, and the same signature as before: every
+instrument that can see the change improved, every instrument blind to it is
+unchanged to the decimal. `human-test` and `cold-deck` feed likes only, so
+their `answerBalance` is zero and the personal gate never runs — which is why
+they read identically, and why they cannot be cited as evidence either way.
+
+### A correction, and it is mine
+
+`simulate` now reports **12/13**, and the failure is not new. The exploration
+guard reads 1.39x against a 1.15x limit — and the engine of the day *before*
+any of this reads exactly 1.39x too. `CO_WATCH_DECK_SCALE = 0.8` has never
+passed that guard; the comment above it claimed 0.8 "improves every ruler at
+once, including the tunnel-vision guard" while the table three lines higher
+recorded 1.39. The exposure model briefly masked it by trusting a viewer who
+had answered "watched" to everything, and `answerBalance` correctly removed
+that false trust and restored the true reading.
+
+I pulled co-watch back to 0.6 to make it pass, and it did — at the cost of the
+long tail (10.9% → 8.6%), a cold-deck target, and the real-label ruler
+(82.7 → 77.4). Four rulers prefer 0.8, one prefers 0.6. 0.8 stays and the
+failure is recorded rather than papered over. The guard needs a look of its
+own: it is a needle hunt by its own admission, and its absolute numbers say
+the deck now reaches those four titles in 305 swipes where the build that set
+the 1.15 limit took 547.
+
+### So: expansion?
+
+Now it can mean something — the gate is no longer an absolute fame window, so
+depth is reachable. But it is still not the bottleneck, and the honest next
+question is not "how many titles" but "how many more does the gate now admit
+that are worth admitting". That is measurable with `replay.ts` before a single
+title is downloaded.
+
+---
+
 ## The second session, and what it settled (2026-08-15)
 
 The user re-ran his 200+ session on the exposure model, 416 swipes, same

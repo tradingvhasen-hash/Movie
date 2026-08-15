@@ -504,6 +504,87 @@ export function seenSignals(action: SwipeAction): Record<FacetKind, number> {
  * hundred examples is mostly fitting the deck's own sampling, so these are set
  * from what was measured and left alone.
  */
+/**
+ * How likely this viewer is to have watched a title, from the exposure tables.
+ *
+ * Separate from `facetScore` for one reason, and it is the whole point of the
+ * function: **what an unknown value means.**
+ *
+ * For taste, a token the tables have never seen contributes 0 — neutral, no
+ * opinion — and that is right, because taste is a preference and no evidence
+ * means no preference. For exposure it is badly wrong, and a ruler caught it:
+ * a viewer who answers "never heard of it" forty times in a row writes a
+ * negative against every token he was shown, so *every observed value is
+ * negative* while an unobserved one sits at 0 — above all of them. Titles made
+ * entirely of keywords he has never encountered therefore float to the top,
+ * and the deck served a 2,407-vote film to someone who had recognised nothing.
+ * The gate selects on this score, so "no information" was being read as "good".
+ *
+ * An absent value now falls back to the viewer's own rate for that facet — his
+ * base answer, whatever it is. A person who has watched nothing gets a
+ * negative for the unknown too, so the ordering collapses back to fame, which
+ * is exactly right: he has told us nothing to personalise with. A person who
+ * has watched most of what he was shown gets a positive.
+ *
+ * The AUC probe could not have found this and no amount of it would have. It
+ * scores cards the deck already chose to show, and this is a fault in how
+ * cards *outside* that set are ranked — the blind spot named in
+ * `SEEN_CONFIDENCE_K`'s comment, found by an instrument that walks the pool
+ * rather than one that grades a list.
+ */
+/**
+ * Per-facet base rates, cached against the tables they were computed from.
+ *
+ * This runs for every candidate in the pool on every re-rank, and the story
+ * table holds up to 1,400 values — summing it per candidate took the re-rank
+ * past its 40ms budget on the first try. `applySwipe` already replaces the
+ * touched facet objects rather than mutating them, so a key on the tables
+ * object is exactly a key on "the state of this viewer's knowledge", and the
+ * entry falls out of the map on its own when the next swipe lands.
+ */
+const seenBase = new WeakMap<FacetTable, number>();
+
+function baseRate(table: FacetTable): number {
+  const hit = seenBase.get(table);
+  if (hit !== undefined) return hit;
+  let net = 0;
+  let mass = 0;
+  for (const key in table) {
+    net += table[key][0];
+    mass += table[key][1];
+  }
+  // the viewer's rate for this facet overall, on the same shrunk scale a
+  // single token uses, so a fallback and a real reading are comparable
+  const base = mass > 0 ? net / (mass + TOKEN_K) : 0;
+  seenBase.set(table, base);
+  return base;
+}
+
+export function seenScore(tables: FacetTables, tokens: TitleTokens): number {
+  let weighted = 0;
+  let weightSum = 0;
+
+  for (const kind of FACET_KINDS) {
+    const list = tokens[kind];
+    if (list.length === 0) continue;
+    const table = tables[kind];
+    const base = baseRate(table);
+
+    let sum = 0;
+    for (const token of list) {
+      const entry = table[token];
+      sum += entry
+        ? (entry[0] / (entry[1] + TOKEN_K)) * rarityOf(kind, token)
+        : base;
+    }
+
+    weighted += SEEN_WEIGHTS[kind] * Math.tanh(sum / Math.sqrt(list.length));
+    weightSum += SEEN_WEIGHTS[kind];
+  }
+
+  return weightSum > 0 ? weighted / weightSum : 0;
+}
+
 export const SEEN_WEIGHTS: FacetWeights = {
   story: 0.6,
   genre: 1.4,

@@ -94,7 +94,8 @@ const answer = (t: Title): SwipeAction => {
 const OPENING = ["movie-138843", "movie-18785", "movie-38", "tv-48891"];
 const SWIPES = 250;
 const BLOCK = 50;
-const SEEDS = 10;
+const SEEDS =
+  typeof process !== "undefined" && process.env?.SEEDS ? Number(process.env.SEEDS) : 10;
 const blocks = SWIPES / BLOCK;
 
 const liked = new Array(blocks).fill(0);

@@ -1,0 +1,31 @@
+# Render blueprint — the server build, as opposed to the GitHub Pages demo.
+#
+# The static export on Pages ships the whole catalog to the browser, which is
+# fine at 5,555 titles (1.9 MB gzipped) and impossible past about fifteen
+# thousand. Running a real server removes that ceiling: the catalog and the
+# Discover ranking can move behind an endpoint whenever we choose to grow.
+#
+# Nothing here changes the engine. Measured by cloning the catalog to 50,000
+# titles, the deck's cost does not move at all (129ms → 106ms) because the
+# fame gate caps candidates regardless of catalog size; only Discover grows
+# (103ms → 376ms), and that is the part a server fixes.
+services:
+  - type: web
+    name: dhawq
+    runtime: node
+    plan: free
+    region: frankfurt
+    branch: claude/movie-swipe-app-0bvkc8
+    buildCommand: npm ci && npm run build
+    # next start reads PORT, which Render sets
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # Supabase is optional: /api/recommend answers 503 without it and the
+      # app falls back to ranking in the browser, which is what ships today.
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false

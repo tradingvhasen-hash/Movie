@@ -8,12 +8,15 @@ import {
   pruneFacets,
   revertFacets,
   facetSignals,
+  seenSignals,
   titleTokens,
   trackStreak,
   updateFacetWeights,
+  SEEN_WEIGHTS,
   type FacetTables,
   type FacetWeights,
   type StreakState,
+  type TitleTokens,
 } from "./facets";
 import type { SwipeAction, Title } from "../types";
 
@@ -76,6 +79,40 @@ export interface TasteProfile {
   seenCount: number;
   /** titles swiped away as unwatched */
   unseenCount: number;
+
+  /**
+   * A second set of tables answering a different question: **what does this
+   * person watch at all?**
+   *
+   * The deck's whole job is to show cards a viewer can rate, and a card they
+   * have never seen cannot be rated. Until now the engine answered "have you
+   * seen this?" with `recognizability(voteCount)` — a global vote count, one
+   * answer for the whole of humanity — and paid for it with a weight of 0.9
+   * falling to 0.55, larger than the taste term's entire range.
+   *
+   * That was never tested, and could not be: every ruler in this repo defines
+   * its simulated viewer as someone who knows the most-voted titles, so fame
+   * predicts recognition *by construction*. One real 449-swipe session settled
+   * it (`scripts/seen-model.py`), predicting the second half from the first:
+   *
+   *     fame — what shipped              AUC 0.453
+   *     his own genres + decade          AUC 0.707
+   *     both together                    AUC 0.704
+   *
+   * Below a coin, and adding nothing on top of the personal model. Broken
+   * down it inverts: over 50k votes → 13% watched, 8–20k → 37%, 3–8k → 41%.
+   * The most famous titles in the catalog were the ones he was *least* likely
+   * to have seen, because they are global blockbusters and he watches
+   * comedies.
+   *
+   * So every swipe-up, which used to be spent on a weak taste signal and
+   * nothing else, now also writes a full answer here. One viewer is enough to
+   * retire the claim that fame predicts recognition and enough to justify
+   * learning the answer per person; it is *not* enough to change a global
+   * constant, which is why the fame term stays and this is blended against it
+   * as the person's own evidence accumulates.
+   */
+  seenFacets: FacetTables;
 }
 
 export const LIKE_WEIGHT = 1.0;
@@ -100,6 +137,7 @@ export function emptyProfile(): TasteProfile {
     totalSwipes: 0,
     seenCount: 0,
     unseenCount: 0,
+    seenFacets: emptyFacets(),
   };
 }
 
@@ -113,6 +151,13 @@ export function normalizeProfile(p: Partial<TasteProfile> | undefined): TastePro
     ...base,
     ...p,
     facets: p.facets && typeof p.facets === "object" ? { ...base.facets, ...p.facets } : base.facets,
+    // absent from every profile written before this shipped; an empty set is
+    // the correct starting point and the fame prior carries alone until it
+    // fills, so nothing has to be migrated
+    seenFacets:
+      p.seenFacets && typeof p.seenFacets === "object"
+        ? { ...base.seenFacets, ...p.seenFacets }
+        : base.seenFacets,
     facetWeights:
       p.facetWeights && typeof p.facetWeights === "object"
         ? { ...base.facetWeights, ...p.facetWeights }
@@ -161,6 +206,9 @@ export function applySwipe(
   const next: TasteProfile = {
     ...profile,
     facets: pruneFacets(applyFacets(profile.facets, tokens, signals)),
+    // every action teaches the exposure model, including the one that teaches
+    // taste the least
+    seenFacets: pruneFacets(applyFacets(profile.seenFacets, tokens, seenSignals(action))),
     facetWeights: updateFacetWeights(
       profile.facetWeights,
       before.perKind,
@@ -219,6 +267,7 @@ export function revertSwipe(
   const next: TasteProfile = {
     ...profile,
     facets: revertFacets(profile.facets, tokens, signals),
+    seenFacets: revertFacets(profile.seenFacets, tokens, seenSignals(action)),
     // an undone swipe should not keep a theme benched
     streaks: { runs: {}, cooldown: profile.streaks.cooldown },
     totalSwipes: Math.max(0, profile.totalSwipes - 1),
@@ -269,6 +318,86 @@ export const TASTE_CONFIDENCE_K = 4;
 export function tasteConfidence(profile: TasteProfile): number {
   const evidence = profile.ratedSwipes + 0.45 * profile.unseenCount;
   return evidence / (evidence + TASTE_CONFIDENCE_K);
+}
+
+/* ── has this person watched this? ────────────────────────────────────── */
+
+/**
+ * Swipes before the viewer's own exposure model is trusted half as far as it
+ * ever will be.
+ *
+ * Set at 45 by analogy with taste — exposure has no rarity weighting, no
+ * learned facet importances and no streak detector, so let it move slowly —
+ * and then measured, which is the only reason it is not 45 now. Sweeping the
+ * blend weight directly against a real 449-swipe export (`seen-probe.ts`), AUC
+ * on everything the viewer had not swiped yet:
+ *
+ *     trained on    fame only   w=0.4   w=0.8   personal only
+ *      5 swipes       0.472     0.535   0.654       0.692
+ *     12              0.472     0.565   0.699       0.721
+ *     60              0.473     0.577   0.682       0.677
+ *    320              0.449     0.635   0.768       0.774
+ *
+ * More personal is better at *every* prefix, from the fifth swipe on. Genre
+ * carries it and a viewer's first few likes are already coherent, so the
+ * tables are informative long before they are large.
+ *
+ * 8, not the 4 the curve above argues for, and the reason is a thing that
+ * measurement cannot see. The AUC test ranks cards the deck actually showed
+ * this viewer; in production the term ranks the whole gate, most of which his
+ * tables have no data for at all. A title sharing no token with anything he
+ * has swiped scores exactly 0.5 — the neutral middle — so at full trust the
+ * unexplored majority of the catalog loses its ordering entirely. Keeping a
+ * real share on the prior early is what keeps that majority sorted sensibly
+ * while the tables are still thin. The cost is the gap between the w=0.4 and
+ * w=0.8 columns for the first twenty or so swipes; the alternative risks the
+ * region the ruler is blind to.
+ */
+export const SEEN_CONFIDENCE_K = 8;
+
+/**
+ * The most of the recognition term the personal model may ever take.
+ *
+ * Not 1, even though on the one viewer measured the global prior scored below
+ * a coin flip and added nothing on top of the personal model. Two reasons, and
+ * both are about what the data cannot tell us:
+ *
+ *   - The exposure tables can only learn from cards the deck chose to show,
+ *     and the deck chooses by fame. A viewer never shown an obscure title has
+ *     taught the model nothing about obscure titles, and the model does not
+ *     know the difference between "you skip these" and "you were never asked".
+ *   - It is one viewer. Someone whose watching genuinely tracks the
+ *     blockbuster list exists, and for them the prior is right.
+ *
+ * Holding a quarter of the term on the global prior costs little if the
+ * personal model is right and is the whole safety net if it is not.
+ */
+const SEEN_MAX_TRUST = 0.75;
+
+export function seenTrust(profile: TasteProfile): number {
+  const evidence = profile.totalSwipes;
+  return SEEN_MAX_TRUST * (evidence / (evidence + SEEN_CONFIDENCE_K));
+}
+
+/**
+ * How likely *this* viewer is to have watched a title, in [0,1], blending
+ * their own answers with the global fame prior by how many answers they have
+ * given.
+ *
+ * `fame` is passed in rather than recomputed so the caller keeps its one
+ * `recognizability(voteCount)` call per candidate — this runs on every card in
+ * the gate on every re-rank.
+ */
+export function watchLikelihood(
+  profile: TasteProfile,
+  tokens: TitleTokens,
+  fame: number
+): number {
+  const w = seenTrust(profile);
+  if (w <= 0) return fame;
+  // facetScore is [-1, 1]; a probability-shaped term is what the ranking adds
+  const personal = 0.5 + 0.5 * facetScore(profile.seenFacets, SEEN_WEIGHTS, tokens).total;
+  return (1 - w) * fame + w * personal;
 }
 
 /** Calibration ends once taste evidence exists, or enough cards were seen */

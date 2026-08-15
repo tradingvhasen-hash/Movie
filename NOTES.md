@@ -102,6 +102,137 @@ against the improved engine, not the old one.
 
 ---
 
+## Fame was never an answer to "have you seen this?" (2026-08-15)
+
+The deck's whole job is to show cards a viewer can rate, and a card they have
+never seen cannot be rated. Since the first commit the engine answered "have
+you seen this?" with `recognizability(voteCount)` — a global vote count, one
+answer for the whole of humanity — and paid `W_RECOGNITION` 0.9 falling to
+0.55 for it, a larger weight than the entire taste term's range.
+
+**It was never tested, and it could not be.** Every simulated viewer in this
+repo is *defined* as someone who knows the most-voted titles. Fame predicts
+recognition by construction in every instrument here. The rulers encoded the
+assumption they existed to check — the sixth time in this project that the
+ruler, not the engine, was the fault, and the deepest one.
+
+### What one real session says
+
+The user swiped 449 cards as himself: right for watched-and-liked, left for
+watched-and-disliked, up for never-watched — 167 watched, 37%. Exported from
+`/lab`, ids and actions only. `scripts/seen-model.py`, training on the first
+half and predicting the second:
+
+| predicting "has watched" | AUC |
+|---|---|
+| fame — what shipped | **0.453** |
+| his own genres + decade | **0.707** |
+| fame *and* his genres | 0.704 |
+
+0.5 is a coin. Fame carried **nothing**, and added nothing on top of the
+personal model. Without any model at all the inversion is visible:
+
+| votes | watched |
+|---|---|
+| over 50k | 13% |
+| 8–20k | 37% |
+| 3–8k | **41%** |
+
+The most famous titles in the catalog were the ones he was *least* likely to
+have seen. They are global blockbusters; he watches comedies. Comedy 57%
+against drama 20%.
+
+### What shipped
+
+A second set of facet tables, `seenFacets`, learning the exposure question
+from the same swipes: watched (liked **or** disliked) writes +1, not-seen
+writes −1, symmetric, no rarity weighting and no skip discount — unlike taste,
+both answers are equally certain. Fixed facet weights (`SEEN_WEIGHTS`), genre
+and era leading, because that is what the 449 swipes say carries it.
+
+`watchLikelihood(profile, tokens, fame)` blends the personal answer against
+the global prior by `seenTrust`, and the ranking multiplies **that** by the
+same untouched `W_RECOGNITION`. What changed is not the weight; it is that the
+number it multiplies is about this person instead of about the world.
+
+Every swipe-up now teaches something real. It used to be spent on a weak taste
+signal with genre zeroed — the softest evidence in the engine — while being
+the single most informative answer available to the question the engine
+actually needed.
+
+### Setting the blend, from the curve rather than by analogy
+
+`scripts/seen-probe.ts` replays a real export through `applySwipe` and scores
+the held-out remainder with the shipped `watchLikelihood` — the same function
+the deck calls. AUC on everything not yet swiped, sweeping the blend weight:
+
+| trained on | fame only | w=0.4 | w=0.8 | personal only |
+|---|---|---|---|---|
+| 5 swipes | 0.472 | 0.535 | 0.654 | **0.692** |
+| 12 | 0.472 | 0.565 | 0.699 | **0.721** |
+| 60 | 0.473 | 0.577 | **0.682** | 0.677 |
+| 320 | 0.449 | 0.635 | 0.768 | **0.774** |
+
+More personal is better at every prefix, from the **fifth swipe**. `K` was
+written at 45 by analogy with taste and is 8 because of this table. It is not 4
+— which the curve argues for — for a reason the ruler cannot see: the test
+ranks cards the deck actually showed him, while in production the term ranks
+the whole gate, most of which his tables have no data for. A title sharing no
+token scores exactly 0.5, so at full trust the unexplored majority of the
+catalog loses its ordering. `SEEN_MAX_TRUST` 0.75 holds a quarter on the prior
+permanently for the same reason, plus the obvious one: someone whose watching
+genuinely tracks the blockbuster list exists, and for them the prior is right.
+
+### What the rulers said, including the ones that cannot see it
+
+`scripts/long-session.ts`, 200 swipes, on-taste cards per fifty:
+
+| strategy | before | after |
+|---|---|---|
+| right / **up** (teaches the exposure model) | 32 16 10 5 = **63** | 33 15 12 **10** = **70** |
+| right / left (never says "not seen") | 33 26 20 13 = 92 | 33 27 16 15 = 91 |
+
+The swipe-up strategy is the user's own, and its late blocks doubled. The
+swipe-left strategy never writes a −1, so its exposure tables learn that
+everything is watched and the term is uninformative — and it moved by one
+card. **The ruler that can see the change shows the gain; the ruler that
+cannot shows nothing.** That is the shape a real effect makes.
+
+The rest, honestly:
+
+| ruler | before | after |
+|---|---|---|
+| deck (500 real libraries) | 32.0% | 31.4% |
+| deck, long tail only | 9.9% | **10.9%** |
+| Discover | 34.2% | 34.2% |
+| vibe, hard pairs | 60% | 60% |
+| `simulate` | 13/13 | 13/13 |
+| `drift` | 5/5 | 5/5 |
+| `cold-deck` | same targets missed | same, own-genre equal or better in 6 of 12 rows |
+
+The deck line dipping 0.6 points inside its own confidence interval
+[28.6–34.3] is **not evidence against this**, and it is not evidence for it
+either: `human-test` feeds the engine likes only, so its exposure tables see
+nothing but +1 and the term degenerates into a weak duplicate of the taste
+score. It is the same blindness as the paragraph above, and the long-tail line
+rising while the headline dips is what de-emphasising fame looks like.
+
+### The honest limit
+
+**One viewer.** Enough to retire the claim that fame predicts recognition, and
+enough to justify learning the answer per person — which is a mechanism, and
+is what shipped. **Not** enough to move a global constant, which is why
+`W_RECOGNITION` is untouched and the prior is still under the blend. The next
+person's export runs through the same two commands.
+
+And a bias this cannot escape on its own: the tables can only learn from cards
+the deck chose to show, and the deck chooses by fame. The model cannot tell
+"you skip these" from "you were never asked". Fixing that means a gate that is
+not an absolute fame window — the next thing to measure, not something to
+assume.
+
+---
+
 ## Rejecting a card erases the taste that chose it (2026-08-14)
 
 The user documented his own session in blocks of fifty, twice, with two

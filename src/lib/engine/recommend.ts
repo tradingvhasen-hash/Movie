@@ -6,7 +6,12 @@ import {
   titleTokens,
   type FacetTables,
 } from "./facets";
-import { isCalibrating, tasteConfidence, type TasteProfile } from "./taste";
+import {
+  isCalibrating,
+  tasteConfidence,
+  watchLikelihood,
+  type TasteProfile,
+} from "./taste";
 import type { Recommendation, Title } from "../types";
 
 export interface CandidateItem {
@@ -978,7 +983,13 @@ export function recommend(
     const fs = facetScore(facets, facetWeights, tokens, streaks.cooldown, totalSwipes);
 
     const q = qualityPrior(c.title.rating, c.title.voteCount);
-    const known = recognizability(c.title.voteCount);
+    /**
+     * Was the global vote count, for everyone, forever. It is now the *prior*
+     * this viewer's own answers are blended against — see `watchLikelihood`.
+     * The weight below is untouched: what changed is that the number it
+     * multiplies is about this person rather than about the world.
+     */
+    const known = watchLikelihood(profile, tokens, recognizability(c.title.voteCount));
     const score =
       W_QUALITY * q +
       wRecognition * known +

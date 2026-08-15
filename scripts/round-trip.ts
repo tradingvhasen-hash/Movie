@@ -48,6 +48,7 @@ function toRow(p: TasteProfile) {
   return {
     taste: `[${p.taste.join(",")}]`,
     facets: p.facets,
+    seen_facets: p.seenFacets,
     facet_weights: p.facetWeights,
     streaks: p.streaks,
     liked_sum: p.likedSum,
@@ -77,6 +78,7 @@ function fromRow(row: Record<string, unknown>): TasteProfile {
   return {
     ...base,
     facets: row.facets as TasteProfile["facets"],
+    seenFacets: (row.seen_facets as TasteProfile["seenFacets"]) ?? base.seenFacets,
     facetWeights: (row.facet_weights as TasteProfile["facetWeights"]) ?? base.facetWeights,
     streaks: (row.streaks as TasteProfile["streaks"]) ?? base.streaks,
     taste: vector(row.taste, base.taste),
@@ -175,6 +177,17 @@ add(
   "every learned value survives",
   facetTokens(back) === facetTokens(profile),
   `${facetTokens(back)} of ${facetTokens(profile)} values`
+);
+
+// the exposure tables are a second, independent model in the same row; a sync
+// that carried taste but dropped these would silently hand a returning viewer
+// back the global fame prior it took them a session to escape
+const seenTokens = (p: TasteProfile) =>
+  Object.values(p.seenFacets).reduce((n, table) => n + Object.keys(table).length, 0);
+add(
+  "the exposure model survives",
+  seenTokens(back) === seenTokens(profile) && seenTokens(profile) > 0,
+  `${seenTokens(back)} of ${seenTokens(profile)} values`
 );
 
 const benched = (p: TasteProfile) =>

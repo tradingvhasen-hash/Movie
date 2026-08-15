@@ -24,6 +24,7 @@ function toRow(userId: string, p: TasteProfile) {
     user_id: userId,
     taste: `[${p.taste.join(",")}]`,
     facets: p.facets,
+    seen_facets: p.seenFacets,
     facet_weights: p.facetWeights,
     streaks: p.streaks,
     liked_sum: p.likedSum,
@@ -54,6 +55,9 @@ function fromRow(row: Record<string, unknown>): TasteProfile | null {
   return {
     ...base,
     facets,
+    // rows written before the exposure model come back empty, which is
+    // exactly right: the fame prior carries alone until the tables refill
+    seenFacets: (row.seen_facets as TasteProfile["seenFacets"]) ?? base.seenFacets,
     facetWeights: (row.facet_weights as TasteProfile["facetWeights"]) ?? base.facetWeights,
     streaks: (row.streaks as TasteProfile["streaks"]) ?? base.streaks,
     taste: parseVector(row.taste, base.taste),

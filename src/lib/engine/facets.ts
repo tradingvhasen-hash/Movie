@@ -466,6 +466,53 @@ export function facetSignals(action: SwipeAction): Record<FacetKind, number> {
   return out;
 }
 
+/**
+ * The *other* question a swipe answers: have you watched this at all?
+ *
+ * Taste and exposure are different facts about the same card, and the tables
+ * above deliberately learn only the first. `facetSignals` scores a dislike at
+ * -1 and a skip at -0.35 with genre zeroed, because for taste "I have not seen
+ * it" is weak evidence and says nothing about a category. For exposure the
+ * arithmetic inverts exactly: a dislike is a *watched* title and belongs on
+ * the same side as a like, a skip is the strongest possible negative, and
+ * genre is the single most predictive facet there is.
+ *
+ * Measured on one viewer's 449 real swipes: comedy 57% watched against drama
+ * 20%, and the same file found the vote count that ships in its place scoring
+ * AUC 0.453 — below a coin flip, because the most famous titles in the catalog
+ * are global blockbusters and he watches comedies.
+ *
+ * Symmetric ±1 with no rarity asymmetry and no skip discount: unlike taste,
+ * both answers here are equally certain and equally cheap to give.
+ */
+export function seenSignals(action: SwipeAction): Record<FacetKind, number> {
+  const base = action === "not_seen" ? -1 : 1;
+  const out = {} as Record<FacetKind, number>;
+  for (const kind of FACET_KINDS) out[kind] = base;
+  return out;
+}
+
+/**
+ * Facet importances for the exposure tables.
+ *
+ * Fixed, not learned. `updateFacetWeights` moves the taste weights by
+ * rewarding whichever facet predicted the last like — a credit-assignment loop
+ * that needs a target to agree with. The exposure question has one too, but
+ * the same 449 swipes say the answer barely moves: genre and era carry it,
+ * story adds a little, and cast/director/language are close to noise at the
+ * volumes a single session produces. A learned weight on six facets from a
+ * hundred examples is mostly fitting the deck's own sampling, so these are set
+ * from what was measured and left alone.
+ */
+export const SEEN_WEIGHTS: FacetWeights = {
+  story: 0.6,
+  genre: 1.4,
+  cast: 0.5,
+  director: 0.4,
+  era: 1.1,
+  language: 0.8,
+};
+
 const round3 = (x: number) => Math.round(x * 1000) / 1000;
 
 /**

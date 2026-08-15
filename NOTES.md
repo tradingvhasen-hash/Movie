@@ -102,6 +102,62 @@ against the improved engine, not the old one.
 
 ---
 
+## The other thirty-nine Wikipedias, and why they do not save us (2026-08-15)
+
+The catalog gained 7,271 titles and **not one of them had a behavioural edge**:
+the distilled MovieLens graph covers the original 5,555, and the English
+clickstream does not know Egyptian or Tamil cinema exists. They were in the
+catalog and invisible to every signal that made this engine work.
+
+The reviewer found the material, and it is exactly the right shape: Wikipedia
+publishes the same monthly clickstream, same CC0 licence, for **forty
+languages** — `arwiki`, `hiwiki`, `tawiki`, `mlwiki`, `trwiki`, `fawiki` among
+them. Small, too: Arabic 12.5 MB, Hindi 1.6, Tamil 0.9, Malayalam 0.4, all ten
+together less than the English dump alone. `scripts/wiki-edges-multi.py`, one
+Wikidata query per language so nothing is matched by name, and deliberately no
+cross-language edges — an Arabic reader moving between two Egyptian films is a
+statement by that audience about that cinema, and routing it through English
+articles would replace it with what English readers think of Egyptian film.
+
+**Built, run, and it does almost nothing.** Click pairs found inside our
+catalog, per language:
+
+| | pairs | titles in catalog | rescued from having no graph |
+|---|---|---|---|
+| Arabic | 813 | 331 | **10** |
+| Hindi | 36 | 500 | **0** |
+| Tamil | 12 | 387 | 2 |
+| Malayalam | 0 | 293 | **0** |
+| Turkish | 1,435 | 578 | 4 |
+| Japanese | 3,546 | 730 | 0 |
+
+**61 titles in total.** The cause is not the mapping — 6,261 of our titles
+have an Arabic article, 1,775 have a Hindi one. It is traffic. Wikipedia's
+clickstream only publishes pairs above ten clicks in a month, and the small
+wikis do not have ten clicks between two film articles. The data is not thin,
+it is absent, and no threshold we control can recover it.
+
+The signal that *is* there is real — `3 Idiots → Rang De Basanti, Nanban, Like
+Stars on Earth, Jab Tak Hai Jaan` is a genuinely good Hindi neighbourhood, and
+`Parasite → Mulholland Drive, Blue Is the Warmest Color, Talk to Her` is a
+genuinely good one for Parasite. There is simply almost none of it.
+
+Kept, because it is additive and costs nothing: the merge only fills titles
+that have *no* graph at all and never displaces real co-watching. Measured on
+the same 60 people, harvest 243.1 against 243.8 — unchanged, as 61 titles out
+of 12,826 should be. On the user's own labels at 30 seeds the catalog now
+reads **87.6 against the old catalog's 82.7**.
+
+**So Arabic, Hindi, Tamil and Malayalam cinema are now in the catalog and still
+have no behavioural data.** They are reachable — the language door and the
+per-language floors did that — and they are ranked on metadata alone, which is
+the weakest of the three signals this engine has and the one measured worst.
+That is the honest state, and the next question is what could actually supply
+it: the reviewer's LLM-for-exposure bet is the cheapest untested candidate, and
+it is aimed at precisely this hole.
+
+---
+
 ## Two lines were keeping a language off the site (2026-08-15)
 
 The user named eleven titles he loves that the site had never once shown him.

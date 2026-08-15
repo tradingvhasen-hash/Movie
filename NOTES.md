@@ -102,6 +102,83 @@ against the improved engine, not the old one.
 
 ---
 
+## A grid asks a different question, and it is 2.2x faster (2026-08-15)
+
+The arithmetic the harvest ruler exposed: **a card asks about one title, so
+harvesting H titles takes at least H interactions.** No ranking, gate, graph or
+model beats that. 2,000 cards recovers 78% of a real history and costs 37
+minutes of uninterrupted swiping, with the last hundred cards yielding four
+titles each.
+
+A grid inverts the cost. Thirty posters, tap the ones you know: thirty answers
+for one screen, and a title the viewer has never heard of costs a glance rather
+than a swipe.
+
+### The fourth answer
+
+`SwipeAction` gains `seen` — watched, no verdict — because nobody rates thirty
+films by tapping and flattening a tap into `liked` would invent a preference
+the person never expressed. It writes to the exposure tables at full strength
+and **nothing** to the taste tables; it moves no facet importance, because
+there is no verdict for a facet to have predicted; and it ends a skip streak,
+because a tap is a person saying they know the thing. Thirty taps should teach
+the site thirty more titles you have seen and nothing at all about what you
+enjoy. Those are two questions and this answers one.
+
+### Measured, with the cost model taken from his own sessions
+
+1.1 seconds a card is his real rate across 1,288 swipes, not an assumption.
+A grid screen is charged 1.5s to take in plus 0.35s a poster.
+
+| | attention spent | titles harvested per hour |
+|---|---|---|
+| deck | 9.2 min | 1,667 |
+| **grid** | **3.4 min** | **3,656** |
+
+**2.2x.** 2,000 titles becomes seventeen minutes instead of thirty-seven. Not
+the 5x the reviewer estimated — his figure assumed 2.5s a card and the user is
+more than twice that fast — and not nothing.
+
+### And it refuted my own reasoning about the gate
+
+I argued that once a miss costs only a glance there is nothing left for a fame
+window to protect, so the grid should rank the whole catalog by
+`watchLikelihood`. Measured, wider pools are monotonically worse:
+
+| candidate pool | the deck's gate | 3x | 8x | whole catalog |
+|---|---|---|---|---|
+| titles per hour | **3,656** | 2,533 | 2,075 | 1,979 |
+
+A cheap miss is still a wasted tile. The gate is not only a cost control — it
+is a statement about which titles a person plausibly knows, and that stays true
+however little a wrong answer costs. The grid draws from exactly the deck's
+pool; only the *question* changes.
+
+Ranking a **deck** purely by exposure was also tried and was a wash (236.2
+against 236.9), because the recognition term already dominates the deck's
+blend. On a grid there is no such term to hide behind, so the objective has to
+be stated outright — which is why `watchedGrid` exists rather than a mode flag.
+
+### The cost of the bigger catalog, stated
+
+The re-rank went from a 24ms median to 33-38ms against a 40ms guard, and
+`simulate` now reports it as failing on some runs. Profiled at 120 swipes: the
+whole re-rank 58ms, of which the graph walk 21ms and the fame gate 8ms. The
+walk is cached now — it was recomputed after every swipe although the liked
+list only changes on a right-swipe, so two thirds of that work was thrown away.
+
+Sweeping `WALK_FRONTIER` at 150 / 300 / 600 gave 38.5 / 33.7 / 35.4ms — no
+ordering, because this machine varies by ~5ms between identical runs. There is
+no signal to tune against, so nothing was tuned. The guard is marginal rather
+than comfortable; it is measured off the swipe critical path, and if it ever
+matters on a real phone the answer is to ship less catalog rather than to shave
+the walk.
+
+**Still to build: the screen itself.** The engine, the fourth answer and the
+selection are in and measured; no user can see any of it yet.
+
+---
+
 ## The other thirty-nine Wikipedias, and why they do not save us (2026-08-15)
 
 The catalog gained 7,271 titles and **not one of them had a behavioural edge**:

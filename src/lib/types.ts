@@ -29,7 +29,22 @@ export interface Title {
   related?: string[];
 }
 
-export type SwipeAction = "liked" | "disliked" | "not_seen";
+/**
+ * The answers a person can give about a title.
+ *
+ * `seen` is the fourth and it exists for the grid. A card asks one question
+ * and gets a full verdict; a grid of thirty posters asks "which of these have
+ * you watched?" and gets thirty answers, and a tap on one of them means
+ * exactly *watched* — no opinion, because nobody is going to rate thirty
+ * films by tapping.
+ *
+ * That distinction has to reach the model, not be flattened on the way in.
+ * `seen` writes to the exposure tables at full strength and writes **nothing**
+ * to the taste tables, because inventing a preference the person never
+ * expressed is how a model learns something false. Which is the whole reason
+ * this is a separate value and not `liked` with a smaller weight.
+ */
+export type SwipeAction = "liked" | "disliked" | "not_seen" | "seen";
 
 export interface Swipe {
   titleId: string;

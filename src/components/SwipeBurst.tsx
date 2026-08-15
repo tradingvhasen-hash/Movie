@@ -33,6 +33,14 @@ function particleTargets(action: SwipeAction, i: number) {
         y: -160 - jitter * 100,
         rotate: 0,
       };
+    // a grid tap, which has no card to burst from — the switch stays
+    // exhaustive so a future action cannot silently fall through to undefined
+    case "seen":
+      return {
+        x: spread * 100,
+        y: -60 - jitter * 60,
+        rotate: spread * 20,
+      };
   }
 }
 

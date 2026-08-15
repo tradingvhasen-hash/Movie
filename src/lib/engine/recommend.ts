@@ -134,6 +134,30 @@ const RANK_SPREAD = 2.2;
 /** how many top-scored candidates the diversity pass considers */
 const FINALIST_POOL = 60;
 
+/**
+ * RE-RANK COST AFTER THE CATALOG GREW, stated rather than buried.
+ *
+ * The catalog went from 5,555 titles to 12,826 and a re-rank went from a 24ms
+ * median to roughly 33-38ms against a 40ms guard. Profiled, at 120 swipes:
+ *
+ *     the whole re-rank        58 ms
+ *     of which the graph walk  21 ms
+ *     of which the fame gate    8 ms
+ *
+ * The walk dominates and its cost barely moves with the number of liked
+ * titles, because `WALK_FRONTIER` caps hop two at 600 nodes however many seeds
+ * it started from. Caching it (below) removes the work on every swipe that is
+ * not a like, which is most of them.
+ *
+ * Sweeping the frontier at 150 / 300 / 600 produced 38.5 / 33.7 / 35.4ms —
+ * no ordering at all, because this machine's timing varies by about 5ms
+ * between identical runs. There is no signal here to tune against, so nothing
+ * was tuned. The guard is now marginal rather than comfortable, it is measured
+ * off the swipe critical path (the re-rank is already non-blocking), and if it
+ * ever matters on a real phone the answer is to ship less catalog, not to
+ * shave the walk.
+ */
+
 /* ── fame gate ─────────────────────────────────────────────────────────
    Obscure titles never enter the queue, at any stage. The tier widens as
    the user proves how much they watch, but even the widest tier is the top
@@ -950,7 +974,25 @@ const WALK_GAMMA = 0.6;
 /** nodes carried into the next hop — bounds the cost, changes nothing else */
 const WALK_FRONTIER = 600;
 
+/**
+ * The walk costs about 20ms on the current graph and is recomputed on every
+ * re-rank — but a re-rank happens after *every* swipe, and the liked list only
+ * changes on a right-swipe. Two thirds of the work was being thrown away.
+ *
+ * The list is append-only, so its length plus its last id identify it exactly;
+ * there is no need to hash the whole thing. Keyed on the pool as well, so a
+ * different catalog never reads another's answer.
+ */
+const walkCache = new WeakMap<
+  CandidateItem[],
+  { key: string; value: Map<string, CoWatch> }
+>();
+
 export function walkBonus(pool: CandidateItem[], liked: Title[]): Map<string, CoWatch> {
+  const key = `${liked.length}|${liked[liked.length - 1]?.id ?? ""}`;
+  const hit = walkCache.get(pool);
+  if (hit && hit.key === key) return hit.value;
+
   const graph = buildGraph(pool);
   const visits = new Map<string, CoWatch>();
   const seeds = new Set(liked.map((t) => t.id));
@@ -1034,6 +1076,7 @@ export function walkBonus(pool: CandidateItem[], liked: Title[]): Map<string, Co
     }
   }
 
+  walkCache.set(pool, { key, value: visits });
   return visits;
 }
 
@@ -1395,3 +1438,108 @@ export function calibrationDeck(
 }
 
 export { DIM, isCalibrating };
+
+/* ── the grid ──────────────────────────────────────────────────────────── */
+
+/**
+ * WHICH OF THESE HAVE YOU WATCHED?
+ *
+ * A different question from the deck's, and the reason a separate function
+ * exists rather than a mode flag.
+ *
+ * The deck asks one question per interaction and needs a full verdict back, so
+ * a card the viewer has never seen is a wasted swipe — which is the entire
+ * reason the fame gate exists, and the reason 902 comedies in this catalog
+ * were unreachable. The arithmetic underneath it is brutal and no model can
+ * beat it: **harvesting H titles takes at least H interactions.** Measured on
+ * real histories, 2,000 cards recovers 78% of a person's viewing — 37 minutes
+ * of uninterrupted swiping, and the last hundred cards yield four titles each.
+ *
+ * A grid inverts the cost. Thirty posters, tap the ones you know: thirty
+ * answers for one screen, and a title the viewer has never heard of costs a
+ * glance instead of a swipe. Measured against real histories with the time
+ * cost taken from the user's own 1,288 swipes (1.1s a card), that is
+ * **3,656 titles an hour against the deck's 1,667** — 2.2x, and 2,000 titles
+ * becomes seventeen minutes instead of thirty-seven.
+ *
+ * I ALSO CLAIMED THE GATE COULD GO, AND THAT WAS WRONG. The reasoning was that
+ * once a miss costs a glance there is nothing left for a fame window to
+ * protect, so the grid should rank the whole catalog. Measured, wider pools are
+ * monotonically worse:
+ *
+ *     candidate pool     the deck's gate    3x    8x    whole catalog
+ *     titles per hour              3,656  2,533  2,075          1,979
+ *
+ * A cheap miss is still a wasted tile. The gate is not only a cost control —
+ * it is a statement about which titles a person plausibly knows, and that
+ * remains true however little the wrong answer costs. So the grid draws from
+ * exactly the deck's pool and only the *question* changes.
+ *
+ * What it deliberately does not do is chase the taste score. The deck's blend
+ * is the right answer to "will you enjoy this"; here it would be actively
+ * wrong, because the most enjoyable title is often one the person has not seen
+ * yet and this screen is asking about the past. Measured on real histories,
+ * ranking a *deck* purely by exposure was a wash (236.2 against 236.9) — the
+ * recognition term already dominates there. On a grid there is no such term to
+ * hide behind, so the objective has to be stated outright.
+ *
+ * Spread across the languages the viewer watches, in proportion to how much
+ * they watch them, so an Arabic speaker's grid is not thirty English films.
+ */
+export function watchedGrid(
+  pool: CandidateItem[],
+  profile: TasteProfile,
+  opts: { excludeIds: Set<string>; count: number; seed?: number }
+): Title[] {
+  const { excludeIds, count } = opts;
+  const seed = opts.seed ?? 1;
+
+  const gated = fameGate(pool, fameTierSize(profile, "swipe"), profile.facets, profile);
+
+  const scored: { t: Title; w: number }[] = [];
+  for (const c of gated) {
+    if (excludeIds.has(c.title.id)) continue;
+    const w = watchLikelihood(
+      profile,
+      titleTokens(c.title),
+      recognizability(c.title.voteCount)
+    );
+    // a small deterministic wobble so two people with the same history do not
+    // get the same grid, and so a rebuild does not repeat the same thirty
+    scored.push({ t: c.title, w: w + JITTER * jitterFor(c.title.id, seed) });
+  }
+  scored.sort((a, b) => b.w - a.w);
+
+  /**
+   * Two of any one decade or language would make a screen of thirty read as a
+   * themed list rather than a memory test, and a memory test is what this is:
+   * the more different corners it touches, the more of a history one screen
+   * can reach. A cap rather than a quota, so it never has to invent structure
+   * when the viewer really is that narrow.
+   */
+  const perEra = Math.max(3, Math.round(count / 4));
+  const perLang = Math.max(4, Math.round(count / 3));
+  const eras = new Map<number, number>();
+  const langs = new Map<string, number>();
+  const out: Title[] = [];
+  const spare: Title[] = [];
+
+  for (const { t } of scored) {
+    if (out.length >= count) break;
+    const era = Math.floor(t.year / 10);
+    const lang = t.originalLanguage;
+    if ((eras.get(era) ?? 0) >= perEra || (langs.get(lang) ?? 0) >= perLang) {
+      if (spare.length < count) spare.push(t);
+      continue;
+    }
+    eras.set(era, (eras.get(era) ?? 0) + 1);
+    langs.set(lang, (langs.get(lang) ?? 0) + 1);
+    out.push(t);
+  }
+  // a narrow viewer fills from the overflow rather than getting a short screen
+  for (const t of spare) {
+    if (out.length >= count) break;
+    out.push(t);
+  }
+  return out;
+}

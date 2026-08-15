@@ -48,12 +48,28 @@ import {
   fameGate,
   fameTierSize,
   recommend,
+  watchedGrid,
   type CandidateItem,
 } from "../src/lib/engine/recommend";
 import { applySwipe, emptyProfile, type TasteProfile } from "../src/lib/engine/taste";
 import type { SwipeAction, Title } from "../src/lib/types";
 
 const CARDS = Number(process.env.CARDS ?? 500);
+/**
+ * `deck` asks one title at a time and gets a full verdict. `grid` shows
+ * GRID posters at once and gets "seen / not seen" for all of them.
+ *
+ * The comparison is only meaningful in *time*, because per interaction the
+ * grid is strictly worse — it collects no opinion. The cost model below is
+ * measured from the user's own three sessions rather than assumed.
+ */
+const MODE = process.env.MODE ?? "deck";
+const GRID = Number(process.env.GRID ?? 30);
+/** his measured swipe rate, from 1,288 real cards across three sessions */
+const SECONDS_PER_CARD = Number(process.env.SEC_CARD ?? 1.1);
+/** a screen costs a fixed beat to take in, plus a glance per poster */
+const GRID_FIXED = Number(process.env.GRID_FIXED ?? 1.5);
+const GRID_PER_TILE = Number(process.env.GRID_TILE ?? 0.35);
 const BLOCK = Number(process.env.BLOCK ?? 100);
 const LIMIT = Number(process.env.USERS ?? 60);
 /** how many of their favourites the opening grid collects, as the app does */
@@ -88,6 +104,7 @@ let totalHistory = 0;
 let totalCeiling = 0;
 let totalHarvest = 0;
 let ranOut = 0;
+let seconds = 0;
 
 for (const [, history] of users) {
   const seen = new Map<string, number>();
@@ -114,30 +131,42 @@ for (const [, history] of users) {
   let found = favourites.length;
   let cards = 0;
   while (cards < CARDS) {
-    const batch = recommend(pool, profile, {
-      excludeIds: shown,
-      count: 10,
-      seed: 7,
-      vectorFor: vf,
-      likedTitles: liked,
-      mode: "swipe",
-    });
+    const batch: Title[] =
+      MODE === "grid"
+        ? watchedGrid(pool, profile, { excludeIds: shown, count: GRID, seed: 7 })
+        : recommend(pool, profile, {
+            excludeIds: shown,
+            count: 10,
+            seed: 7,
+            vectorFor: vf,
+            likedTitles: liked,
+            mode: "swipe",
+          }).map((r) => r.title);
     if (batch.length === 0) {
       ranOut++;
       break;
     }
-    for (const rec of batch) {
+    if (MODE === "grid") seconds += GRID_FIXED + GRID_PER_TILE * batch.length;
+    for (const title of batch) {
       if (cards >= CARDS) break;
-      const rating = seen.get(rec.title.id);
+      const rating = seen.get(title.id);
+      // a grid tap says "watched" and nothing more; the deck gets a verdict
       const action: SwipeAction =
-        rating === undefined ? "not_seen" : rating >= 3.5 ? "liked" : "disliked";
+        rating === undefined
+          ? "not_seen"
+          : MODE === "grid"
+            ? "seen"
+            : rating >= 3.5
+              ? "liked"
+              : "disliked";
       if (rating !== undefined) {
         harvested[Math.floor(cards / BLOCK)]++;
         found++;
       }
-      if (action === "liked") liked.push(rec.title);
-      profile = applySwipe(profile, rec.title, vf(rec.title), action);
-      shown.add(rec.title.id);
+      if (action === "liked") liked.push(title);
+      if (MODE !== "grid") seconds += SECONDS_PER_CARD;
+      profile = applySwipe(profile, title, vf(title), action);
+      shown.add(title.id);
       cards++;
     }
   }
@@ -176,7 +205,9 @@ for (let i = 0; i < blocks; i++) {
 
 const pct = (a: number, b: number) => `${((a / b) * 100).toFixed(1)}%`;
 console.log(
-  `\n  HARVEST   ${avg(totalHarvest)} of ${avg(totalHistory)} films  ` +
+  `\n  ${MODE.toUpperCase()}, ${(seconds / n / 60).toFixed(1)} minutes of a person's attention each\n` +
+    `  RATE      ${((totalHarvest / seconds) * 3600).toFixed(0)} titles harvested per hour\n` +
+    `\n  HARVEST   ${avg(totalHarvest)} of ${avg(totalHistory)} films  ` +
     `(${pct(totalHarvest, totalHistory)} of a real history, in ${CARDS} cards)\n` +
     `  CEILING   ${avg(totalCeiling)} reachable inside the gate  ` +
     `(${pct(totalCeiling, totalHistory)} of it)\n` +

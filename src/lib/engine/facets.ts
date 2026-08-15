@@ -457,9 +457,15 @@ const SKIP_SCALE: Record<FacetKind, number> = {
 
 /** the evidence one swipe writes, per facet */
 export function facetSignals(action: SwipeAction): Record<FacetKind, number> {
+  const out = {} as Record<FacetKind, number>;
+  // "I watched it" carries no opinion, so it teaches taste nothing. Writing a
+  // small positive here would be inventing a preference nobody expressed.
+  if (action === "seen") {
+    for (const kind of FACET_KINDS) out[kind] = 0;
+    return out;
+  }
   const base =
     action === "liked" ? LIKE_SIGNAL : action === "disliked" ? DISLIKE_SIGNAL : SKIP_SIGNAL;
-  const out = {} as Record<FacetKind, number>;
   for (const kind of FACET_KINDS) {
     out[kind] = action === "not_seen" ? base * SKIP_SCALE[kind] : base;
   }
@@ -486,6 +492,7 @@ export function facetSignals(action: SwipeAction): Record<FacetKind, number> {
  * both answers here are equally certain and equally cheap to give.
  */
 export function seenSignals(action: SwipeAction): Record<FacetKind, number> {
+  // liked, disliked and a bare grid tap all mean "watched"; only not_seen does not
   const base = action === "not_seen" ? -1 : 1;
   const out = {} as Record<FacetKind, number>;
   for (const kind of FACET_KINDS) out[kind] = base;
@@ -693,7 +700,11 @@ export function updateFacetWeights(
   action: SwipeAction,
   ratedSwipes: number
 ): FacetWeights {
-  if (action === "not_seen" || ratedSwipes < WEIGHT_WARMUP) return weights;
+  // a grid tap carries no verdict, so there is nothing for a facet to have
+  // predicted correctly or wrongly — importance must not move on it
+  if (action === "not_seen" || action === "seen" || ratedSwipes < WEIGHT_WARMUP) {
+    return weights;
+  }
   const target = action === "liked" ? 1 : -1;
 
   const next = {} as FacetWeights;
@@ -766,6 +777,8 @@ export function trackStreak(
   action: SwipeAction,
   swipeClock: number
 ): { state: StreakState; benched: string[] } {
+  // any answer other than "never heard of it" ends a run of them — including a
+  // grid tap, which is a person saying they know the thing
   if (action !== "not_seen") {
     return { state: { runs: {}, cooldown: state.cooldown }, benched: [] };
   }

@@ -224,6 +224,21 @@ export function applySwipe(
     return next;
   }
 
+  /**
+   * A grid tap: watched, no verdict.
+   *
+   * It counts toward `seenCount` — which is what the fame ledger and the
+   * exposure model read — and stops there. No taste vector, no liked centroid,
+   * no `ratedSwipes`, because the person did not say they liked it. Thirty
+   * taps on a grid should make the site know thirty more titles you have seen
+   * and know nothing new about what you enjoy, and that is exactly right: the
+   * two questions are separate and this is the answer to only one of them.
+   */
+  if (action === "seen") {
+    next.seenCount = profile.seenCount + 1;
+    return next;
+  }
+
   next.taste = [...profile.taste];
   next.likedSum = [...profile.likedSum];
   next.dislikedSum = [...profile.dislikedSum];
@@ -275,6 +290,11 @@ export function revertSwipe(
 
   if (action === "not_seen") {
     next.unseenCount = Math.max(0, profile.unseenCount - 1);
+    return next;
+  }
+
+  if (action === "seen") {
+    next.seenCount = Math.max(0, profile.seenCount - 1);
     return next;
   }
 

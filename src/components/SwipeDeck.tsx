@@ -46,30 +46,33 @@ export default function SwipeDeck() {
   const [hintChecks, setHintChecks] = useState([false, false, false]);
   const [burst, setBurst] = useState<{ id: number; action: SwipeAction } | null>(null);
 
+  /**
+   * The card that flies off is the card that was answered — the same object,
+   * returned by the commit itself.
+   *
+   * This used to read `queue[0]` out of the render closure while the commit
+   * read the live queue. Two swipes inside one React batch see the same
+   * closure, so the second gesture animated the *first* card off a second
+   * time while recording a different one. On screen that is a card changing
+   * into another film mid-flight, which is exactly what the user described
+   * and I could not find until his recording was slowed to sixty frames.
+   */
   const handleSwipe = useCallback(
     (action: SwipeAction) => {
-      const top = queue[0];
       setForcedExit(null);
-      if (top) {
-        const at = Date.now();
-        setLeaving((l) => [...l, { title: top, action, at }]);
-        setTimeout(() => setLeaving((l) => l.filter((c) => c.at !== at)), 560);
-      }
-      swipeTop(action);
+      const top = swipeTop(action);
+      if (!top) return;
+      const at = Date.now();
+      setLeaving((l) => [...l, { title: top, action, at }]);
+      setTimeout(() => setLeaving((l) => l.filter((c) => c.at !== at)), 560);
       setBurst({ id: Date.now(), action });
       setTimeout(() => setBurst((b) => (b && Date.now() - b.id >= 950 ? null : b)), 1000);
     },
-    [swipeTop, queue]
+    [swipeTop]
   );
 
   // a button press is the same commit, just without a finger to lift
-  const trigger = useCallback(
-    (action: SwipeAction) => {
-      if (queue.length === 0) return;
-      handleSwipe(action);
-    },
-    [queue.length, handleSwipe]
-  );
+  const trigger = handleSwipe;
 
   /**
    * The swipe screen is exactly one viewport tall and must never scroll — an

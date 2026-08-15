@@ -102,6 +102,86 @@ against the improved engine, not the old one.
 
 ---
 
+## The deck was overwriting the question it had just asked (2026-08-16)
+
+The first recording showed a broken deck and I found three real faults in it
+(below). None of them was the one he was actually pointing at. He filmed it
+again — 1.55 seconds this time, only the moment it happens — and added the
+detail that closed it: **he had not flipped a single card. All of it was the
+fault.**
+
+At sixty frames a second the sequence is not ambiguous:
+
+| time | on screen |
+|---|---|
+| 0.22s | he swipes Kick-Ass 2 right |
+| 0.30s | Grown Ups settles on top, unanswered |
+| 0.42–0.60s | **two live cards drawn over each other** — Limitless fading in *in front of* Grown Ups, which is pushed to second place |
+| 0.63s | he swipes Limitless |
+| 0.70s | Grown Ups is on top again |
+| 1.02s | three Grown Ups cards on screen at once |
+
+Two full cards, both with their year badges and their details buttons, one
+fading in over the other. Not a fly-off copy — those carry no text. Two live
+cards, and the one he had been about to answer was shoved into second place by
+a card the deck had already dealt him.
+
+### The cause: a rebuild that installs a snapshot of the past
+
+`rebuild()` captured the top card, then — because Supabase is configured on the
+live site, which it is not in any of my local runs — went to `/api/recommend`
+and installed the answer when it came back. On mobile data that round trip is
+a few hundred milliseconds, and the head it put back was the head from *before*
+the round trip. By then the viewer had usually answered that card and moved on.
+
+So the deck re-dealt a card he had judged, `AnimatePresence` was handed a key
+it was still animating out, and both copies were drawn at once. Every symptom
+in the recording follows from those two lines.
+
+### How it was caught, after two probes that lied
+
+The first two versions of the probe read the top card as
+`document.querySelector('h2')`. That is wrong: an answered card stays mounted
+for the 520ms of its fly-off and sits *earlier* in the DOM than the live one.
+The probe reported "29 of 30 swipes dead" on a build where every swipe worked,
+and then "0 faults" on the build that had them. Both readings were the
+instrument, not the app. Recording it here because it is the fourth time in
+this project that the ruler was the broken thing.
+
+What finally worked was logging the install itself — what head it was about to
+put back, and what head was actually live at that instant:
+
+| | installs | installed a stale head |
+|---|---|---|
+| the build he filmed | 15 | **1** |
+| after the fix | 5 | **0** |
+
+The one stale install is visible in the log doing exactly what the video shows:
+the head it restores becomes the top card on the very next line, and the card
+that had been live is gone. On his phone — real network jitter, a real CPU, and
+a build where the rebuild ran after *every* swipe rather than every sixteenth —
+that rate is many times higher, which is why his 1.55 seconds contains four of
+them and my 50 swipes contain one.
+
+### The fix
+
+The head is read at install time and never captured earlier, answered titles
+are filtered out on the way in, and the queue is de-duplicated. The live top
+card can no longer be displaced by a rebuild, by construction.
+
+Two smaller things went with it. The fly-off copy took its title from
+`queue[0]` in the deck's render closure while the commit read the live queue —
+two swipes inside one React batch made them disagree, so the animation showed
+one film leaving while a different one was recorded. It now uses the title the
+commit returns. And the recommend endpoint, which answers 503 whenever the
+Supabase catalog is not seeded, was asked again on every rebuild; one failure
+is now enough to stop asking.
+
+Measured on a production build at 4× CPU with 400ms of endpoint latency, 60
+drag swipes 250ms apart: 2 cards re-dealt before, 0 after, twice each.
+
+---
+
 ## Three faults behind one word: "glitching" (2026-08-16)
 
 The user filmed it. Nineteen seconds, and it is unambiguous: cards frozen for

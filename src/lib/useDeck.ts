@@ -56,8 +56,19 @@ const RESERVE = 24;
  */
 const REFILL_AT = 8;
 
+/**
+ * Set once the cloud endpoint has failed, and never retried.
+ *
+ * It answers 503 whenever the Supabase catalog is not seeded, and the client
+ * cannot tell that from a network blip — so it asked again on every rebuild,
+ * paying a full round trip to learn the same thing. One failure is enough:
+ * the bundled catalog is larger than the seeded one anyway.
+ */
+let remoteOffline = false;
+
 /** cloud mode: fetch the next batch from the seeded TMDB catalog */
 async function fetchRemoteBatch(count: number): Promise<Title[] | null> {
+  if (remoteOffline) return null;
   const state = useDhawq.getState();
   const exclude = Object.keys(state.swipes);
   const likedIds = Object.values(state.swipes)
@@ -74,10 +85,14 @@ async function fetchRemoteBatch(count: number): Promise<Title[] | null> {
         count,
       }),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      remoteOffline = true;
+      return null;
+    }
     const data = (await res.json()) as { items: { title: Title }[] };
     return data.items.map((i) => i.title);
   } catch {
+    remoteOffline = true;
     return null;
   }
 }
@@ -107,6 +122,21 @@ function pendingVerdicts(exclude: Set<string>): Title[] {
   }
   // newest first: what you tapped a minute ago is easier to have an opinion on
   return out.reverse();
+}
+
+/**
+ * Titles that must never be dealt again, because the viewer has already told
+ * us what they think of them.
+ *
+ * A grid tap (`seen`) is deliberately *not* in here: it says "I watched it"
+ * and nothing more, so the deck still owes that title a verdict.
+ */
+function answeredIds(): Set<string> {
+  const out = new Set<string>();
+  for (const [id, sw] of Object.entries(useDhawq.getState().swipes)) {
+    if (sw.action !== "seen") out.add(id);
+  }
+  return out;
 }
 
 function computeLocalBatch(excludeExtra: string[] = []): Title[] {
@@ -176,21 +206,47 @@ export function useDeck() {
    * screen is preserved so it never swaps out from under the user's finger.
    */
   const rebuild = useCallback(() => {
-    const keepTop = queueRef.current.slice(0, 1);
-    const keepIds = keepTop.map((t) => t.id);
-
+    /**
+     * The head is read *here*, at install time, and never captured earlier.
+     *
+     * This is the bug the user filmed and I twice failed to find: cards that
+     * came back after being swiped away, and two posters drawn on top of each
+     * other. When Supabase is configured — which it is on the live site — a
+     * rebuild is not synchronous. It posts to `/api/recommend` and installs
+     * whatever comes back, which on mobile data is a few hundred milliseconds
+     * later. The old code captured the top card *before* that round trip and
+     * put it back at the front of the queue afterwards, by which time the
+     * viewer had usually answered it and moved on two cards.
+     *
+     * So the deck re-dealt a card the viewer had just judged, `AnimatePresence`
+     * saw a key it was still animating out, and both copies were drawn at once.
+     * Every symptom in the recording follows from those two lines.
+     *
+     * Measured on a production build, throttled to a phone and 400ms of
+     * latency: 8 of 40 swiped titles came back. Nine of 167 samples showed an
+     * already-answered card on top.
+     */
     const install = (fresh: Title[]) => {
-      const next = [...keepTop, ...fresh.filter((f) => !keepIds.includes(f.id))];
-      setQueue(next.slice(0, RESERVE));
+      const done = answeredIds();
+      const next = queueRef.current.filter((t) => !done.has(t.id)).slice(0, 1);
+      const taken = new Set(next.map((t) => t.id));
+      for (const t of fresh) {
+        if (done.has(t.id) || taken.has(t.id)) continue;
+        taken.add(t.id);
+        next.push(t);
+        if (next.length >= RESERVE) break;
+      }
+      setQueue(next);
+      queueRef.current = next;
     };
 
     if (isSupabaseConfigured()) {
       void fetchRemoteBatch(BATCH).then((remote) => {
-        install(remote && remote.length > 0 ? remote : computeLocalBatch(keepIds));
+        install(remote && remote.length > 0 ? remote : computeLocalBatch());
       });
       return;
     }
-    install(computeLocalBatch(keepIds));
+    install(computeLocalBatch());
   }, []);
 
   /** coalescing wrapper: many swipes in a row cost one rebuild */
@@ -216,10 +272,18 @@ export function useDeck() {
     };
   }, [rebuild]);
 
+  /**
+   * Answers the card that is on top *now* and returns it, so the caller never
+   * has to work out which card it just answered. The deck used to read
+   * `queue[0]` from its own render closure for the fly-off copy while this
+   * read `queueRef`, and two swipes inside one React batch made the two
+   * disagree — the animation showed one film leaving while a different one
+   * was recorded.
+   */
   const swipeTop = useCallback(
-    (action: SwipeAction) => {
+    (action: SwipeAction): Title | null => {
       const top = queueRef.current[0];
-      if (!top) return;
+      if (!top) return null;
       doSwipe(top, action);
       // advance immediately — the next card is already queued, so the
       // re-rank behind it is invisible
@@ -228,6 +292,7 @@ export function useDeck() {
       queueRef.current = rest;
       // only when we are running out, because a rebuild freezes the phone
       if (rest.length <= REFILL_AT) refill();
+      return top;
     },
     [doSwipe, refill]
   );

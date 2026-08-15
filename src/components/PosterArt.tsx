@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ClapperIcon, TvIcon } from "./ui/Icons";
 import { locale } from "@/lib/i18n";
 import type { Title } from "@/lib/types";
@@ -16,6 +16,18 @@ function hashCode(s: string): number {
   return Math.abs(h);
 }
 
+/**
+ * Posters this session has already displayed once.
+ *
+ * `img.complete` is not a reliable answer to "is this cached" at the moment a
+ * ref fires — a memory-cached image can still report false until the decode
+ * lands, which is a frame or two later and on a phone rather more. That is
+ * long enough for the deck's fly-off copy to paint the blue placeholder, so a
+ * card the viewer just swiped appeared to turn into a blank card on its way
+ * out. Remembering the URL ourselves is not a guess about the browser's cache.
+ */
+const displayed = new Set<string>();
+
 export default function PosterArt({
   title,
   className = "",
@@ -25,17 +37,22 @@ export default function PosterArt({
   className?: string;
   sizes?: string;
 }) {
+  const src = title.posterPath
+    ? `https://image.tmdb.org/t/p/w500${title.posterPath}`
+    : null;
   /**
-   * Starts visible when the browser already has the image.
-   *
-   * The generated artwork is the base layer and the real poster cross-fades in
-   * on decode, which is right for a first sight and wrong for a second one: the
-   * deck's fly-off copy re-mounts a poster that is already in cache, so it
-   * flashed the blue placeholder for a frame or two and the card appeared to
-   * *change into a different thing* on its way out. Visible in the user's
-   * recording as blue cards sliding across.
+   * Starts visible, and without a fade, when this poster has been on screen
+   * before. The cross-fade is right for a first sight and wrong for a second
+   * one: the deck's fly-off copy re-mounts a poster the viewer is already
+   * looking at, and fading it up from nothing shows the placeholder instead.
    */
-  const [shown, setShown] = useState(false);
+  const cached = useRef(src !== null && displayed.has(src)).current;
+  const [shown, setShown] = useState(cached);
+
+  function reveal() {
+    if (src) displayed.add(src);
+    setShown(true);
+  }
 
   const h = hashCode(title.id);
   const angle = 150 + (h % 60);
@@ -69,25 +86,26 @@ export default function PosterArt({
       </div>
 
       {/* real poster fades in over the art once it decodes */}
-      {title.posterPath && (
+      {src && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={`https://image.tmdb.org/t/p/w500${title.posterPath}`}
+          src={src}
           ref={(el) => {
             // already decoded from a previous mount — no fade, no placeholder
-            if (el?.complete && el.naturalWidth > 0) setShown(true);
+            if (el?.complete && el.naturalWidth > 0) reveal();
           }}
           alt={title.title[locale]}
           sizes={sizes}
-          loading="lazy"
-          decoding="async"
-          onLoad={() => setShown(true)}
+          loading={cached ? "eager" : "lazy"}
+          decoding={cached ? "sync" : "async"}
+          onLoad={reveal}
           onError={() => setShown(false)}
           style={{
             opacity: shown ? 1 : 0,
             transform: shown ? "scale(1)" : "scale(1.03)",
-            transition:
-              "opacity 0.55s cubic-bezier(0.22,1,0.36,1), transform 0.7s cubic-bezier(0.22,1,0.36,1)",
+            transition: cached
+              ? "none"
+              : "opacity 0.55s cubic-bezier(0.22,1,0.36,1), transform 0.7s cubic-bezier(0.22,1,0.36,1)",
           }}
           className="absolute inset-0 h-full w-full object-cover"
           draggable={false}

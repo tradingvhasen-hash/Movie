@@ -36,10 +36,88 @@ const OUT = process.env.CATALOG_OUT ?? "public/catalog.json";
  * bar because TV accumulates far fewer votes than film.
  */
 const MIN_VOTES: Record<TitleType, number> = { movie: 1000, tv: 400 };
+
+/**
+ * Fame floors per original language — because a vote count is an English
+ * scale, not a measure of how many people saw something.
+ *
+ * The single floor above was set to keep the deck recognisable, and for
+ * English it does. Measured against TMDB itself, here is what it does to
+ * everyone else — films at or above each floor, across the whole of TMDB:
+ *
+ *     language     >=1000 (the floor)    >=100    >=20
+ *     Arabic                        1       20      258
+ *     Hindi                         6      299    1,163
+ *     Tamil                         0       29      376
+ *     Malayalam                     0       10      291
+ *     Turkish                       1      102      609
+ *
+ * **There is one Arabic film in existence above our floor.** Not
+ * under-represented — arithmetically impossible, on a product whose first
+ * language is Arabic. An Egyptian film fifty million people watched carries
+ * perhaps eighty TMDB votes, because TMDB's voters are overwhelmingly Western.
+ * The catalog shipped `en 4,814 · ja 237 · hi 6 · ar 2`.
+ *
+ * So the floor becomes relative to each language's own audience on TMDB. This
+ * is the same correction `fameLists` already makes between film and
+ * television, for the same reason and with the same shape: the numbers are
+ * only comparable inside their own scale.
+ *
+ * Adding these titles is only half the fix. At 300 votes an Arabic film ranks
+ * near 4,000th globally and the gate would never admit it, so `fameGate` has
+ * to rank within language too — the two changes are useless apart.
+ */
+const LANG_FLOORS: Record<string, number> = {
+  en: 1000,
+  ja: 300,
+  ko: 200,
+  es: 200,
+  fr: 200,
+  it: 150,
+  de: 150,
+  zh: 150,
+  pt: 100,
+  ru: 100,
+  hi: 50,
+  tr: 40,
+  th: 40,
+  sv: 40,
+  da: 40,
+  no: 40,
+  nl: 40,
+  pl: 40,
+  id: 30,
+  fa: 25,
+  ar: 20,
+  ta: 20,
+  te: 20,
+  ml: 20,
+  kn: 20,
+  ur: 20,
+  he: 20,
+};
+/** how many titles to take per non-English language, best-known first */
+const PER_LANG = Number(process.env.PER_LANG ?? 400);
+/** languages with no entry above are still allowed in, just not sought out */
+const DEFAULT_FLOOR = 150;
 const TODAY = new Date().toISOString().slice(0, 10);
 
-/** not narrative works — they pollute taste vectors and the swipe deck */
-const EXCLUDED_GENRES = new Set(["news", "talk", "reality", "soap"]);
+/**
+ * Not narrative works.
+ *
+ * `talk` and `news` used to be here, on the reasoning that a chat show is not
+ * a story and would pollute the taste vectors. That reasoning was about
+ * *recommending*, and the product's actual goal is for a person to get
+ * everything they have ever watched into the site. The user named four titles
+ * he loves and could never find: Key & Peele, The Daily Show, The Tonight
+ * Show, Old Dads. Three were excluded by this line or the floor above, and a
+ * whole way of watching — late-night, sketch, stand-up — was missing because
+ * of a definition of "narrative" nobody asked for.
+ *
+ * `reality` and `soap` stay out: hundreds of near-identical episodes-as-series
+ * that would swamp the deck without telling us anything.
+ */
+const EXCLUDED_GENRES = new Set(["reality", "soap"]);
 /** valid catalog entries, but poor signals for cold-start calibration */
 const NON_CALIBRATION_GENRES = new Set(["documentary"]);
 const MAX_OVERVIEW = Number(process.env.MAX_OVERVIEW ?? 200);
@@ -138,7 +216,45 @@ async function collectIds(type: TitleType, want: number): Promise<number[]> {
     }
   }
   console.log(`  ${type}: ${ids.size} ids after lists`);
-  return [...ids].slice(0, want);
+
+  /**
+   * A pass per language, because the global one cannot reach them.
+   *
+   * `sort_by=vote_count.desc` over the whole corpus is an English ranking:
+   * every page of it is English until far past our target, so the loop above
+   * fills up and stops before a single Arabic or Tamil title appears. Asking
+   * each language separately, best-known first, is the only way they enter —
+   * and it keeps the "most recognisable first" principle intact, just applied
+   * inside the audience that would recognise them.
+   */
+  const before = ids.size;
+  for (const [lang, langFloor] of Object.entries(LANG_FLOORS)) {
+    if (lang === "en") continue;
+    const floorFor = type === "tv" ? Math.round(langFloor * 0.4) : langFloor;
+    let added = 0;
+    for (let page = 1; page <= 20 && added < PER_LANG; page++) {
+      const data = await tmdb(`/discover/${type}`, {
+        page: String(page),
+        sort_by: "vote_count.desc",
+        with_original_language: lang,
+        "vote_count.gte": String(floorFor),
+        [`${dateField}.lte`]: TODAY,
+      });
+      const results = data.results ?? [];
+      for (const r of results) {
+        if (added >= PER_LANG) break;
+        if (!ids.has(r.id)) {
+          ids.add(r.id);
+          added++;
+        }
+      }
+      if (results.length === 0 || page >= (data.total_pages ?? 1)) break;
+    }
+    if (added > 0) console.log(`    ${type}/${lang}: +${added} (floor ${floorFor})`);
+  }
+  console.log(`  ${type}: ${ids.size} ids (+${ids.size - before} from language passes)`);
+
+  return [...ids];
 }
 
 function clip(text: string, max: number): string {
@@ -159,7 +275,12 @@ async function fetchTitle(type: TitleType, id: number): Promise<Title | null> {
     const released: string | undefined =
       type === "movie" ? d.release_date : d.first_air_date;
     const year = Number(released?.slice(0, 4));
-    if (!titleEn || !year || (d.vote_count ?? 0) < MIN_VOTES[type]) return null;
+    const lang: string = d.original_language ?? "en";
+    const floor =
+      type === "tv"
+        ? Math.round((LANG_FLOORS[lang] ?? DEFAULT_FLOOR) * 0.4)
+        : LANG_FLOORS[lang] ?? DEFAULT_FLOOR;
+    if (!titleEn || !year || (d.vote_count ?? 0) < floor) return null;
     if (d.adult) return null;
     // TMDB popularity spikes for unreleased titles; asking "have you watched
     // this?" about a film that isn't out yet is nonsense, so drop them

@@ -102,6 +102,107 @@ against the improved engine, not the old one.
 
 ---
 
+## Two lines were keeping a language off the site (2026-08-15)
+
+The user named eleven titles he loves that the site had never once shown him.
+Four were not in the catalog at all, and they were not obscure: Key & Peele,
+The Daily Show, The Tonight Show, Old Dads. He also said he likes Indian and
+Arabic films and the site behaves as though they do not exist.
+
+It behaves that way because they did not. `en 4,814 · ja 237 · hi 6 · ar 2` —
+**two Arabic titles on a product whose first language is Arabic.**
+
+### The cause, measured against TMDB itself
+
+`MIN_VOTES = { movie: 1000, tv: 400 }`, one global floor. Films at or above it,
+across the whole of TMDB:
+
+| language | ≥1000 (our floor) | ≥100 | ≥20 |
+|---|---|---|---|
+| Arabic | **1** | 20 | 258 |
+| Hindi | 6 | 299 | 1,163 |
+| Tamil | **0** | 29 | 376 |
+| Malayalam | **0** | 10 | 291 |
+| Turkish | 1 | 102 | 609 |
+
+**There is one Arabic film in existence above our floor.** Not
+under-represented — arithmetically impossible. TMDB's voters are overwhelmingly
+Western, so a vote count is an English scale: an Egyptian film fifty million
+people watched carries perhaps eighty votes. This is the same mistake the code
+already fixed once between film and television, made again one axis over.
+
+The second line was `EXCLUDED_GENRES = {news, talk, reality, soap}`, written
+because a chat show is not a story and would pollute the taste vectors. Sound
+reasoning about *recommending*, and wrong about the actual goal: The Daily Show
+carries 650 votes, well clear of the floor, and was excluded by definition.
+
+### What shipped
+
+Per-language floors, and a language pass per language because
+`sort_by=vote_count.desc` over the whole corpus is an English ranking that
+fills up before a single Arabic title appears. `reality` and `soap` stay out.
+
+| | before | after |
+|---|---|---|
+| Arabic | 2 | **331** |
+| Hindi | 6 | **500** |
+| Tamil | 0 | **387** |
+| Malayalam | 0 | **293** |
+| Turkish | 7 | **578** |
+| Persian | 1 | **117** |
+| Japanese · Korean · Spanish | 237 · 80 · 109 | 730 · 469 · 636 |
+| **total** | 5,555 | **12,826** |
+
+Eight of his eleven named titles are now present. The three still missing —
+Old Dads (480 votes), The Tonight Show (382), Key & Peele (252) — are English
+titles under the English floor, and lowering that is a separate decision with
+its own measurement.
+
+### The gate fix, and the version of it that was wrong
+
+Adding the titles is half the job: at 300 votes an Arabic film ranks near
+global 8,000 and the gate ends around 1,700, so it would never be offered.
+
+**Tried first: rank every title by its percentile within its own language.** The
+exact analogue of the film/TV split, and it looks right. Measured, absolute
+harvest fell **16%** — because the gate's ~900 slots then split across 27
+languages *for everybody*, including the viewer who only watches English. It
+hands every new person a deck proportional to the **catalog's** languages
+instead of to **theirs**, which is the same class of error as answering "have
+you seen this?" with a global vote count. Reverted.
+
+What shipped instead is a **door**: the per-language fame lists exist, and the
+gate opens one into a language only once the viewer's exposure tables show they
+watch it. A new account gets the global fame order unchanged. The door widens
+with the evidence, and `watchLikelihood` still decides what comes through it.
+
+### And a false alarm worth recording
+
+The first comparison said the new catalog was 20% worse. It was not the
+catalog: the shipped `public/catalog.json` carries the distilled EASE and
+Wikipedia graph, applied *after* the build by `apply-edges.ts`, and the fresh
+build had only raw TMDB links — 6.4 per title against 40.6. I nearly threw out
+a good catalog on that number.
+
+| same 60 people, 500 cards | harvest |
+|---|---|
+| old catalog, 5,555 | 245.2 |
+| new catalog, raw | 195.7 |
+| new catalog + the graph | **243.8** |
+
+**No regression, with 7,271 more titles and whole categories that did not
+exist.** `simulate` 12/13 (the same pre-existing failure), `vibe` 60%
+unchanged, and `replay` — the user's own labels — **82.7 → 94.4**.
+
+The cost is real and should be stated: the download goes from 1.78 MB gzipped
+to 3.33 MB. And 7,271 of the new titles have no behavioural edges at all,
+because the distilled graph only covers the original 5,555. That is the next
+piece of work, and the reviewer found the material for it: Wikipedia publishes
+clickstreams for **40 languages**, `arwiki` and `hiwiki` and `tawiki` among
+them, all CC0 — behavioural data for exactly the cinema just added.
+
+---
+
 ## The first instrument that measures the actual goal (2026-08-15)
 
 The user stated the goal plainly, and it is not the one anything here was

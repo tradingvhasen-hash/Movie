@@ -257,6 +257,30 @@ export function fameTierSize(profile: TasteProfile, mode: RankMode = "swipe"): n
  */
 const fameOrder = new WeakMap<CandidateItem[], { movie: CandidateItem[]; tv: CandidateItem[] }>();
 
+/**
+ * Fame, and the second scale it is blind to.
+ *
+ * The paragraph above explains why a vote count cannot be compared between
+ * film and television. The identical thing is true of language: TMDB's voters
+ * are overwhelmingly Western, so a vote count is an English scale. An Egyptian
+ * film fifty million people watched carries perhaps eighty votes; a mid-tier
+ * American comedy carries three thousand. Ranked together, every non-English
+ * title sorts below every English one and the gate never reaches it.
+ *
+ * TRIED THE OBVIOUS FIX AND IT WAS WRONG. Ranking every title by its
+ * percentile *within its own language* is the exact analogue of the film/TV
+ * split and it looks right on paper. Measured, absolute harvest fell 16% —
+ * because the gate's ~900 slots then get split across 27 languages for
+ * everybody, including the viewer who only watches English. It hands every new
+ * person a deck proportional to the **catalog's** languages instead of to
+ * **theirs**, which is the same class of error as answering "have you seen
+ * this?" with a global vote count.
+ *
+ * So the language lists are built here but not merged. `fameGate` opens a door
+ * into them only for languages the viewer has shown they watch — see
+ * `languageDoor`. A new account gets the global fame order unchanged, which is
+ * exactly today's behaviour, and the door opens on evidence.
+ */
 function fameLists(pool: CandidateItem[]) {
   let lists = fameOrder.get(pool);
   if (!lists) {
@@ -268,6 +292,54 @@ function fameLists(pool: CandidateItem[]) {
     fameOrder.set(pool, lists);
   }
   return lists;
+}
+
+/** per-language fame order, built once per pool, read only through the door */
+const langOrder = new WeakMap<CandidateItem[], Map<string, CandidateItem[]>>();
+
+function languageLists(pool: CandidateItem[]): Map<string, CandidateItem[]> {
+  let lists = langOrder.get(pool);
+  if (!lists) {
+    lists = new Map();
+    for (const c of pool) {
+      const key = c.title.originalLanguage;
+      const list = lists.get(key);
+      if (list) list.push(c);
+      else lists.set(key, [c]);
+    }
+    for (const list of lists.values()) {
+      list.sort((a, b) => b.title.voteCount - a.title.voteCount);
+    }
+    langOrder.set(pool, lists);
+  }
+  return lists;
+}
+
+/**
+ * Which languages this viewer actually watches, and how deep to go in each.
+ *
+ * Read from the exposure tables rather than the taste tables, because the
+ * question is "have you seen it", not "did you like it" — someone can watch a
+ * great deal of Hindi cinema and rate most of it badly, and they should still
+ * be asked about Hindi films.
+ *
+ * English needs no door: it is already the whole of the global fame order.
+ * Everything else is invisible without one, which is the point.
+ */
+const LANG_DOOR_MASS = 2;
+
+function languageDoor(profile: TasteProfile | undefined): Map<string, number> {
+  const out = new Map<string, number>();
+  if (!profile) return out;
+  const table = profile.seenFacets.language;
+  for (const lang of Object.keys(table)) {
+    if (lang === "en") continue;
+    const [net, mass] = table[lang];
+    if (mass < LANG_DOOR_MASS || net <= 0) continue;
+    // share of the door proportional to how consistently they have seen it
+    out.set(lang, Math.min(1, net / mass));
+  }
+  return out;
 }
 
 /**
@@ -451,9 +523,39 @@ export function fameGate(
   // zero when the viewer has taught us nothing, so the work is skipped
   // entirely on the first cards rather than computed and thrown away
   const personal = profile && seenTrust(profile) > 0 ? profile : null;
+  const door = languageDoor(profile);
+  const langs = door.size > 0 ? languageLists(pool) : null;
+
   const reorder = (list: CandidateItem[], keep: number) => {
     if (!personal || keep >= list.length) return list.slice(0, keep);
     const window = list.slice(0, Math.min(list.length, Math.round(keep * GATE_WIDTH)));
+
+    /**
+     * The door: the best-known titles of the languages this viewer watches,
+     * added to the window so `watchLikelihood` can rank them against the rest.
+     *
+     * Without this they are unreachable by arithmetic — an Arabic film sits
+     * near global rank 8,000 and the window ends at 2,700. With it they are
+     * merely *candidates*, and the exposure model decides, which is the whole
+     * difference between this and the version that cost 16% of harvest.
+     */
+    if (langs) {
+      const kind = list === fameLists(pool).tv ? "tv" : "movie";
+      const seen = new Set(window.map((c) => c.title.id));
+      for (const [lang, strength] of door) {
+        const src = langs.get(lang);
+        if (!src) continue;
+        let taken = 0;
+        const room = Math.round(keep * strength);
+        for (const c of src) {
+          if (taken >= room) break;
+          if ((c.title.type === "tv") !== (kind === "tv")) continue;
+          if (seen.has(c.title.id)) continue;
+          window.push(c);
+          taken++;
+        }
+      }
+    }
     const scored = window.map((c) => ({
       c,
       w: watchLikelihood(

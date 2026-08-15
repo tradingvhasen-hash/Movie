@@ -202,6 +202,61 @@ way `vibe-pairs.ts` defines its pairs, rather than by the engine grading itself.
 **Two hypotheses, both mine, both measured, both wrong.** The collapse is real
 and reproduced; its cause is still open.
 
+### Fame does not predict what a person has watched (2026-08-14)
+
+The first real ground truth this project has ever had. A user swiped 449 cards
+using the gestures exactly as designed — right for watched and liked, left for
+watched and not liked, up for **not watched, however famous** — and exported
+them from `/lab`. 167 watched, 282 not: a 37% recognition rate.
+
+The deck's whole job is to show titles a viewer has seen, because a card they
+have not seen cannot be rated. The engine answers "have you seen this?" with
+`recognizability(voteCount)` — a global vote count, one answer for all of
+humanity — weighted 0.9 falling to 0.55, a range larger than the taste term's
+entire spread.
+
+**Measured on his session, that answer is a coin flip.** Trained on his first
+224 swipes, tested on the next 225:
+
+| predicting "has watched" | AUC |
+|---|---|
+| **fame — what ships today** | **0.453** |
+| his own genres + decade | **0.707** |
+| fame *and* his genres | 0.704 |
+
+Fame carries nothing, and adds nothing on top of a personal model. The
+inversion is visible without any model at all:
+
+| | watched |
+|---|---|
+| over 50k votes | **13%** |
+| 8–20k | 37% |
+| 3–8k | **41%** |
+
+**The most famous titles in the catalog are the ones he was least likely to
+have seen.** They are global blockbusters; he watches comedies. By genre the
+spread is 57% for comedy against 20% for drama — the thing the facet tables
+already track, and the thing the fame term overrides.
+
+**And this exposes the deepest ruler fault yet.** Every instrument here defines
+its simulated viewer as *someone who knows the most-voted titles*
+(`deck-drift.ts`, `cold-deck.ts`, the fame gate's whole justification). Fame
+predicts recognition **by construction** in all of them. That is why sweeping
+the recognition weight measured null twice today: the rulers cannot see a
+change to an assumption they are built on.
+
+Fifth time an instrument has been the fault, and the first time the fix is not
+a better simulation but a real person's data.
+
+**What this does and does not license.** It retires the claim that fame
+predicts recognition, and it justifies learning the answer per person — the
+machinery already exists, since the facet tables would only need a second set
+of counters keyed on watched/not-watched rather than liked/disliked. It does
+*not* license changing a global constant on n=1. `scripts/seen-model.py` runs
+the same test on any future export in one command.
+
+---
+
 ### Where the remaining decline actually comes from (2026-08-14)
 
 Third logged session, after the graph weight went to 0.8:

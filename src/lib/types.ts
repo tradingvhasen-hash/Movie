@@ -15,6 +15,18 @@ export interface Title {
   /** TMDB vote average 0-10 */
   rating: number;
   voteCount: number;
+  /**
+   * How widely this was actually watched by its own audience, 0..1, estimated
+   * once offline by a language model (`scripts/llm-reach.py`).
+   *
+   * The prior the engine reaches for when a person has told it nothing. It
+   * replaces `recognizability(voteCount)`, which measured AUC 0.500 against a
+   * real viewer's answers — a coin flip — because a TMDB vote count is a
+   * survey of Western film enthusiasts and cannot see that fifty million
+   * people watched an Egyptian film. Absent for titles the run did not reach,
+   * where the vote count is still used.
+   */
+  reach?: number;
   popularity: number;
   posterPath?: string | null;
   backdropPath?: string | null;

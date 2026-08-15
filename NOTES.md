@@ -102,6 +102,81 @@ against the improved engine, not the old one.
 
 ---
 
+## A better prior that the engine cannot use (2026-08-15)
+
+The catalog gained 7,271 titles with no behavioural data of any kind — the
+multi-language clickstreams rescued 61 — so they are ranked on metadata and a
+prior. The prior is `recognizability(voteCount)`, and a TMDB vote count is a
+survey of Western film enthusiasts: an Egyptian film fifty million people
+watched carries eighty votes. Three paid experiments have asked a model about
+*taste*; this asked about **exposure**, which is world knowledge rather than a
+claim about art.
+
+### In isolation it is clearly better
+
+`scripts/llm-exposure.py`, on the user's 526 real labels split by time:
+
+| | AUC |
+|---|---|
+| global vote count, what ships | **0.500** |
+| the model, per title | **0.639** |
+| his own genres + decade | 0.737 |
+| 20% model blended into his own | **0.750** |
+
+And the finding that made it look shippable: **the model scores 0.639 whether
+or not it is told whose history it is looking at.** Told his tastes, told
+nothing — identical. So it is not personalisation, it is a fact about the
+title, computable once offline instead of an API call per screen forever.
+
+Model choice measured rather than assumed: Opus 0.639, Sonnet 4.6 0.624, Haiku
+4.5 0.593. `scripts/llm-reach.py` then scored the catalog — **11,880 of
+12,826**, stopping when the API credit ran out. The 946 missing skew Malayalam,
+Tamil and Arabic, which is the worst possible place for a gap.
+
+### End to end it buys nothing
+
+Shipped raw first, and it cost 40% of the real-label ruler — 88.0 to 52.5. Not
+the ordering, which is what improved: the *distribution*. Median reach is 0.14
+against the old prior's 0.583, and the score computes `wRecognition * known`
+with the weight near 0.9, so substituting it silently divides the whole
+recognition term by three and hands the ranking to taste and quality.
+
+Fitted a power curve so reach's 10th, 50th and 90th percentiles land on the old
+prior's, leaving the ordering untouched. Then swept the blend:
+
+| weight | 0 | 0.25 | 0.35 | 0.5 | 1 |
+|---|---|---|---|---|---|
+| harvest | **243.1** | 240.7 | 241.8 | 237.6 | 229.7 |
+| his labels | 87.6 | 89.4 | **92.3** | 84.5 | 62.9 |
+
+The two rulers disagree in opposite directions and both moves sit inside their
+own noise. Ordering the **gate** by reach instead of votes — the place it
+should matter most, since that is what puts an Egyptian film at rank 8,000 —
+changed harvest by nothing at all.
+
+### Why, and the lesson
+
+`recognizability` is not only an exposure prior in this engine. The gate ranks
+by vote count, the tier ledger counts against it, the quality prior correlates
+with it, and every constant around it was fitted with it in place. **The AUC
+test isolated one of its four jobs and improved that one.** A term measured
+better at the job you asked about can still be worse at the job it is doing.
+
+Default is 0. The data is kept in `.cache/reach.json`, the loader is
+best-effort, and `REACH=0.35 npm run replay` re-measures in one command. It is
+**not** shipped to the browser — 55 KB for a term weighted zero is 55 KB
+wasted.
+
+### What would make it pay
+
+Nothing here tests it on the case it was bought for. This viewer's labelled
+history is almost entirely English-language film, so the measurement above says
+nothing about whether reach helps an Arabic speaker find Egyptian cinema — the
+one place the vote count is not merely weak but structurally blind. That needs
+labels from someone whose history is not English, and we have none.
+
+---
+
 ## The screen (2026-08-15)
 
 `/seen` exists. Thirty posters, tap what you have watched, commit, next screen.

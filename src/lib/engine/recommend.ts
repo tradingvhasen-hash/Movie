@@ -1,4 +1,4 @@
-import { cosine, qualityPrior, recognizability, DIM } from "./features";
+import { cosine, qualityPrior, reachPrior, recognizability, DIM } from "./features";
 import {
   explainMatch,
   facetScore,
@@ -308,7 +308,17 @@ const fameOrder = new WeakMap<CandidateItem[], { movie: CandidateItem[]; tv: Can
 function fameLists(pool: CandidateItem[]) {
   let lists = fameOrder.get(pool);
   if (!lists) {
-    const sorted = [...pool].sort((a, b) => b.title.voteCount - a.title.voteCount);
+    // GATE_REACH=1 orders the queue by the model's reach estimate instead of
+    // the vote count. This is where reach should matter most if it matters at
+    // all: the gate is what decides an Egyptian film with eighty TMDB votes
+    // sits at rank 8,000 and is never offered to anyone.
+    const byReach = typeof process !== "undefined" && process.env?.GATE_REACH === "1";
+    const sorted = [...pool].sort((a, b) =>
+      byReach
+        ? reachPrior(b.title) - reachPrior(a.title) ||
+          b.title.voteCount - a.title.voteCount
+        : b.title.voteCount - a.title.voteCount
+    );
     lists = {
       movie: sorted.filter((c) => c.title.type !== "tv"),
       tv: sorted.filter((c) => c.title.type === "tv"),
@@ -582,11 +592,7 @@ export function fameGate(
     }
     const scored = window.map((c) => ({
       c,
-      w: watchLikelihood(
-        personal,
-        titleTokens(c.title),
-        recognizability(c.title.voteCount)
-      ),
+      w: watchLikelihood(personal, titleTokens(c.title), reachPrior(c.title)),
     }));
     scored.sort((a, b) => b.w - a.w);
     return scored.slice(0, keep).map((s) => s.c);
@@ -1225,7 +1231,7 @@ export function recommend(
      * The weight below is untouched: what changed is that the number it
      * multiplies is about this person rather than about the world.
      */
-    const known = watchLikelihood(profile, tokens, recognizability(c.title.voteCount));
+    const known = watchLikelihood(profile, tokens, reachPrior(c.title));
     const score =
       W_QUALITY * q +
       wRecognition * known +
@@ -1499,11 +1505,7 @@ export function watchedGrid(
   const scored: { t: Title; w: number }[] = [];
   for (const c of gated) {
     if (excludeIds.has(c.title.id)) continue;
-    const w = watchLikelihood(
-      profile,
-      titleTokens(c.title),
-      recognizability(c.title.voteCount)
-    );
+    const w = watchLikelihood(profile, titleTokens(c.title), reachPrior(c.title));
     // a small deterministic wobble so two people with the same history do not
     // get the same grid, and so a rebuild does not repeat the same thirty
     scored.push({ t: c.title, w: w + JITTER * jitterFor(c.title.id, seed) });

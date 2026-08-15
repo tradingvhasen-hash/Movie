@@ -45,6 +45,16 @@ const exports_ = files.length
 const catalog = decodeCatalog(
   JSON.parse(readFileSync("public/catalog.json", "utf8")) as EncodedCatalog
 );
+// the browser attaches this in catalog.ts; instruments must see the same prior
+try {
+  const reach = JSON.parse(readFileSync(".cache/reach.json", "utf8")) as Record<string, number>;
+  for (const t of catalog) {
+    const r = reach[t.id];
+    if (typeof r === "number") t.reach = r;
+  }
+} catch {
+  /* measured without it, same as a browser that failed to fetch it */
+}
 buildRarityIndex(catalog);
 const pool: CandidateItem[] = catalog.map((title) => ({ title }));
 const byId = new Map(catalog.map((t) => [t.id, t]));

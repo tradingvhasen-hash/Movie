@@ -46,6 +46,21 @@ function assetUrl(path: string): string {
   return `${base}${path}`;
 }
 
+/** Best-effort: the prior improves if it arrives, and nothing breaks if not. */
+async function attachReach(titles: Title[]): Promise<void> {
+  try {
+    const res = await fetch(assetUrl("/reach.json"), { cache: "force-cache" });
+    if (!res.ok) return;
+    const reach = (await res.json()) as Record<string, number>;
+    for (const t of titles) {
+      const r = reach[t.id];
+      if (typeof r === "number") t.reach = r;
+    }
+  } catch {
+    /* the vote count remains the prior */
+  }
+}
+
 /** Fetches and installs the full catalog. Safe to call repeatedly. */
 export function loadCatalog(): Promise<CandidateItem[]> {
   if (loadPromise) return loadPromise;
@@ -55,7 +70,16 @@ export function loadCatalog(): Promise<CandidateItem[]> {
       if (!res.ok) throw new Error(`catalog ${res.status}`);
       const data = (await res.json()) as EncodedCatalog;
       if (!data?.t?.length) throw new Error("empty catalog");
-      return build(decodeCatalog(data));
+      const titles = decodeCatalog(data);
+
+      /**
+       * Reach rides alongside rather than inside the catalog: 55 KB gzipped
+       * against the catalog's 3.3 MB, and a separate file means a failure to
+       * fetch it costs the prior and nothing else — the engine falls back to
+       * the vote count exactly as before. Not worth a schema change.
+       */
+      await attachReach(titles);
+      return build(titles);
     } catch {
       return fallback();
     }

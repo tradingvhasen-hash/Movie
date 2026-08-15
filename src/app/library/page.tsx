@@ -191,13 +191,22 @@ function LibraryTile({
       title={title}
       onClick={onSelect}
       badge={
+        /* three states, not two. A title added from the grid is watched with
+           no verdict — showing it a thumbs-down would put words in the
+           viewer's mouth, and it is the deck's job to ask which it is. */
         <span
           className={`flex h-6 w-6 items-center justify-center rounded-full shadow-sm ${
-            swipe.action === "liked" ? "bg-accent text-white" : "bg-white/90 text-ink-dim"
+            swipe.action === "liked"
+              ? "bg-accent text-white"
+              : swipe.action === "seen"
+                ? "bg-white/90 text-ink-faint"
+                : "bg-white/90 text-ink-dim"
           }`}
         >
           {swipe.action === "liked" ? (
             <HeartIcon size={13} filled />
+          ) : swipe.action === "seen" ? (
+            <span className="text-[11px] font-bold leading-none">✓</span>
           ) : (
             <ThumbsDownIcon size={12} filled />
           )}

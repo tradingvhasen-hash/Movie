@@ -24,6 +24,16 @@ export const CardsIcon = (p: IconProps) => (
   </svg>
 );
 
+/** four panes: the "which of these have you seen" grid */
+export const GridIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <rect x="3.5" y="3.5" width="7" height="7" rx="1.5" />
+    <rect x="13.5" y="3.5" width="7" height="7" rx="1.5" />
+    <rect x="3.5" y="13.5" width="7" height="7" rx="1.5" />
+    <rect x="13.5" y="13.5" width="7" height="7" rx="1.5" />
+  </svg>
+);
+
 export const SparklesIcon = (p: IconProps) => (
   <svg {...base(p)}>
     <path d="M12 4l1.7 4.3L18 10l-4.3 1.7L12 16l-1.7-4.3L6 10l4.3-1.7L12 4z" />

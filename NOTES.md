@@ -102,6 +102,42 @@ against the improved engine, not the old one.
 
 ---
 
+## The screen (2026-08-15)
+
+`/seen` exists. Thirty posters, tap what you have watched, commit, next screen.
+A tap writes `seen`; everything untapped writes `not_seen`, which is a real
+answer and the whole reason the page is fast — twenty-odd "no"s cost the
+person nothing to give.
+
+Driven in a real browser rather than assumed: thirty tiles render, taps toggle,
+the commit writes all thirty answers, the counter advances and the next screen
+arrives. Two things only showed up by looking at it:
+
+**Only ten of thirty posters fit on a phone.** The first build used three
+columns, and a grid you have to scroll three times is a slower deck — the
+speed comes entirely from the eye taking in many at a glance. Four columns puts
+about twenty in view. A poster stays recognisable well below that size, because
+recognising something you have already seen needs far less detail than reading
+something you have not.
+
+**The library badge marked grid titles as disliked.** It had two states, liked
+and everything-else, and a title added from the grid is watched with no
+verdict. Putting a thumbs-down on it invents the opinion the `seen` action
+exists to avoid. Three states now.
+
+The posters do not load in this sandbox — the headless browser cannot reach
+`image.tmdb.org` although curl can, so every tile falls back to generated art.
+That is the environment, not the page; `PosterArt` always draws art first and
+cross-fades the real poster over it.
+
+**Not decided, and deliberately left alone:** whether this should be where a
+new account lands. It is a tab, not the front door. The measurement says the
+grid harvests 2.2x faster while collecting no taste at all — so the answer is
+probably "grid first, deck after", but that is a judgement about what someone
+wants on their first visit and not something the harvest ruler can settle.
+
+---
+
 ## A grid asks a different question, and it is 2.2x faster (2026-08-15)
 
 The arithmetic the harvest ruler exposed: **a card asks about one title, so

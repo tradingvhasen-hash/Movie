@@ -3,15 +3,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import SwipeCard from "./SwipeCard";
+import PosterArt from "./PosterArt";
 import SwipeBurst from "./SwipeBurst";
 import TastePicker from "./TastePicker";
 import { useDeck } from "@/lib/useDeck";
 import { useDhawq } from "@/lib/store";
 import { GlowButton, HeartButton, NeuButton } from "./ui";
 import { ArrowUpIcon, ClapperIcon, PopcornIcon, ThumbsDownIcon, UndoIcon } from "./ui/Icons";
-import { FADE_UP, SECTION, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
+import { EASE_SWEEP, FADE_UP, SECTION, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
 import { t } from "@/lib/i18n";
-import type { SwipeAction } from "@/lib/types";
+import type { SwipeAction, Title } from "@/lib/types";
 
 export default function SwipeDeck() {
   const { queue, hydrated, swipeTop, undo, canUndo, refill } = useDeck();
@@ -27,6 +28,18 @@ export default function SwipeDeck() {
   const setOnboardingSeen = useDhawq((s) => s.setOnboardingSeen);
   const resetAll = useDhawq((s) => s.resetAll);
 
+  /**
+   * The card that has already been answered and is still flying off.
+   *
+   * The swipe commits the instant the finger lifts; this keeps a copy on
+   * screen for the half-second the animation takes, with pointer events off,
+   * so the deck underneath is live immediately. Previously the *real* card
+   * stayed and owned the pointer for that whole window, which made every
+   * second fast swipe do nothing.
+   */
+  const [leaving, setLeaving] = useState<
+    { title: Title; action: SwipeAction; at: number }[]
+  >([]);
   const [forcedExit, setForcedExit] = useState<SwipeAction | null>(null);
   /** welcome → pick a few you love → deck */
   const [picking, setPicking] = useState(false);
@@ -35,20 +48,27 @@ export default function SwipeDeck() {
 
   const handleSwipe = useCallback(
     (action: SwipeAction) => {
+      const top = queue[0];
       setForcedExit(null);
+      if (top) {
+        const at = Date.now();
+        setLeaving((l) => [...l, { title: top, action, at }]);
+        setTimeout(() => setLeaving((l) => l.filter((c) => c.at !== at)), 560);
+      }
       swipeTop(action);
       setBurst({ id: Date.now(), action });
       setTimeout(() => setBurst((b) => (b && Date.now() - b.id >= 950 ? null : b)), 1000);
     },
-    [swipeTop]
+    [swipeTop, queue]
   );
 
+  // a button press is the same commit, just without a finger to lift
   const trigger = useCallback(
     (action: SwipeAction) => {
-      if (queue.length === 0 || forcedExit) return;
-      setForcedExit(action);
+      if (queue.length === 0) return;
+      handleSwipe(action);
     },
-    [queue.length, forcedExit]
+    [queue.length, handleSwipe]
   );
 
   /**
@@ -229,15 +249,63 @@ export default function SwipeDeck() {
                 </motion.div>
               )}
             </AnimatePresence>
-            {queue.slice(0, 3).map((title, i) => (
-              <SwipeCard
-                key={title.id}
-                title={title}
-                index={i}
-                onSwipe={handleSwipe}
-                forcedExit={i === 0 ? forcedExit : null}
-              />
+            {/**
+              * AnimatePresence, so a card can leave the queue the instant the
+              * finger lifts and still fly off afterwards.
+              *
+              * Without it the swipe could not be committed until the 520ms
+              * exit animation finished, because the commit hung off
+              * `onAnimationComplete`. For half a second after every gesture the
+              * deck was **deaf**: `drag` is disabled once a card is exiting and
+              * the exiting card still owns the pointer, so a second swipe in
+              * that window did nothing at all. Reproduced at a swipe every
+              * 250ms — every other card stuck — and the user swipes at 1.1s
+              * with bursts far faster than that.
+              *
+              * Now the gesture commits immediately and the animation is pure
+              * decoration playing out over a card React has already removed.
+              */}
+            {/* already answered, still flying — inert, so the live card under
+                it takes the next gesture immediately */}
+            {leaving.map(({ title, action, at }) => (
+              <motion.div
+                key={`leaving-${at}`}
+                className="pointer-events-none absolute inset-0 z-40"
+                /* starts roughly where the thumb let go, so the hand-off from
+                   the real card to this copy is not visible */
+                initial={
+                  action === "liked"
+                    ? { x: 130, y: -10, rotate: 8, opacity: 1, scale: 1 }
+                    : action === "disliked"
+                      ? { x: -130, y: -10, rotate: -8, opacity: 1, scale: 1 }
+                      : { x: 0, y: -120, rotate: 0, opacity: 1, scale: 1 }
+                }
+                animate={
+                  action === "liked"
+                    ? { x: 640, y: -90, rotate: 24, opacity: 0, scale: 0.92 }
+                    : action === "disliked"
+                      ? { x: -640, y: -90, rotate: -24, opacity: 0, scale: 0.92 }
+                      : { x: 0, y: -780, rotate: 0, opacity: 0, scale: 0.9 }
+                }
+                transition={{ duration: 0.52, ease: EASE_SWEEP }}
+              >
+                <div className="soft-card relative h-full w-full overflow-hidden">
+                  <PosterArt title={title} />
+                  <div className="card-sheen absolute inset-0" />
+                </div>
+              </motion.div>
             ))}
+            <AnimatePresence initial={false}>
+              {queue.slice(0, 3).map((title, i) => (
+                <SwipeCard
+                  key={title.id}
+                  title={title}
+                  index={i}
+                  onSwipe={handleSwipe}
+                  forcedExit={i === 0 ? forcedExit : null}
+                />
+              ))}
+            </AnimatePresence>
           </div>
         </div>
       </div>

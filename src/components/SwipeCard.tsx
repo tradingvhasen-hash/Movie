@@ -46,16 +46,30 @@ export default function SwipeCard({ title, index, onSwipe, forcedExit }: SwipeCa
   const isTop = index === 0;
   const activeExit = isTop ? (exiting ?? forcedExit) : null;
 
+  /**
+   * A gesture commits the moment the finger lifts, not when the animation
+   * ends. The card is removed from the queue immediately and `AnimatePresence`
+   * plays the fly-off over the top of a card React has already dropped.
+   *
+   * It used to commit from `onAnimationComplete`, 520ms later, and the deck
+   * ignored every swipe in between — reproduced as one stuck card in two at a
+   * swipe every 250ms. Half a second is not a long time to a machine and is a
+   * very long time to a thumb.
+   */
   function handleDragEnd(_: unknown, info: PanInfo) {
     const px = info.offset.x + info.velocity.x / 7;
     const py = info.offset.y + info.velocity.y / 7;
-    if (py < -SWIPE_UP_THRESHOLD && Math.abs(py) > Math.abs(px)) {
-      setExiting("not_seen");
-    } else if (px > SWIPE_X_THRESHOLD) {
-      setExiting("liked");
-    } else if (px < -SWIPE_X_THRESHOLD) {
-      setExiting("disliked");
-    }
+    const action: SwipeAction | null =
+      py < -SWIPE_UP_THRESHOLD && Math.abs(py) > Math.abs(px)
+        ? "not_seen"
+        : px > SWIPE_X_THRESHOLD
+          ? "liked"
+          : px < -SWIPE_X_THRESHOLD
+            ? "disliked"
+            : null;
+    if (!action) return;
+    setExiting(action);
+    onSwipe(action);
   }
 
   /* flies off along an arc, tilting and fading as it goes */
@@ -94,9 +108,13 @@ export default function SwipeCard({ title, index, onSwipe, forcedExit }: SwipeCa
           ? { duration: 0.52, ease: EASE_SWEEP }
           : { ...SPRING_SETTLE, opacity: { duration: 0.35 }, filter: { duration: 0.35 } }
       }
-      onAnimationComplete={() => {
-        if (activeExit) onSwipe(activeExit);
-      }}
+      /**
+       * Leaves instantly, because it is not the thing you watch leave. The
+       * deck keeps an inert copy on screen for the fly-off; this one is gone
+       * the moment the answer is recorded, which is what frees the deck to
+       * take the next gesture.
+       */
+      exit={{ opacity: 0, transition: { duration: 0 } }}
       drag={isTop && !activeExit}
       dragElastic={0.55}
       dragTransition={{ bounceStiffness: 260, bounceDamping: 26 }}

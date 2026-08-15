@@ -102,6 +102,62 @@ against the improved engine, not the old one.
 
 ---
 
+## The deck was deaf for half a second after every swipe (2026-08-15)
+
+The user reported it and could not describe it precisely — "you swipe a card
+and it returns to its place, like you didn't swipe", "the card shows a movie
+and then it changed", "the whole thing is glitching". Not an algorithm
+problem, and it made testing anything else impossible.
+
+**Reproduced, and it is exact.** Real touch events through CDP on an iPhone
+viewport, counting what actually reached the store:
+
+| swipe every | flicks | recorded |
+|---|---|---|
+| 1200ms | 6 | 6 |
+| 600ms | 6 | 6 |
+| **250ms** | 6 | **4** |
+| **120ms** | 6 | **3** |
+
+### The cause
+
+The swipe committed from `onAnimationComplete`, at the end of a **520ms**
+fly-off. For that whole half-second the deck was deaf: `drag` is disabled once
+a card is exiting, and the exiting card still sits at index 0 owning the
+pointer, so a second gesture in that window reached nothing and the card simply
+sat there. He swipes at 1.1s on average with bursts far faster, so he was
+losing roughly every other card in the bursts — and the card that "came back"
+was the *same card*, never answered.
+
+Half a second is nothing to a machine and a very long time to a thumb.
+
+### The fix
+
+Input is decoupled from animation. A gesture commits the instant the finger
+lifts; the deck keeps an inert copy of the answered card on screen for the
+fly-off, `pointer-events: none`, starting roughly where the thumb let go so
+the hand-off is invisible. The real card leaves the queue immediately, which
+is what frees the deck to take the next gesture.
+
+Buttons go through the same path now instead of setting a flag and waiting for
+an animation to finish.
+
+**After:** 6 of 6 recorded at every interval down to 120ms; 12 rapid alternating
+swipes give exactly 12 swipes, 12 order entries and `totalSwipes` +12 — no
+losses and no double-commits. Each action button commits exactly once, undo
+still removes exactly one, and six rapid taps on the heart give six.
+
+### Worth remembering
+
+Nothing in the test suite could ever have caught this. Every ruler here calls
+`applySwipe` directly — none of them touches the interface, so the entire
+engine can be perfect while a third of the user's answers never arrive. He
+found it in a minute of use, and it had presumably been corrupting his
+sessions all along: some fraction of the "on taste" counts he has been sending
+me are cards he answered and the site discarded.
+
+---
+
 ## Paying the debts: a cache that lied, and a bucket with no tap (2026-08-15)
 
 ### The cache was returning another run's answer

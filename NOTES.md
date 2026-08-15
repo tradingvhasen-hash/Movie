@@ -102,6 +102,112 @@ against the improved engine, not the old one.
 
 ---
 
+## The second session, and what it settled (2026-08-15)
+
+The user re-ran his 200+ session on the exposure model, 416 swipes, same
+opening taps, `/lab` reset first. Liked cards per fifty:
+
+| block | before (449) | after (416) |
+|---|---|---|
+| 1–50 | **33** | 19 |
+| 51–100 | 26 | 18 |
+| 101–150 | 31 | **27** |
+| 151–200 | 18 | **25** |
+| 201–250 | 18 | **30** |
+| 251–300 | 15 | 11 |
+| 301–350 | 6 | 9 |
+| 351–400 | 4 | 7 |
+
+Overall rate barely moved (36.1% → 35.3%) but the **shape** changed: the
+collapse moved from block 4 to block 6, and the middle rose sharply. Block
+201–250 is the whole point of the feature — 36 obscure cards (under 8k votes)
+shown, **24 of them he had actually watched (67%)**, against 25 shown and 10
+watched (40%) in the same block of the old session. That is the deck reaching
+past the blockbuster list into titles he really knows, which is exactly what
+`recognizability(voteCount)` could never do.
+
+But blocks 1–2 fell hard: **15 comedy cards in the first 100, against 74**.
+
+### Three hypotheses, two of them mine, all measured
+
+1. **Coverage-gate the blend** — fall back to fame for titles whose tokens the
+   tables have never observed, so the unexplored catalog keeps its ordering.
+   This was the exact failure mode I had written into the code comment as the
+   reason `K` is 8 and not 4. **Measured worse at every prefix** (AUC 0.663 →
+   0.585 at 80 swipes). Coverage correlates with fame — obscure titles have
+   obscure keywords — so gating by it re-imports the bias the model exists to
+   remove. Rejected.
+
+2. **Centre each facet on his own base rate**, because 63% of his swipes are
+   "not seen" and a near-universal token like `2010s` therefore encodes the
+   base rate rather than any discrimination — the same shape as the `corner()`
+   bug. **A wash** (0.692 → 0.690 at 80; 0.760 → 0.772 on the second export).
+   Rejected.
+
+3. **It was the seed.** `makeSeed()` is random on reset, and the cold start
+   compounds: a few early comedies produce comedy likes, which produce more
+   comedies. Ten seeds through the real engine with his real answers as the
+   oracle, first fifty cards:
+
+   | | comedy /50 | liked /50 |
+   |---|---|---|
+   | with the exposure model | 10.3 | 22.5 |
+   | without it | 10.0 | 22.7 |
+
+   Identical. **The cold-start difference is not in the code.** His two real
+   sessions differ by 5× in the first fifty on what is, for that stretch,
+   effectively the same engine.
+
+### The ruler that finally does not assume the answer
+
+Every instrument here builds its viewer from the catalog, and the worst of
+them defines him as someone who knows the most-voted titles — which is how
+fame went unchallenged for the project's entire life. `scripts/replay.ts`
+cannot make that mistake because it does not invent the viewer: a real person
+labelled 526 titles, and those labels are the oracle. Ten seeds, 250 swipes,
+scored **only** on cards he swiped himself.
+
+| block | with the exposure model | without |
+|---|---|---|
+| 1–50 | 21.1 | 20.2 |
+| 51–100 | **15.2** | 8.5 |
+| 101–150 | **11.3** | 8.4 |
+| 151–200 | **10.9** | 6.2 |
+| 201–250 | **12.7** | 7.1 |
+| **total** | **71.2** | 50.4 |
+
+**+41%.** Cold start identical; every later block between 34% and 79% better,
+which is precisely where his real sessions collapse and precisely the shape
+the second session showed.
+
+**The control matters more than the headline.** That oracle contains labels
+from the *new* session, so the titles the new build chose to show are
+over-represented in it. Re-run using **only the old session's labels** — an
+oracle built entirely by the old build, which should favour it:
+
+| | total, cards he really liked |
+|---|---|
+| with the exposure model | **77.2** |
+| without | 49.6 |
+
+**+56%**, larger under the control than under the contaminated version. The
+effect is real.
+
+### What is still true
+
+Still one viewer. `replay.ts` grades against a real human's answers, which
+removes the fame assumption, but it cannot remove the fact that the human is
+him. And its `liked` column is mostly stand-in guesses for unlabelled cards —
+it is near-identical between any two builds and means nothing. Only the middle
+column is evidence, and the file says so in its own header so the next reader
+does not repeat the mistake.
+
+The gate is still an absolute fame window, so the tables still only learn from
+what fame let through. That is the next thing to measure — with `replay.ts`,
+which is now the only ruler that can judge it honestly.
+
+---
+
 ## Fame was never an answer to "have you seen this?" (2026-08-15)
 
 The deck's whole job is to show cards a viewer can rate, and a card they have

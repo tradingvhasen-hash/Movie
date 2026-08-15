@@ -25,6 +25,16 @@ export default function PosterArt({
   className?: string;
   sizes?: string;
 }) {
+  /**
+   * Starts visible when the browser already has the image.
+   *
+   * The generated artwork is the base layer and the real poster cross-fades in
+   * on decode, which is right for a first sight and wrong for a second one: the
+   * deck's fly-off copy re-mounts a poster that is already in cache, so it
+   * flashed the blue placeholder for a frame or two and the card appeared to
+   * *change into a different thing* on its way out. Visible in the user's
+   * recording as blue cards sliding across.
+   */
   const [shown, setShown] = useState(false);
 
   const h = hashCode(title.id);
@@ -63,6 +73,10 @@ export default function PosterArt({
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={`https://image.tmdb.org/t/p/w500${title.posterPath}`}
+          ref={(el) => {
+            // already decoded from a previous mount — no fade, no placeholder
+            if (el?.complete && el.naturalWidth > 0) setShown(true);
+          }}
           alt={title.title[locale]}
           sizes={sizes}
           loading="lazy"

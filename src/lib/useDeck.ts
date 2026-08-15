@@ -8,9 +8,53 @@ import { useDhawq } from "@/lib/store";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import type { SwipeAction, Title } from "@/lib/types";
 
-/** cards kept queued ahead of the user */
+/** cards rendered as a stack; more than three are never visible */
 const QUEUE_AHEAD = 6;
-const BATCH = 10;
+/**
+ * How many cards a rebuild produces, and how deep a reserve is kept.
+ *
+ * A rebuild is one indivisible block of main-thread work — it cannot be
+ * interrupted, so its *cost* is fixed and the only thing under our control is
+ * how often it happens. Deeper reserve, fewer rebuilds.
+ */
+const BATCH = 26;
+const RESERVE = 24;
+/**
+ * Rebuild only when the queue has run down this far.
+ *
+ * It used to rebuild after **every** swipe, on the reasoning that a batch
+ * computed ten swipes ago is what makes a deck feel like it is not listening.
+ * That reasoning was sound and the cost was 12ms, on a catalog of 5,555 titles
+ * and a desktop.
+ *
+ * The catalog is now 12,826 and the device is a phone. Measured with the CPU
+ * throttled the way a mid-range handset actually behaves, one rebuild blocks
+ * the main thread for:
+ *
+ *     1x (this machine)     49 ms
+ *     4x slower            247 ms
+ *     6x slower            428 ms
+ *
+ * The page is *frozen* for that entire time — no swipe registers, no tap, no
+ * flip, no animation. Running it after every swipe means a viewer swiping at
+ * one card a second spends a third of their session touching a dead screen,
+ * which is exactly what the user filmed: cards stuck for seconds while he
+ * swiped at them, and cards that would not flip when tapped.
+ *
+ * So the reserve is deep and the refill is lazy: 24 cards held, rebuilt when 8
+ * remain, which is one rebuild per sixteen swipes instead of one per swipe.
+ * The freeze still costs what it costs — it just stops landing on every
+ * gesture, and a single hiccup every sixteen cards is a different product from
+ * one after every card.
+ *
+ * The price is staleness: a card can now be up to sixteen swipes old, and the
+ * original comment above was right that this is what makes a deck feel deaf.
+ * It is the better trade by a wide margin — a viewer cannot notice ordering
+ * that is slightly behind, and cannot fail to notice a screen that ignores
+ * them. The real answer is to get this work off the main thread entirely, and
+ * that is a bigger change than a broken app should wait for.
+ */
+const REFILL_AT = 8;
 
 /** cloud mode: fetch the next batch from the seeded TMDB catalog */
 async function fetchRemoteBatch(count: number): Promise<Title[] | null> {
@@ -137,7 +181,7 @@ export function useDeck() {
 
     const install = (fresh: Title[]) => {
       const next = [...keepTop, ...fresh.filter((f) => !keepIds.includes(f.id))];
-      setQueue(next.slice(0, QUEUE_AHEAD + 1));
+      setQueue(next.slice(0, RESERVE));
     };
 
     if (isSupabaseConfigured()) {
@@ -182,7 +226,8 @@ export function useDeck() {
       const rest = queueRef.current.slice(1);
       setQueue(rest);
       queueRef.current = rest;
-      refill();
+      // only when we are running out, because a rebuild freezes the phone
+      if (rest.length <= REFILL_AT) refill();
     },
     [doSwipe, refill]
   );

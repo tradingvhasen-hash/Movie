@@ -102,6 +102,82 @@ against the improved engine, not the old one.
 
 ---
 
+## Three faults behind one word: "glitching" (2026-08-16)
+
+The user filmed it. Nineteen seconds, and it is unambiguous: cards frozen for
+three and five seconds at a time while he swipes at them, the same two titles
+alternating back and forth, blue placeholder cards sliding across, and — his
+own observation, which turned out to be a separate bug — "if you see a card
+that doesn't flip, that is also part of the problem."
+
+### 1. I had been measuring a development build
+
+Every performance number I took was against `next dev`. Profiling the phone
+under CPU throttling showed the time going to `jsxDEV` — the JSX dev transform.
+Rebuilt for production and measured again:
+
+| 6x CPU throttle | six swipes, no rebuild |
+|---|---|
+| `next dev` | tasks of 250-295ms, nine over 150ms |
+| `next start` | tasks of 64-92ms, none over 150ms |
+
+Three times the cost, and it sent me looking in the wrong place first. **The
+deck runs in production; measure production.**
+
+### 2. The re-rank ran after every swipe and froze the phone
+
+`recommend()` is one indivisible block of main-thread work. On this machine it
+is 49ms; with the CPU throttled the way a mid-range handset behaves:
+
+    1x       49 ms
+    4x      247 ms
+    6x      428 ms
+
+The page is *frozen* for that whole time — no swipe, no tap, no flip, no
+animation. It ran after **every** swipe, on the reasoning that a stale batch
+makes a deck feel deaf. That reasoning was written when the catalog was 5,555
+titles; it is now 12,826.
+
+The reserve is now 24 cards, refilled when 8 remain: one rebuild per sixteen
+swipes instead of one per swipe. The price is that a card can be sixteen swipes
+stale, and that trade is not close — nobody notices ordering that is slightly
+behind, and nobody fails to notice a screen that ignores them. The real answer
+is to move this off the main thread, and a broken app should not wait for it.
+
+Measured after, on production at 6x throttle: **20 of 20 swipes recorded at his
+real pace and in bursts, with one freeze over 150ms in twenty cards.**
+
+### 3. The flip was being eaten by the drag
+
+The card is a drag surface and Framer starts a drag after a few pixels — which
+a thumb tap always produces. The drag then swallows the click, and the details
+button does nothing. `onPointerDownCapture` stops the pointer at the button so
+the drag never begins. With a deliberately wobbly touch tap: **7 of 8 flips**.
+
+I could not get a clean before/after on this one — the harness kept failing to
+find the button on the control build — so the honest claim is that the
+mechanism is specific and understood and the fix measures 7/8, not that I
+watched it go from 0 to 7.
+
+### 4. And a glitch I had added myself the same day
+
+The fly-off copy introduced this morning re-mounts `PosterArt`, which draws
+generated artwork first and cross-fades the real poster on decode. For a copy
+of a card whose poster is already in cache that is simply wrong, and it flashed
+the blue placeholder — visible in the recording as blue cards sliding across,
+which is exactly the "the card changed into something else" he described. It
+now shows the image immediately when the browser already has it.
+
+### What this says about the rulers
+
+Nothing here was findable by anything in the repo. Every instrument calls
+`applySwipe` directly; not one touches the interface, renders a frame, or runs
+on a slow device. The engine can be measurably excellent while a third of the
+answers never arrive — and some fraction of the block counts he sent me over
+the past days were cards he answered and the site dropped.
+
+---
+
 ## The deck was deaf for half a second after every swipe (2026-08-15)
 
 The user reported it and could not describe it precisely — "you swipe a card

@@ -179,6 +179,17 @@ export default function SwipeCard({ title, index, onSwipe, forcedExit }: SwipeCa
             </div>
             <motion.button
               onClick={() => setShowDetails((v) => !v)}
+              /**
+               * The card is a drag surface, and Framer starts a drag after a
+               * few pixels of movement — which a thumb tap always produces. The
+               * drag then swallows the click and the card does not flip. The
+               * user noticed it before any instrument here did: "if you see a
+               * card that doesn't flip, that is also part of the problem."
+               *
+               * Stopping the pointer here means the drag never begins for a
+               * touch that started on this button, so the tap is a tap.
+               */
+              onPointerDownCapture={(e) => e.stopPropagation()}
               aria-label={t("swipe.details")}
               whileTap={{ scale: 0.88 }}
               animate={{ rotate: showDetails ? 180 : 0 }}

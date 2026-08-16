@@ -67,8 +67,29 @@ const MIN_VOTES: Record<TitleType, number> = { movie: 1000, tv: 400 };
  * near 4,000th globally and the gate would never admit it, so `fameGate` has
  * to rank within language too — the two changes are useless apart.
  */
+/**
+ * EN WAS 1,000 AND THAT IS WHERE HIS LIBRARY WENT.
+ *
+ * The first unbiased sample of a real viewer's exposure — 199 titles drawn at
+ * random from the whole catalog — put every title he had watched between 1,176
+ * and 5,914 votes. Four of the nine sat under two thousand. Checked against
+ * TMDB itself, the catalog held 100% of English films in the 2,000-12,000 band
+ * and **34%** of the 500-2,000 band, because the floor cut at a thousand:
+ *
+ *     votes            TMDB has    we had
+ *     500 - 2,000          4,067     1,363
+ *     2,000 - 6,000        1,771     1,770
+ *     6,000 - 12,000         570       570
+ *
+ * Two thousand seven hundred English films missing, in the exact band the only
+ * evidence we have says a real person watches. At his measured in-band hit
+ * rate that is roughly three hundred titles he has seen and the site could not
+ * show him — more than the 245 he has managed to record in three sessions.
+ *
+ * Every ranking change made in two days is worth less than this one number.
+ */
 const LANG_FLOORS: Record<string, number> = {
-  en: 1000,
+  en: 500,
   ja: 300,
   ko: 200,
   es: 200,

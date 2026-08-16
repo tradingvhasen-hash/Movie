@@ -20,7 +20,9 @@
     "simulate": "tsx scripts/simulate.ts",
     "roundtrip": "tsx scripts/round-trip.ts",
     "replay": "tsx scripts/replay.ts",
-    "harvest": "tsx scripts/harvest.ts"
+    "harvest": "tsx scripts/harvest.ts",
+    "calibrate": "tsx scripts/calibrate.ts",
+    "extend": "tsx scripts/extend-catalog.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.2",

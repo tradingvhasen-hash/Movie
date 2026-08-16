@@ -7,35 +7,9 @@ deploying, then **pull down to refresh once** so the browser drops the old code.
 
 ---
 
-## 1 · The SQL — one block now, and it is bigger than the last one
+> The SQL in §1 is **done** — he ran it. Removed.
 
-Supabase → **SQL Editor** → New query → paste → **Run**:
-
-```sql
-alter table public.swipes drop constraint if exists swipes_title_id_fkey;
-alter table public.list_items drop constraint if exists list_items_title_id_fkey;
-
-alter table public.swipes drop constraint if exists swipes_action_check;
-alter table public.swipes add constraint swipes_action_check
-  check (action in ('liked', 'disliked', 'not_seen', 'seen'));
-
-alter table public.user_taste add column if not exists seen_facets jsonb;
-```
-
-The first two lines matter more than everything I sent you yesterday. The
-`swipes` table required every title id to already exist in a `titles` table
-that holds a few hundred rows, while the catalog the site ranks against is
-15,083. So the upload silently threw away every swipe whose film was not in
-that small table — you could swipe a thousand cards, sign in on another device,
-and find a few dozen. No error was raised anywhere, including to me.
-
-The site now works either way: it uploads everything first and only falls back
-to the old filtering if the database refuses. Running this makes the fallback
-unnecessary.
-
----
-
-## 2 · ⭐ One more calibration round
+## 1 · ⭐ Calibration round — /calibrate
 
 **Where:** https://dhawq.onrender.com/calibrate
 
@@ -54,7 +28,7 @@ Tap **شاهدته** or **لم أشاهده**, "not watched" is worth exactly as
 
 ---
 
-## 3 · Swipe 400 cards and export
+## 2 · Swipe 400 cards — the home page, then /lab
 
 **Where:** https://dhawq.onrender.com → **Swipe** → then `/lab` → Export.
 **Do not reset first.**
@@ -72,7 +46,7 @@ to **30.0**. That is the number I want your file to confirm or refute.
 
 ---
 
-## 4 · Search — does it find what you actually remember?
+## 3 · Search — /search
 
 **Where:** https://dhawq.onrender.com/search
 
@@ -86,7 +60,7 @@ have can measure it.
 
 ---
 
-## 5 · The grid — and a correction to what I told you about it
+## 4 · The grid — /seen
 
 **Where:** https://dhawq.onrender.com/seen
 

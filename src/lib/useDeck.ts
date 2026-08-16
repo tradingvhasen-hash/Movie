@@ -90,6 +90,19 @@ async function fetchRemoteBatch(count: number): Promise<Title[] | null> {
       return null;
     }
     const data = (await res.json()) as { items: { title: Title }[] };
+    /**
+     * An empty 200 is a dead endpoint, not a quiet one.
+     *
+     * The guard above only caught a failure status. The live endpoint answers
+     * **200 with `items: []`** — the Supabase catalog is not seeded, so the
+     * vector search matches nothing — which meant the app paid a full round
+     * trip on every rebuild, forever, and threw the answer away every time.
+     * Verified against the deployed site.
+     */
+    if (data.items.length === 0) {
+      remoteOffline = true;
+      return null;
+    }
     return data.items.map((i) => i.title);
   } catch {
     remoteOffline = true;
@@ -158,8 +171,26 @@ function computeLocalBatch(excludeExtra: string[] = []): Title[] {
     seed: state.seed,
     vectorFor: vectorOf,
     likedTitles,
+    homeLanguages: homeLanguages(),
   }).map((r) => r.title);
   return [...pending, ...rest];
+}
+
+/**
+ * The languages this person reads, as primary subtags.
+ *
+ * Free, present before the first card, and the only signal available at zero
+ * evidence about which of the catalog's 34 languages is worth opening.
+ */
+function homeLanguages(): string[] {
+  if (typeof navigator === "undefined") return [];
+  const raw = navigator.languages?.length ? navigator.languages : [navigator.language];
+  const out: string[] = [];
+  for (const tag of raw ?? []) {
+    const base = String(tag).toLowerCase().split("-")[0];
+    if (base && !out.includes(base)) out.push(base);
+  }
+  return out.slice(0, 3);
 }
 
 /** run work when the browser is idle, with a short deadline as a fallback */

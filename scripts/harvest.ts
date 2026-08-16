@@ -29,10 +29,28 @@
  * fell from 3,061 titles/hour to 220 inside eight minutes, and an average
  * hides that completely.
  *
- * CEILING is the honest denominator: how many of their history the gate can
- * ever reach, at any session length. When harvest stops well below ceiling the
- * ranking is at fault; when ceiling itself is low, no ranking can help and the
- * fault is reachability.
+ * REACHED / SHOWN decompose the loss, which is the whole point. A title in a
+ * person's history is lost at exactly one of three stages:
+ *
+ *     never a candidate   the gate never admitted it, at any point in the
+ *                         session. No ranking can recover this.
+ *     candidate, unshown  admitted but never ranked highly enough to deal.
+ *                         This is the ranking's fault and nothing else's.
+ *     shown               recovered.
+ *
+ * THE OLD `CEILING` WAS WRONG AND IT MATTERED. It called `fameGate` once, on
+ * the profile the session *ended* with, and reported the answer as "what the
+ * gate can ever reach at any session length". Two things are wrong with that.
+ * The gate it evaluated was sized for a 500-card session, so a longer session
+ * would have raised the number on its own — the figure had a session length
+ * baked into it while claiming not to. And the gate is personalised by
+ * `watchLikelihood`, fitted on the answers this very session produced, so if
+ * the ranking tunnelled the denominator tunnelled with it: the ceiling was
+ * downstream of the thing it was supposed to bound.
+ *
+ * Both faults were found by review. What replaces it is a union across the
+ * whole session — a title counts as reachable if the gate held it at any
+ * point, which is what "reachable" was always meant to mean.
  *
  * WHAT IT CANNOT DO. A MovieLens history is what someone bothered to rate on
  * one site, not everything they have watched — it is a floor on their real
@@ -51,7 +69,7 @@ import {
   watchedGrid,
   type CandidateItem,
 } from "../src/lib/engine/recommend";
-import { applySwipe, emptyProfile, type TasteProfile } from "../src/lib/engine/taste";
+import { applySwipe, emptyProfile } from "../src/lib/engine/taste";
 import type { SwipeAction, Title } from "../src/lib/types";
 
 const CARDS = Number(process.env.CARDS ?? 500);
@@ -113,6 +131,7 @@ const harvested = new Array(blocks).fill(0);
 let totalHistory = 0;
 let totalCeiling = 0;
 let totalHarvest = 0;
+let totalShown = 0;
 let ranOut = 0;
 let seconds = 0;
 
@@ -124,6 +143,8 @@ for (const [, history] of users) {
   let profile = emptyProfile();
   const shown = new Set<string>();
   const liked: Title[] = [];
+  /** every title the gate has admitted at any point for this person */
+  const reachedIds = new Set<string>();
 
   // the opening grid: their best-known favourites, the way a real person
   // would tap the handful they recognise on the first screen
@@ -156,6 +177,13 @@ for (const [, history] of users) {
       ranOut++;
       break;
     }
+    // sampled rather than continuous: the gate is the expensive call and it
+    // moves slowly, so once a block is enough to see what it ever held
+    if (cards % BLOCK === 0) {
+      for (const c of fameGate(pool, fameTierSize(profile, "swipe"), profile.facets, profile)) {
+        reachedIds.add(c.title.id);
+      }
+    }
     if (MODE === "grid") seconds += GRID_FIXED + GRID_PER_TILE * batch.length;
     for (const title of batch) {
       if (cards >= CARDS) break;
@@ -182,17 +210,13 @@ for (const [, history] of users) {
   }
   totalHarvest += found;
 
-  // the denominator: what the gate could ever have offered this person
-  totalCeiling += reachable(profile, seen);
+  // the denominator: everything the gate held at any point in the session
+  let everReached = 0;
+  for (const id of seen.keys()) if (reachedIds.has(id)) everReached++;
+  totalCeiling += everReached;
+  totalShown += found;
 }
 
-/** how much of their history the gate admits, at the pool they ended on */
-function reachable(profile: TasteProfile, seen: Map<string, number>): number {
-  const gate = fameGate(pool, fameTierSize(profile, "swipe"), profile.facets, profile);
-  let n = 0;
-  for (const c of gate) if (seen.has(c.title.id)) n++;
-  return n;
-}
 
 const n = users.length;
 const avg = (x: number) => (x / n).toFixed(1).padStart(6);
@@ -219,9 +243,11 @@ console.log(
     `  RATE      ${((totalHarvest / seconds) * 3600).toFixed(0)} titles harvested per hour\n` +
     `\n  HARVEST   ${avg(totalHarvest)} of ${avg(totalHistory)} films  ` +
     `(${pct(totalHarvest, totalHistory)} of a real history, in ${CARDS} cards)\n` +
-    `  CEILING   ${avg(totalCeiling)} reachable inside the gate  ` +
+    `  REACHED   ${avg(totalCeiling)} were candidates at some point  ` +
     `(${pct(totalCeiling, totalHistory)} of it)\n` +
+    `  LOST AT RETRIEVAL  ${pct(totalHistory - totalCeiling, totalHistory)}` +
+    `   ·  LOST AT RANKING  ${pct(totalCeiling - totalShown, totalHistory)}\n` +
     (ranOut ? `  ${ranOut} of ${n} ran out of cards before ${CARDS}\n` : "") +
-    `\n  If harvest sits far below ceiling the ranking is at fault.\n` +
-    `  If ceiling itself is low, no ranking can fix it — that is reachability.\n`
+    `\n  Retrieval loss is a gate problem and no ranking can touch it.\n` +
+    `  Ranking loss is ours: the title was there and we did not deal it.\n`
 );

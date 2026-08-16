@@ -40,7 +40,14 @@ import type { SwipeAction, Title } from "../src/lib/types";
 const files = process.argv.slice(2);
 const exports_ = files.length
   ? files
-  : [".cache/user-swipes.json", ".cache/user-swipes-v2.json"];
+  : [
+      ".cache/user-swipes.json",
+      ".cache/user-swipes-v2.json",
+      // the 1,100-card session, on the current catalog. Roughly doubles the
+      // oracle and is the only one that reaches past card 440, which is where
+      // the decay this ruler exists to catch actually lives.
+      ".cache/user-swipes-v3.json",
+    ];
 
 const catalog = decodeCatalog(
   JSON.parse(readFileSync("public/catalog.json", "utf8")) as EncodedCatalog
@@ -87,14 +94,33 @@ if (truth.size === 0) {
 }
 
 /**
- * A card he never saw has no true answer, so it gets a stand-in. Deliberately
- * shaped like his log — he swipes up on the obscure and on the famous
- * blockbusters alike, and reserves left for the middle he actually watched.
- * This is a guess and nothing below is scored on it.
+ * A card he never labelled teaches the profile NOTHING.
+ *
+ * It used to get a stand-in answer, and the stand-in answered "have you seen
+ * this?" with `t.voteCount < 4000`. Nothing below was *scored* on that, which
+ * is what the old comment claimed made it safe — but it was wrong, and the
+ * error ran deep. The stand-in answer was applied to the profile. It fed
+ * `seenCount` and `unseenCount`, which size the gate; it fed the seen-facet
+ * tables, which order the gate; it fed `seenTrust` and `watchLikelihood`.
+ *
+ * So inside this ruler, fame *was* recognition, by construction — the exact
+ * error the header above correctly identifies in every other instrument,
+ * reappearing one layer down. And this ruler has had veto power: it killed the
+ * reach model, it killed the gate reserve, and it is why the tunnel-vision
+ * guard sat red for weeks. Every one of those changes decouples the gate from
+ * vote count, and a ruler that scores by tracking vote count punishes them
+ * whether they are right or wrong.
+ *
+ * The fix is not a better guess. It is to stop guessing: an unlabelled card is
+ * dealt, occupies its slot, and updates nothing. The profile is then built
+ * only from answers a person actually gave. `LEGACY_STANDIN=1` restores the
+ * old behaviour for comparison.
  */
-const answer = (t: Title): SwipeAction => {
+const LEGACY = process.env.LEGACY_STANDIN === "1";
+const answer = (t: Title): SwipeAction | null => {
   const known = truth.get(t.id);
   if (known) return known;
+  if (!LEGACY) return null;
   const comedy = t.genres.some((g) => g.toLowerCase() === "comedy");
   if (t.voteCount < 4000) return "not_seen";
   return comedy ? "liked" : t.voteCount > 12000 ? "not_seen" : "disliked";
@@ -102,8 +128,15 @@ const answer = (t: Title): SwipeAction => {
 
 /** the same four taps he opened both real sessions with */
 const OPENING = ["movie-138843", "movie-18785", "movie-38", "tv-48891"];
-const SWIPES = 250;
-const BLOCK = 50;
+/**
+ * Six hundred, not two hundred and fifty.
+ *
+ * His hit rate starts falling at card 110 and bottoms out around 550. The
+ * primary instrument of this project used to stop at 250 — before the problem
+ * it was built to detect had finished happening.
+ */
+const SWIPES = Number(process.env.SWIPES ?? 600);
+const BLOCK = 100;
 const SEEDS =
   typeof process !== "undefined" && process.env?.SEEDS ? Number(process.env.SEEDS) : 10;
 const blocks = SWIPES / BLOCK;
@@ -146,7 +179,8 @@ for (let seed = 1; seed <= SEEDS; seed++) {
         likedTitles.push(r.title);
         liked[b]++;
       }
-      p = applySwipe(p, r.title, vf(r.title), a);
+      // an unlabelled card is shown and forgotten; only real answers teach
+      if (a) p = applySwipe(p, r.title, vf(r.title), a);
       shown.add(r.title.id);
       cards++;
     }
@@ -156,16 +190,17 @@ for (let seed = 1; seed <= SEEDS; seed++) {
 const mean = (x: number) => (x / SEEDS).toFixed(1).padStart(5);
 console.log(
   `\n${truth.size} labelled titles · ${SEEDS} seeds · ${SWIPES} swipes each\n\n` +
-    "  block      liked*     HE REALLY LIKED     of his cards shown"
+    "  block      HE HAD WATCHED IT     of the block he had labelled"
 );
 for (let i = 0; i < blocks; i++) {
   console.log(
-    `  ${String(i * BLOCK + 1).padStart(3)}-${String((i + 1) * BLOCK).padEnd(4)}   ${mean(liked[i])}         ${mean(real[i])}            ${mean(labelled[i])}`
+    `  ${String(i * BLOCK + 1).padStart(3)}-${String((i + 1) * BLOCK).padEnd(4)}   ${mean(real[i])}                 ${mean(labelled[i])}`
   );
 }
 const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
 console.log(
-  `  TOTAL         ${mean(sum(liked))}         ${mean(sum(real))}            ${mean(sum(labelled))}\n\n` +
-    "  * mostly stand-in answers — near-identical between builds, ignore it.\n" +
-    "    The middle column is the score: cards he swiped himself and liked.\n"
+  `  TOTAL           ${mean(sum(real))}                 ${mean(sum(labelled))}\n\n` +
+    "  The score is the first column: cards he swiped himself and liked.\n" +
+    "  The second is how much of each block he had labelled at all — when it\n" +
+    "  falls, the deck has walked out of the region we have truth about.\n"
 );

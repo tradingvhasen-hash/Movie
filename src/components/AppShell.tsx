@@ -3,13 +3,21 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { BooksIcon, GridIcon, CardsIcon, SparklesIcon } from "./ui/Icons";
+import { BooksIcon, GridIcon, CardsIcon, SearchIcon, SparklesIcon } from "./ui/Icons";
 
 /* labels inline so the shell renders in any context, including the 404 page */
 const TABS = [
   { href: "/", label: "Swipe", Icon: CardsIcon },
   // the fast lane: thirty questions a screen instead of one a gesture
   { href: "/seen", label: "Seen it?", Icon: GridIcon },
+  /**
+   * The escape hatch, promoted to the nav.
+   *
+   * A person knows the name of the film they watched; the engine has to guess
+   * it out of 12,826. Typing it is the cheapest interaction in the product and
+   * it was not reachable from anywhere.
+   */
+  { href: "/search", label: "Search", Icon: SearchIcon },
   { href: "/discover", label: "Discover", Icon: SparklesIcon },
   { href: "/library", label: "Library", Icon: BooksIcon },
 ] as const;

@@ -409,8 +409,33 @@ function languageLists(pool: CandidateItem[]): Map<string, CandidateItem[]> {
  */
 const LANG_DOOR_MASS = 2;
 
-function languageDoor(profile: TasteProfile | undefined): Map<string, number> {
+/**
+ * The languages a person reads, which is free and was being thrown away.
+ *
+ * The door below opens a language once the viewer has demonstrated they watch
+ * it. They cannot demonstrate it for a language they are never shown, and the
+ * best Tamil film in this catalog sits at global rank 6,140 — so for an Arabic
+ * or Hindi or Turkish speaker the door is logically unopenable. A real
+ * 1,100-card session: 1,045 English cards, and zero in any of those three.
+ *
+ * `navigator.languages` answers the question directly and costs nothing. It is
+ * a prior, not a verdict — it opens the door at half strength and the exposure
+ * model decides from there, exactly as demonstrated evidence does.
+ *
+ * Not measurable by any ruler here: harvest's population is MovieLens, which
+ * is English-speaking, so this can only be checked against a real viewer who
+ * is not. The rulers can say it does no harm; only he can say it helps.
+ */
+const HOME_LANG_STRENGTH = 0.5;
+
+function languageDoor(
+  profile: TasteProfile | undefined,
+  homeLanguages?: string[]
+): Map<string, number> {
   const out = new Map<string, number>();
+  for (const lang of homeLanguages ?? []) {
+    if (lang !== "en") out.set(lang, HOME_LANG_STRENGTH);
+  }
   if (!profile) return out;
   const table = profile.seenFacets.language;
   for (const lang of Object.keys(table)) {
@@ -418,7 +443,7 @@ function languageDoor(profile: TasteProfile | undefined): Map<string, number> {
     const [net, mass] = table[lang];
     if (mass < LANG_DOOR_MASS || net <= 0) continue;
     // share of the door proportional to how consistently they have seen it
-    out.set(lang, Math.min(1, net / mass));
+    out.set(lang, Math.max(out.get(lang) ?? 0, Math.min(1, net / mass)));
   }
   return out;
 }
@@ -626,7 +651,8 @@ export function fameGate(
   pool: CandidateItem[],
   limit: number,
   facets?: FacetTables,
-  profile?: TasteProfile
+  profile?: TasteProfile,
+  homeLanguages?: string[]
 ): CandidateItem[] {
   const { movie, tv } = fameLists(pool);
   const shareOf = (n: number) =>
@@ -635,7 +661,7 @@ export function fameGate(
   // zero when the viewer has taught us nothing, so the work is skipped
   // entirely on the first cards rather than computed and thrown away
   const personal = profile && seenTrust(profile) > 0 ? profile : null;
-  const door = languageDoor(profile);
+  const door = languageDoor(profile, homeLanguages);
   const langs = door.size > 0 ? languageLists(pool) : null;
 
   const reorder = (list: CandidateItem[], keep: number) => {
@@ -712,7 +738,27 @@ export function fameGate(
     return [...reorder(list, base), ...extra];
   };
 
-  const kept = [...take(movie), ...take(tv)];
+  /**
+   * De-duplicated, which it was not.
+   *
+   * `reorder` selects from a window of `base x GATE_WIDTH` and can therefore
+   * return titles at ranks `base ... 3*base`; the deep corner slice starts at
+   * `base`. The two overlap, nothing removed the overlap, and `recommend`
+   * scores the array without a seen-set — so a title could be scored twice and
+   * selected twice in one batch of ten. Measured on the user's own session:
+   * 186 duplicates in the gate after 330 swipes, 250 after 660.
+   *
+   * That is the best candidate anyone has offered for the two identical cards
+   * drawn over each other in his recording, which I spent a day failing to
+   * reproduce. Found by a reviewer reading the code rather than running it.
+   */
+  const seen = new Set<string>();
+  const kept: CandidateItem[] = [];
+  for (const c of [...take(movie), ...take(tv)]) {
+    if (seen.has(c.title.id)) continue;
+    seen.add(c.title.id);
+    kept.push(c);
+  }
   // back into fame order. Concatenating the two lists left every film ahead of
   // every series, and the exploration pass takes the first twelve candidates
   // of a genre from this array — so it could never pick a series at all.
@@ -1273,6 +1319,8 @@ export interface RecommendOptions {
    * "because you loved…" line.
    */
   likedTitles?: Title[];
+  /** BCP-47 primary subtags the viewer reads, e.g. ["ar"], from the browser */
+  homeLanguages?: string[];
   /** candidate id → bonus from collaborative co-occurrence (cloud path) */
   coOccurrenceBonus?: Map<string, number>;
   /** override the automatic exploration share */
@@ -1360,7 +1408,8 @@ export function recommend(
     pool,
     fameTierSize(profile, mode),
     mode === "swipe" ? profile.facets : undefined,
-    profile
+    profile,
+    opts.homeLanguages
   );
   const coWatchScale =
     mode === "discover"

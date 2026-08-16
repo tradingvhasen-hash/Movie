@@ -178,7 +178,16 @@ export default function CalibrationGrid() {
               className="flex w-full min-w-0 flex-col gap-1 text-left"
             >
               <div
-                className={`relative overflow-hidden rounded-xl border transition-all ${
+                /**
+                 * The 2:3 box belongs to the *card*, not to the image inside
+                 * it. Hanging the ratio on the <img> alone means the card has
+                 * no shape until a poster arrives, and a person opening this
+                 * page for the first time is looking at exactly that moment.
+                 * With the ratio here the grid is laid out correctly before a
+                 * single byte of image has been fetched, and stays correct if
+                 * one never arrives.
+                 */
+                className={`relative aspect-[2/3] w-full overflow-hidden rounded-xl border transition-all ${
                   on
                     ? "border-accent ring-2 ring-accent/60"
                     : "border-line opacity-60"

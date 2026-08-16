@@ -102,6 +102,112 @@ against the improved engine, not the old one.
 
 ---
 
+## A third of the interface was dead, and the user knew why before I did (2026-08-16)
+
+He described working around this engine rather than using it. He has watched
+The Office, New Girl, The Big Bang Theory and How I Met Your Mother, dislikes
+all four, and swipes **up** on them — "never seen it" — because a left swipe
+would teach the tables that he dislikes sitcoms and cost him Modern Family and
+Brooklyn Nine-Nine, which he loves. He asked me to test the idea rather than
+agree with it, and to say no if the numbers said no.
+
+His own files say how complete the workaround is:
+
+    1,100 swipes  ->  201 liked,  893 not seen,   6 disliked
+      378 swipes  ->  121 liked,  256 not seen,   1 disliked
+
+**One of the three gestures the product is built on is used 0.3% of the time.**
+
+### The mechanism, and it is one line
+
+`applyFacets` writes the same signal to every token a title carries. A dislike
+of The Office writes a negative against `comedy`, `sitcom`, `workplace`,
+`Steve Carell`, `2000s` and `en` in one stroke — and the first two are exactly
+what it shares with the shows he loves.
+
+Nothing here could see it. `human` feeds the engine only films rated four stars
+and up: there is not one dislike in it. `harvest` and `replay` include dislikes
+but score how much was *recovered*, never what a dislike did to a neighbouring
+taste.
+
+### The ruler — `scripts/mixed-taste.ts`
+
+250 MovieLens people who both love and hate films inside the same genres. Half
+their loves go to the engine, half are held back. Then two runs identical in
+every other way: their hates swiped left, or hidden exactly as he hides them.
+
+    what the engine was told           loves found in a page of 12
+      dislikes swiped left                     26.1%
+      dislikes swiped up (hidden)              32.1%
+      paired difference                        -6.0 points, outside the noise
+      honesty helped 48 people, hurt 136
+
+**Telling this engine the truth cost six points of page quality.** In Discover
+it is -3.2; in the deck, which is what he uses, it is -6.0.
+
+### What each facet was actually costing
+
+    dislike allowed to touch          cost of being honest
+      everything (what shipped)             -6.0
+      genre alone                           -5.1
+      era alone                             -3.1
+      story alone                           -2.6
+      director alone                        -1.1
+      cast alone                            -0.7   (noise)
+
+Not one facet is positive. **A dislike, spread automatically, carries no
+recoverable information in this model** — only damage, concentrated exactly
+where a person's identity lives.
+
+### Two fixes measured and rejected, one shipped
+
+**Rejected: more gradations.** His other suggestion, and the obvious one — half
+a like, half a dislike. Simulated by weakening the negative: the gap closes
+from -6.0 to -0.2 at a quarter strength. But it closes by *muting* the dislike,
+not by making it useful; at no strength does an honest dislike beat a hidden
+one. More buttons buy a quieter mistake, not a better model.
+
+**Rejected for now: contrastive blame.** Scale the negative down on tokens the
+viewer's own history already supports, so one bad comedy cannot dent `comedy`
+for someone who has liked twenty. Recovers most of it (-6.0 to -1.2) and keeps
+some signal, which is better in principle than muting. It stops at -1.2, and it
+needs undo to record per-token deltas. Kept behind `CONTRAST` as the better
+idea if a dislike ever has to say more than it does now.
+
+**Shipped: confine the dislike to cast and director.** The two most specific
+facets, where a negative means "not this actor, not this director" and cannot
+reach a whole category. `SKIP_SCALE` already refused to charge a genre for
+"never heard of it" with exactly this reasoning, then asserted a dislike was
+different. That assertion was the bug.
+
+    mixed-taste, deck mode      -6.0   ->   -0.9   (inside the noise)
+    harvest, 60 x 500 cards    243.9   ->  250.1
+    replay on his own labels   186.8   ->  188.2
+    human / vibe / simulate     unchanged (32.5% / 58% / 12 of 13)
+
+### What is still open, and it is his idea
+
+If a dislike spread automatically carries no information in any facet, then
+**asking which facet is the only way to make it informative**. That is the real
+argument for the "why didn't you like this?" prompt he proposed — not that it
+is a nice extra, but that it is the only remaining route to a useful dislike.
+Two conditions before building it: it belongs on dislikes only, which cost
+nothing because dislikes are rare, and there is no evidence yet that people
+answer such a prompt accurately. That evidence does not exist here and cannot
+be simulated.
+
+### And a different bug his example exposed
+
+He watched Joker, thought it was fine, and swipes **up** — because there is no
+gesture for "watched it, no strong feeling". The model has had that answer
+since the grid shipped (`seen`: teaches exposure at full strength, teaches
+taste nothing). The deck has no way to send it. So every lukewarm title he has
+ever seen is recorded as *unwatched*, which corrupts the exposure tables and
+loses the library entry. That is a missing gesture, not a missing scale, and it
+is the right answer to his Joker case.
+
+---
+
 ## The deck was not running out of films. It was running out of room. (2026-08-16)
 
 He said the hit rate collapses after card 300. His last three sessions read

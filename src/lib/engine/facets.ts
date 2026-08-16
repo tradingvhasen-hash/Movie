@@ -59,7 +59,10 @@ export type FacetWeights = Record<FacetKind, number>;
  * skipped superhero films teach the deck nothing.
  */
 export const LIKE_SIGNAL = 1;
-export const DISLIKE_SIGNAL = -1;
+export const DISLIKE_SIGNAL =
+  typeof process !== "undefined" && process.env?.DISLIKE
+    ? -Number(process.env.DISLIKE)
+    : -1;
 export const SKIP_SIGNAL = -0.35;
 
 /** shrinkage on a token's mean: one sighting is a hint, five are evidence */
@@ -506,6 +509,56 @@ const SKIP_SCALE: Record<FacetKind, number> = {
   fame: 1,
 };
 
+/**
+ * WHAT A DISLIKE IS ALLOWED TO BLAME — and the measurement that set it.
+ *
+ * `SKIP_SCALE` above already refuses to charge a genre for "never heard of
+ * it", with the right reasoning: charging `comedy`, which a fifth of the
+ * catalog carries, is charging the viewer's whole world for one card. It then
+ * states that a dislike is different and writes the full negative everywhere.
+ * That was an assumption, and it is wrong.
+ *
+ * The user found it before any instrument here did. He has watched The Office,
+ * New Girl, The Big Bang Theory and How I Met Your Mother, dislikes all four,
+ * and swipes *up* on them — because a left swipe would teach the tables that
+ * he dislikes sitcoms and cost him Modern Family and Brooklyn Nine-Nine, which
+ * he loves. His two real sessions contain **6 dislikes in 1,100 swipes and 1
+ * in 378**. A third of the interface is dead, and he was right to kill it.
+ *
+ * `scripts/mixed-taste.ts` measures exactly his claim on 250 MovieLens people
+ * who both love and hate films inside the same genres: give the engine the
+ * dislikes, or hide them, and count how many of their held-back loves come
+ * back in a page of twelve.
+ *
+ *     what the dislike was allowed to touch     cost of being honest
+ *     everything (what shipped)                       -6.0 points
+ *     genre alone                                     -5.1
+ *     era alone                                       -3.1
+ *     story alone                                     -2.6
+ *     director alone                                  -1.1
+ *     cast alone                                      -0.7  (noise)
+ *
+ * Not one facet is positive. A dislike, spread automatically, carries no
+ * recoverable information in this model — only damage, and the damage lives
+ * where the viewer's identity lives. So it is confined to the two most
+ * specific facets, where it means "not this actor, not this director" and
+ * cannot reach a whole category.
+ *
+ * Two other fixes were measured and are not what shipped. Weakening the
+ * dislike closes the gap (-6.0 to -0.2 at a quarter strength) by *muting* it,
+ * not by making it useful — which is the honest verdict on adding half-like
+ * and half-dislike buttons. Scaling the negative down on tokens the viewer
+ * already loves (`CONTRAST`) recovers most of it and keeps some signal, but
+ * still tops out at -1.2 and needs undo to record per-token deltas. It stays
+ * behind an env flag as the better idea if a dislike ever has to say more.
+ *
+ * On the other rulers, confining it is free or better:
+ *
+ *     harvest, 60 people x 500 cards      243.9  ->  250.1
+ *     replay on his own labels            186.8  ->  188.2
+ */
+const DISLIKE_FACETS = new Set<FacetKind>(["cast", "director"]);
+
 /** the evidence one swipe writes, per facet */
 export function facetSignals(action: SwipeAction): Record<FacetKind, number> {
   const out = {} as Record<FacetKind, number>;
@@ -519,6 +572,13 @@ export function facetSignals(action: SwipeAction): Record<FacetKind, number> {
     action === "liked" ? LIKE_SIGNAL : action === "disliked" ? DISLIKE_SIGNAL : SKIP_SIGNAL;
   for (const kind of FACET_KINDS) {
     out[kind] = action === "not_seen" ? base * SKIP_SCALE[kind] : base;
+  }
+  if (action === "disliked") {
+    const allow =
+      typeof process !== "undefined" && process.env?.DIS_FACETS
+        ? new Set(process.env.DIS_FACETS.split(","))
+        : DISLIKE_FACETS;
+    for (const kind of FACET_KINDS) if (!allow.has(kind)) out[kind] = 0;
   }
   // fame is an exposure fact, never a taste one — see FACET_WEIGHTS.fame
   out.fame = 0;
@@ -667,6 +727,20 @@ const round3 = (x: number) => Math.round(x * 1000) / 1000;
  * Fold one swipe into the tables. Mutates a copy-on-write clone of each
  * touched facet so React/Zustand see a new object.
  */
+/**
+ * How much a value you already love can absorb the blame for one bad title.
+ *
+ * 0 restores the old behaviour: a dislike writes its full negative against
+ * every token the title carries.
+ */
+const CONTRAST =
+  typeof process !== "undefined" && process.env?.CONTRAST
+    ? Number(process.env.CONTRAST)
+    : 0;
+
+/** never let a token become completely immune to new evidence */
+const CONTRAST_FLOOR = 0.15;
+
 export function applyFacets(
   tables: FacetTables,
   tokens: TitleTokens,
@@ -677,13 +751,38 @@ export function applyFacets(
     const list = tokens[kind];
     const signal = signals[kind];
     if (list.length === 0 || signal === 0) continue;
-    const mass = Math.abs(signal);
     const table = { ...next[kind] };
     for (const token of list) {
       const prev = table[token];
+      /**
+       * BLAME THE PART THAT IS NEW, NOT THE PART YOU ALREADY LOVE.
+       *
+       * A title is not disliked for all of its properties at once, but this
+       * wrote the same negative against every one of them. Someone who has
+       * liked twenty comedies and then dislikes one still got a negative
+       * against `comedy`, alongside the negatives against whatever actually
+       * put them off.
+       *
+       * That is not a theoretical concern. Measured on 250 MovieLens people
+       * who both love and hate films inside the same genres, swiping left
+       * honestly instead of hiding the dislike cost **6.0 points** of page
+       * quality in the deck — it hurt 136 of them and helped 48. The product
+       * was punishing honest use, which is exactly why the user stopped
+       * swiping left on shows he genuinely dislikes.
+       *
+       * So a negative is scaled down on tokens the viewer's own history
+       * already supports. The blame flows to the tokens with no support —
+       * which is where the reason for the dislike almost always is.
+       */
+      let s = signal;
+      if (signal < 0 && CONTRAST > 0 && prev) {
+        const support = Math.max(0, prev[0] / (prev[1] + TOKEN_K));
+        s = signal * Math.max(CONTRAST_FLOOR, 1 - CONTRAST * support);
+      }
+      const mass = Math.abs(s);
       table[token] = prev
-        ? [round3(prev[0] + signal), round3(prev[1] + mass)]
-        : [round3(signal), round3(mass)];
+        ? [round3(prev[0] + s), round3(prev[1] + mass)]
+        : [round3(s), round3(mass)];
     }
     next[kind] = table;
   }

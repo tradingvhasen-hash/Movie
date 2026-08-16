@@ -73,7 +73,23 @@ export default function CalibrationGrid() {
   const [ready, setReady] = useState(false);
   const [seed] = useState(() => Math.floor(Math.random() * 1e9));
   const [page, setPage] = useState(0);
-  const [seen, setSeen] = useState<Record<string, boolean>>({});
+  /**
+   * TAPPED MEANS WATCHED, AND NOTHING ELSE IS AN ANSWER TO GIVE.
+   *
+   * This asked for two taps' worth of decision per poster — "watched" or "not
+   * watched" — with a third state for "not answered", so 200 titles cost 200
+   * deliberate choices. The user asked for the grid's shape instead: everything
+   * starts at not-watched, one tap anywhere on a card flips it to watched, and
+   * another tap flips it back.
+   *
+   * The cost is that "I did not answer" and "I have not seen it" stop being
+   * distinguishable, and every title on a page he skims past is recorded as
+   * unwatched. That is the right trade here: the base rate is about 5%, so the
+   * overwhelming majority of correct answers are "no", and a sample where the
+   * "no"s are free is a sample he will actually finish. It is the same argument
+   * the /seen grid is built on.
+   */
+  const [watched, setWatched] = useState<Record<string, true>>({});
 
   useEffect(() => {
     void loadCatalog().then(() => setReady(true));
@@ -86,18 +102,25 @@ export default function CalibrationGrid() {
   const PER_PAGE = 24;
   const pages = Math.ceil(items.length / PER_PAGE);
   const view = items.slice(page * PER_PAGE, (page + 1) * PER_PAGE);
-  const answered = Object.keys(seen).length;
+  const picked = Object.keys(watched).length;
+  // every title on a page the user has reached counts as answered
+  const reached = Math.min(items.length, (page + 1) * PER_PAGE);
 
-  const mark = useCallback((id: string, watched: boolean) => {
-    setSeen((s) => ({ ...s, [id]: watched }));
+  const toggle = useCallback((id: string) => {
+    setWatched((s) => {
+      const next = { ...s };
+      if (next[id]) delete next[id];
+      else next[id] = true;
+      return next;
+    });
   }, []);
 
   const download = () => {
     const rows = items
-      .filter((t) => t.id in seen)
+      .slice(0, reached)
       .map((t) => ({
         id: t.id,
-        seen: seen[t.id],
+        seen: t.id in watched,
         voteCount: t.voteCount,
         lang: t.originalLanguage,
         type: t.type,
@@ -126,51 +149,41 @@ export default function CalibrationGrid() {
       <h1 className="text-2xl font-bold tracking-tight">هل شاهدت هذا؟</h1>
       <p className="mt-2 max-w-prose text-sm leading-relaxed text-ink-dim">
         عيّنة عشوائية تمامًا من الكتالوج كلّه — لا ترتيب، لا ترشيح، لا علاقة
-        بذوقك. فيها المشهور والمغمور بالتساوي، أفلامًا ومسلسلات. أجب عن كل ما
-        تستطيع؛ <strong>«لم أشاهده» إجابة ثمينة تمامًا كـ«شاهدته»</strong>.
-        اضغط التصدير في النهاية وأرسل الملف.
+        بذوقك. فيها المشهور والمغمور بالتساوي، أفلامًا ومسلسلات.{" "}
+        <strong>انقر فقط ما شاهدته</strong> — نقرة واحدة في أي مكان على البطاقة،
+        ونقرة ثانية تتراجع. كل ما لم تنقره يُحسب «لم أشاهده»، وهي إجابة ثمينة
+        تمامًا. اضغط «تصدير» في النهاية وأرسل الملف.
       </p>
 
       <div className="mt-5 grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
         {view.map((t) => {
-          const state = seen[t.id];
+          const on = t.id in watched;
           return (
-            <div key={t.id} className="flex flex-col gap-1">
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => toggle(t.id)}
+              aria-pressed={on}
+              className="flex flex-col gap-1 text-left"
+            >
               <div
-                className={`relative overflow-hidden rounded-xl border ${
-                  state === true
+                className={`relative overflow-hidden rounded-xl border transition-all ${
+                  on
                     ? "border-accent ring-2 ring-accent/60"
-                    : state === false
-                      ? "border-line opacity-40"
-                      : "border-line"
+                    : "border-line opacity-60"
                 }`}
               >
                 <PosterArt title={t} sizes="140px" className="aspect-[2/3] w-full" />
+                {on && (
+                  <span className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-full bg-accent text-xs font-bold text-white">
+                    ✓
+                  </span>
+                )}
               </div>
               <div className="truncate text-center text-[10px] leading-tight text-ink-dim">
                 {t.title.en} · {t.year}
               </div>
-              <div className="flex gap-1" dir="ltr">
-                <button
-                  type="button"
-                  onClick={() => mark(t.id, false)}
-                  className={`flex-1 rounded-lg py-1 text-[11px] font-semibold ${
-                    state === false ? "bg-ink text-surface" : "bg-surface-2 text-ink-dim"
-                  }`}
-                >
-                  لم أشاهده
-                </button>
-                <button
-                  type="button"
-                  onClick={() => mark(t.id, true)}
-                  className={`flex-1 rounded-lg py-1 text-[11px] font-semibold ${
-                    state === true ? "bg-accent text-white" : "bg-surface-2 text-ink-dim"
-                  }`}
-                >
-                  شاهدته
-                </button>
-              </div>
-            </div>
+            </button>
           );
         })}
       </div>
@@ -178,14 +191,14 @@ export default function CalibrationGrid() {
       <div className="fixed inset-x-0 bottom-16 z-20 border-t border-line bg-bg/95 px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
           <p className="text-xs tabular-nums text-ink-dim">
-            <span className="font-semibold text-ink">{answered}</span> / {items.length} ·
-            صفحة {page + 1} من {pages}
+            <span className="font-semibold text-ink">{picked}</span> شاهدته ·{" "}
+            {reached} / {items.length} · صفحة {page + 1} من {pages}
           </p>
           <div className="flex gap-2">
             <button
               type="button"
               onClick={download}
-              disabled={answered === 0}
+              disabled={reached === 0}
               className="rounded-full border border-line px-4 py-2 text-sm font-semibold disabled:opacity-40"
             >
               تصدير

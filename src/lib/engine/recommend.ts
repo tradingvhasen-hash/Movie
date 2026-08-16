@@ -104,11 +104,36 @@ const W_RECOGNITION_DISCOVER = 0.12;
 const MMR_LAMBDA = 0.35;
 /** extra penalty per already-picked result sharing a genre */
 const GENRE_REPEAT_PENALTY = 0.16;
-/** measurement knob for the deck's share, swept in scripts/deck-drift.ts */
+/**
+ * OFF FOR THE DECK. Discover keeps its own share below.
+ *
+ * SPREADING SOMEONE ACROSS GENRES THEY DO NOT WATCH. A real 1,100-swipe
+ * session: 39% of his cards were comedies, and 78% of the titles he marked
+ * watched were comedies. 110 animation cards produced zero. Meanwhile 658
+ * English comedies from 1995-2020 with over 1,200 votes sat in the catalog and
+ * were never dealt to him once. Graded on his own answers, the share of cards
+ * he had actually watched fell 35% → 34% → 17% → 2% across the session; with
+ * this off and the gate deep it holds 41% → 61% → 65% → 39%.
+ *
+ * A diversity penalty is insurance against a wrong model. The deck's job is
+ * not to be right about one card, it is to find everything a person has
+ * watched — and there, deliberately showing them a genre they do not watch is
+ * simply a card thrown away. Discover is the opposite: it makes one small set
+ * of suggestions and repeating yourself there is a real failure, so it keeps
+ * its quarter.
+ *
+ * TRIED AND REJECTED — decaying it with evidence instead of switching it off.
+ * The principled version: keep the insurance while the model is a guess, drop
+ * it once someone has given 150 verdicts. It sounds obviously right and it
+ * measured worse than simply switching it off: harvest 224.8 against 229.1,
+ * and the real-answer ruler 85.3 against 100.5 — below even today's 88.0.
+ * The three changes here only pay as a set, and the ramp weakens the set
+ * exactly where the ruler can see it.
+ */
 const DECK_DIVERSITY_SCALE =
   typeof process !== "undefined" && process.env?.DECK_DIVERSITY
     ? Number(process.env.DECK_DIVERSITY)
-    : 0.25;
+    : 0;
 
 /** Discover keeps a quarter of it: one window for discovery, not four */
 const DISCOVER_DIVERSITY_SCALE =
@@ -409,10 +434,28 @@ function languageDoor(profile: TasteProfile | undefined): Map<string, number> {
  * demonstrably liked — so a deep obscurity stays out whether the graph likes
  * it or not.
  */
+/**
+ * Raised from 2.5 to 6, which is the single change that moves reachability.
+ *
+ * `harvest` reports a ceiling as well as a score: how much of a real person's
+ * viewing history the gate can reach *at any session length*. At 2.5 that
+ * ceiling is 64.8% — a third of what someone has watched is unreachable no
+ * matter how long they swipe, which is not a ranking problem and no ranking
+ * can fix it. At 6 it is 76.1%.
+ *
+ * Deeper than 6 does not pay: 12 gives the same ceiling (76.6%) and a worse
+ * score (223.7 against 229.1), because the extra depth is obscurity rather
+ * than more of the viewer's corner.
+ *
+ * On its own this change is *negative* on the real-answer ruler (88.0 to
+ * 79.8) — a deeper gate the ranking is not allowed to exploit just dilutes the
+ * deck. It pays only together with the two changes above, which is why all
+ * three ship or none do.
+ */
 const TASTE_DEPTH =
   typeof process !== "undefined" && process.env?.TASTE_DEPTH
     ? Number(process.env.TASTE_DEPTH)
-    : 2.5;
+    : 6;
 
 /**
  * Is this title in the viewer's own corner?
@@ -649,17 +692,26 @@ function allGenres(pool: CandidateItem[]): string[] {
  * the same movies" complaint. A quarter of the early batches probe genres we
  * have no evidence about, tapering once the picture is filled in.
  */
+/**
+ * NO PROBING. Was a quarter of the deck, then 6-12%, now none.
+ *
+ * A probe spends a card asking a question instead of offering something the
+ * viewer might have watched. That was a good trade when the ranking had little
+ * else to go on: it cost 2.4 points of accuracy at a quarter of the deck, and
+ * bought the discovery of genres nobody had tested. With the gate now six
+ * times deeper into the viewer's own corner, the deck does not need to go
+ * looking — there is more than enough inside the corner to keep finding
+ * things. Measured on top of that deeper gate, removing probing took harvest
+ * 217.6 to 227.4 and the real-answer ruler 79.8 to 91.8.
+ *
+ * `simulate`'s tunnel-vision guard exists for precisely this risk, and it is
+ * the number to watch. It is reported honestly in every run rather than
+ * retuned to accommodate this.
+ */
 export function exploreRatioFor(profile: TasteProfile): number {
   if (process.env?.EXPLORE) return Number(process.env.EXPLORE);
-  if (profile.ratedSwipes === 0) return 0;
-  const warm = Math.min(1, profile.totalSwipes / 60);
-  // Halved from 0.25. A quarter of the deck spent on probes was set when the
-  // ranking had little else to offer; now that the graph carries real signal,
-  // measured on 500 real libraries, that quarter costs 2.4 points of accuracy
-  // (25.7% with no probing, 23.3% with a quarter). Exploration still earns its
-  // place — the tunnel-vision check exists for exactly this — but it no longer
-  // gets to spend one card in four proving it.
-  return 0.12 - 0.06 * warm;
+  void profile;
+  return 0;
 }
 
 /**

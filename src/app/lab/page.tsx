@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { useDhawq } from "@/lib/store";
+import { getLocalTitle, loadCatalog } from "@/lib/catalog";
 import { FADE_UP, staggerContainer } from "@/lib/motion";
 import type { SwipeAction } from "@/lib/types";
 
@@ -116,6 +117,80 @@ export default function LabPage() {
     a.download = `dhawq-swipes-${rows.length}.json`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  /**
+   * PUT A FILE BACK IN.
+   *
+   * The user's browser clears local storage when it closes, so 1,100 swipes
+   * and a session's worth of learned taste vanished between one day and the
+   * next. The exported files survived — they are the only copies of the most
+   * valuable data this project has — and there was no way to put one back.
+   * Every session therefore started from zero, which is also the one condition
+   * under which the deck cannot show what it learned.
+   *
+   * Replayed through `swipe` one at a time rather than written into the state
+   * directly, so the facet tables, the exposure tables and the counters end up
+   * exactly as they would have if the cards had been swiped by hand. A file
+   * restored this way is indistinguishable from having done the work.
+   *
+   * Accepts both shapes this project exports: `{swipes:[{id,a}]}` from here,
+   * and `{sample:[{id,seen}]}` from /calibrate, whose answers are exposure
+   * evidence of the same kind and were also being thrown away.
+   */
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState<string | null>(null);
+
+  const importFile = async (file: File) => {
+    setImporting("reading…");
+    try {
+      const parsed = JSON.parse(await file.text());
+      const raw = (
+        Array.isArray(parsed) ? { swipes: parsed } : parsed
+      ) as {
+        swipes?: { id: string; a: SwipeAction }[];
+        sample?: { id: string; seen: boolean }[];
+      };
+      const rows: { id: string; a: SwipeAction }[] = raw.swipes?.length
+        ? raw.swipes
+        : (raw.sample ?? []).map((r) => ({
+            id: r.id,
+            a: (r.seen ? "seen" : "not_seen") as SwipeAction,
+          }));
+      if (rows.length === 0) {
+        setImporting("nothing in that file");
+        return;
+      }
+      setImporting(`loading the catalog…`);
+      await loadCatalog();
+
+      const swipe = useDhawq.getState().swipe;
+      const already = useDhawq.getState().swipes;
+      let added = 0;
+      let missing = 0;
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
+        if (already[r.id]) continue;
+        const title = getLocalTitle(r.id);
+        if (!title) {
+          missing++;
+          continue;
+        }
+        swipe(title, r.a);
+        added++;
+        // hand the frame back every few hundred so the page does not lock up
+        if (i % 200 === 0) {
+          setImporting(`${i} of ${rows.length}…`);
+          await new Promise((res) => setTimeout(res, 0));
+        }
+      }
+      setImporting(
+        `restored ${added} of ${rows.length}` +
+          (missing > 0 ? ` · ${missing} are not in this catalog` : "")
+      );
+    } catch {
+      setImporting("could not read that file");
+    }
   };
 
   return (
@@ -252,6 +327,25 @@ export default function LabPage() {
           Export {overall.total} swipes
         </button>
 
+        <input
+          ref={fileInput}
+          type="file"
+          accept="application/json,.json"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void importFile(f);
+            e.target.value = "";
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => fileInput.current?.click()}
+          className="rounded-full border border-accent/40 px-4 py-2 text-sm font-semibold text-accent transition-colors hover:bg-accent/10"
+        >
+          Import a file
+        </button>
+
         {!confirming ? (
           <button
             type="button"
@@ -280,9 +374,20 @@ export default function LabPage() {
         )}
       </motion.div>
 
+      {importing && (
+        <motion.p
+          variants={FADE_UP}
+          className="mt-3 text-sm font-semibold tabular-nums text-accent"
+        >
+          {importing}
+        </motion.p>
+      )}
+
       <motion.p variants={FADE_UP} className="mt-3 text-xs text-ink-faint">
-        Reset clears every swipe and the learned taste, and brings back the
-        opening picker so a run starts exactly where the last one did.
+        Import replays an exported file swipe by swipe, so the taste it rebuilds
+        is identical to having done the work by hand. It skips anything already
+        answered, so importing the same file twice changes nothing. Reset clears
+        every swipe and the learned taste, and brings back the opening picker.
       </motion.p>
     </motion.div>
   );

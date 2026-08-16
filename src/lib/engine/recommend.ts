@@ -19,6 +19,27 @@ export interface CandidateItem {
   title: Title;
   /** optional: the diversity pass builds vectors lazily for finalists only */
   vector?: Float32Array;
+  /**
+   * Terms that depend on the title alone, memoised on the candidate.
+   *
+   * A rebuild scores every title the gate admits, which is now a few thousand,
+   * and it happens after every batch of cards for the whole session. Three of
+   * the terms in that sum — the quality prior, the exposure prior and the
+   * per-user tie-break — are pure functions of the title (and, for the last
+   * two, of the session's language set and seed, which do not change while
+   * someone is swiping). They were being recomputed from scratch every time,
+   * including an FNV hash over the id string for the tie-break.
+   *
+   * The pool array outlives the session, so this is the natural place to keep
+   * them. `_k` records what the cached values were computed under, so a change
+   * of seed or home languages recomputes rather than silently serving stale
+   * numbers — the failure mode that would be invisible and would make every
+   * deck after it wrong.
+   */
+  _k?: string;
+  _q?: number;
+  _prior?: number;
+  _jit?: number;
 }
 
 /* ── scoring weights ───────────────────────────────────────────────────
@@ -1638,20 +1659,27 @@ export function recommend(
     return d;
   };
 
+  const cacheKey = `${seed}|${opts.homeLanguages?.join(",") ?? ""}`;
   const scored: { c: CandidateItem; score: number; facet: number }[] = [];
   for (const c of gated) {
     if (excludeIds.has(c.title.id)) continue;
+    if (c._k !== cacheKey) {
+      c._k = cacheKey;
+      c._q = qualityPrior(c.title.rating, c.title.voteCount);
+      c._prior = famePrior(c.title, homeSet, langIndex);
+      c._jit = jitterFor(c.title.id, seed);
+    }
     const tokens = titleTokens(c.title);
     const fs = facetScore(facets, facetWeights, tokens, streaks.cooldown, totalSwipes);
 
-    const q = qualityPrior(c.title.rating, c.title.voteCount);
+    const q = c._q as number;
     /**
      * Was the global vote count, for everyone, forever. It is now the *prior*
      * this viewer's own answers are blended against — see `watchLikelihood`.
      * The weight below is untouched: what changed is that the number it
      * multiplies is about this person rather than about the world.
      */
-    const prior = famePrior(c.title, homeSet, langIndex);
+    const prior = c._prior as number;
     const known = homeFloor(
       profile,
       c.title,
@@ -1680,7 +1708,7 @@ export function recommend(
       W_QUALITY * q +
       wRecognition * recognitionTerm +
       confidence * W_FACETS * fs.total +
-      JITTER * jitterFor(c.title.id, seed) +
+      JITTER * (c._jit as number) +
       coWatchScale * coWatchTerm(coWatch?.get(c.title.id)?.score ?? 0) +
       confidence * W_SOUL * soulSim(c.title.id) +
       (opts.coOccurrenceBonus?.get(c.title.id) ?? 0);

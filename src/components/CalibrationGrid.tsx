@@ -164,7 +164,18 @@ export default function CalibrationGrid() {
               type="button"
               onClick={() => toggle(t.id)}
               aria-pressed={on}
-              className="flex flex-col gap-1 text-left"
+              /**
+               * `min-w-0` and an explicit width, because this is a button and
+               * a flex container. A flex item's automatic minimum size is its
+               * *content*, so until the poster image has intrinsic dimensions
+               * the long title decides how wide the card is: the columns blow
+               * past the screen, `truncate` never bites and the rows overlap.
+               * It looks correct the instant the images are cached and wrong
+               * on the first load of a page, which is exactly when a person
+               * sees it. The div this replaced was a block-level grid item and
+               * had the behaviour for free.
+               */
+              className="flex w-full min-w-0 flex-col gap-1 text-left"
             >
               <div
                 className={`relative overflow-hidden rounded-xl border transition-all ${
@@ -180,7 +191,7 @@ export default function CalibrationGrid() {
                   </span>
                 )}
               </div>
-              <div className="truncate text-center text-[10px] leading-tight text-ink-dim">
+              <div className="w-full truncate text-center text-[10px] leading-tight text-ink-dim">
                 {t.title.en} · {t.year}
               </div>
             </button>

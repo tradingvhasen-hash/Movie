@@ -102,6 +102,93 @@ against the improved engine, not the old one.
 
 ---
 
+## The stutter was the site writing down what you just told it (2026-08-16)
+
+"There is a slight hitch in the swipe, it is not smooth enough."
+
+Frame timings at 4× CPU say the drag itself is perfect — 528 frames, median
+16.7ms, **not one frame over 24ms**. The hitch is entirely at the instant the
+finger lifts, and it is the same shape every time:
+
+    release 1: 17 17 67 67 17 17 17 17 17 17 33 33 17 17
+    release 4: 17 17 100 100 50 50 17 17 17 17 17 17 17 17
+
+Profiling it found script was only 7% of the time, so the first instinct — the
+engine, the re-rank — was wrong. Removing one rendering layer at a time found
+no single owner either. What found it was asking a different question: **does
+it get worse as the library grows?**
+
+| library | stored | frames lost per swipe window | worst stall |
+|---|---|---|---|
+| empty | 3 KB | 25 | 67 ms |
+| 200 swipes | 376 KB | 52 | 183 ms |
+| 600 swipes | 992 KB | **79** | **250 ms** |
+
+A quarter of a second of frozen screen on every card at six hundred swipes,
+and the goal for this product is *every film a person has ever watched*.
+
+### Why
+
+`createJSONStorage` hands the persist middleware a *string*, so
+`JSON.stringify` of the whole library ran inside every `set` — on the main
+thread, at the worst possible moment. The write was already deferred; the
+encoding, which is the expensive half, was not. I had written that deferral
+myself and stopped one step short.
+
+Implementing `PersistStorage` instead means the middleware hands over the
+state *object* and we choose when to encode it. The state is immutable, so
+holding the latest reference and encoding once per burst loses nothing.
+
+### And a ceiling nobody had checked
+
+Two fields were 61% of every stored swipe: `related` (the co-watch edge list,
+derived from the bundled catalog) and `overview` (display prose, also in the
+catalog). Neither is read by the taste model. Dropping them takes a stored
+title from 1,412 bytes to 490 — which matters because localStorage stops at
+five to ten megabytes:
+
+    old shape    6.7 MB for 5,000 films   — over the limit, silent data loss
+    new shape    2.3 MB for 5,000 films
+
+`titleFor` also had its fallback backwards, preferring the stored copy over
+the catalog. The catalog entry is complete and current; the stored copy exists
+for the one case it cannot cover.
+
+### Result
+
+| library | frames lost, before → after | worst stall |
+|---|---|---|
+| empty | 25 → **19** | 67 → 50 ms |
+| 200 swipes | 52 → **21** | 183 → 67 ms |
+| 600 swipes | 79 → **46** | 250 → 100 ms |
+
+Stored size at 600 swipes: 992 KB → 499 KB.
+
+Also measured: the fly-off copy mounted a whole `PosterArt` — a React subtree
+and a fresh `<img>` — at the instant of release, and cost 9 of 24 frames on its
+own. It is now a background image on a bare div, which paints the same pixels
+from the same cached URL.
+
+### Tried and rejected, both measured
+
+**Scheduling the flush through `requestIdleCallback`**: 46 frames lost against
+45. No effect; the plain timer stays.
+
+**Dropping backdrop blur from the cards behind the top one**: taking blur off
+the *whole* deck saves 8 of 26 frames, so this looked free. Measured at the
+deck level it was 39–46 against 42–46 — inside the noise. Reverted rather than
+kept on the strength of a plausible story.
+
+### Still open
+
+At six hundred swipes the hitch is still twice what it is at zero, and the
+remaining cost is not the encode (moving the write outside the measured window
+changed nothing) and not `applySwipe` (flat at 1ms once the facet tables cap).
+Ten percent of the sampled time is garbage collection, which grows with the
+live heap. No fix measured yet.
+
+---
+
 ## The deck was overwriting the question it had just asked (2026-08-16)
 
 The first recording showed a broken deck and I found three real faults in it

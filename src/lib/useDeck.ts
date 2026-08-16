@@ -117,7 +117,7 @@ function pendingVerdicts(exclude: Set<string>): Title[] {
   const out: Title[] = [];
   for (const sw of Object.values(state.swipes)) {
     if (sw.action !== "seen" || exclude.has(sw.titleId)) continue;
-    const title = sw.title ?? getLocalItem(sw.titleId)?.title;
+    const title = getLocalItem(sw.titleId)?.title ?? sw.title;
     if (title) out.push(title);
   }
   // newest first: what you tapped a minute ago is easier to have an opinion on
@@ -146,7 +146,7 @@ function computeLocalBatch(excludeExtra: string[] = []): Title[] {
 
   const likedTitles = Object.values(state.swipes)
     .filter((s) => s.action === "liked")
-    .map((s) => s.title ?? getLocalItem(s.titleId)?.title)
+    .map((s) => getLocalItem(s.titleId)?.title ?? s.title)
     .filter((t): t is Title => Boolean(t));
 
   const pending = pendingVerdicts(new Set(excludeExtra)).slice(0, BATCH);

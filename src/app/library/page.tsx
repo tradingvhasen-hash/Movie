@@ -45,7 +45,7 @@ export default function LibraryPage() {
     if (query.trim()) {
       const q = query.trim().toLowerCase();
       rows = rows.filter((sw) => {
-        const title = sw.title ?? getLocalTitle(sw.titleId);
+        const title = getLocalTitle(sw.titleId) ?? sw.title;
         return (
           title &&
           (title.title.ar.toLowerCase().includes(q) ||
@@ -183,7 +183,7 @@ function LibraryTile({
   onSelect: () => void;
   onRemove: () => void;
 }) {
-  const title = swipe.title ?? getLocalTitle(swipe.titleId);
+  const title = getLocalTitle(swipe.titleId) ?? swipe.title;
   if (!title) return null;
 
   return (

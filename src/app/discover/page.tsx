@@ -49,7 +49,7 @@ export default function DiscoverPage() {
     );
     const likedTitles = Object.values(swipes)
       .filter((s) => s.action === "liked")
-      .map((s) => s.title ?? getLocalTitle(s.titleId))
+      .map((s) => getLocalTitle(s.titleId) ?? s.title)
       .filter((t): t is NonNullable<typeof t> => Boolean(t));
     return recommend(pool, profile, {
       excludeIds: exclude,

@@ -135,6 +135,30 @@ const DECK_DIVERSITY_SCALE =
     ? Number(process.env.DECK_DIVERSITY)
     : 0;
 
+/**
+ * …but not on the first handful of answers.
+ *
+ * With the penalty off from card one, a single accidental right-swipe on an
+ * action film filled 85% of the next twenty cards with action — measured by
+ * `simulate`'s tunnel-vision check, which is not one of the fame-shaped rulers
+ * and means exactly what it says. One answer is not a taste, and a deck that
+ * treats it as one is broken for every new viewer.
+ *
+ * So the penalty is held at full strength until there is enough evidence for
+ * the concentration to be about the person rather than about one card. Short
+ * on purpose: an earlier attempt decayed it over 150 verdicts and measured
+ * worse than no guard at all.
+ */
+const COLD_DIVERSITY = 0.25;
+const COLD_UNTIL =
+  typeof process !== "undefined" && process.env?.COLD_UNTIL
+    ? Number(process.env.COLD_UNTIL)
+    : 5;
+
+function deckDiversity(profile: TasteProfile): number {
+  return profile.ratedSwipes < COLD_UNTIL ? COLD_DIVERSITY : DECK_DIVERSITY_SCALE;
+}
+
 /** Discover keeps a quarter of it: one window for discovery, not four */
 const DISCOVER_DIVERSITY_SCALE =
   typeof process !== "undefined" && process.env?.DIVERSITY
@@ -710,8 +734,11 @@ function allGenres(pool: CandidateItem[]): string[] {
  */
 export function exploreRatioFor(profile: TasteProfile): number {
   if (process.env?.EXPLORE) return Number(process.env.EXPLORE);
-  void profile;
-  return 0;
+  if (profile.ratedSwipes === 0) return 0;
+  // probing survives only while the taste is still a guess, for the same
+  // reason the diversity penalty does
+  if (profile.ratedSwipes >= COLD_UNTIL) return 0;
+  return 0.12 - 0.06 * Math.min(1, profile.totalSwipes / 60);
 }
 
 /**
@@ -1369,7 +1396,7 @@ export function recommend(
   // recommendation grid is just an off-topic suggestion.
   const exploreRatio =
     opts.exploreRatio ?? (mode === "discover" ? 0 : exploreRatioFor(profile));
-  const divScale = mode === "discover" ? DISCOVER_DIVERSITY_SCALE : DECK_DIVERSITY_SCALE;
+  const divScale = mode === "discover" ? DISCOVER_DIVERSITY_SCALE : deckDiversity(profile);
   const exploreSlots = Math.min(count - 1, Math.round(count * exploreRatio));
   const mainSlots = Math.max(1, count - exploreSlots);
 

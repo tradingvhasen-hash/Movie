@@ -527,6 +527,19 @@ const TASTE_MARGIN =
  */
 const CORNER_MASS = 3;
 
+/**
+ * How many *extra* candidates the deep corner may add, per kind.
+ *
+ * Additive, not a total. Written first as a total minus the base, which
+ * quietly turned the deep gate off exactly when it mattered: the base grows
+ * with the session, so by card 500 there was no room left and reachability
+ * fell straight back to where it started (80% to 65%).
+ */
+const DEEP_CAP =
+  typeof process !== "undefined" && process.env?.DEEP_CAP
+    ? Number(process.env.DEEP_CAP)
+    : 1200;
+
 function corner(facets: FacetTables): Set<string> {
   const table = facets.genre;
   let best = -Infinity;
@@ -676,12 +689,27 @@ export function fameGate(
     const deep = Math.round(
       list.length * shareOf(Math.max(limit, TIER_BASE) * TASTE_DEPTH)
     );
-    return [
-      ...reorder(list, base),
-      ...list
-        .slice(base, deep)
-        .filter((c) => c.title.genres.some((g) => mine.has(g.toLowerCase()))),
-    ];
+    /**
+     * Capped, because everything admitted here is scored on every rebuild.
+     *
+     * Going six times deep instead of two and a half doubled the candidate
+     * pool, and the rebuild went from 33ms to 62ms — which is a quarter of a
+     * second of frozen screen on a phone, once every sixteen cards. That is
+     * the freeze the user filmed, arriving by a different route.
+     *
+     * The slice is in fame order, so a cap keeps the best-known of the
+     * viewer's corner and drops the tail. Reachability barely notices: the
+     * titles beyond the cap are the ones the ranking was never going to reach
+     * inside a session anyway.
+     */
+    const room = DEEP_CAP;
+    const extra: CandidateItem[] = [];
+    for (let i = base; i < deep && i < list.length; i++) {
+      if (extra.length >= room) break;
+      const c = list[i];
+      if (c.title.genres.some((g) => mine.has(g.toLowerCase()))) extra.push(c);
+    }
+    return [...reorder(list, base), ...extra];
   };
 
   const kept = [...take(movie), ...take(tv)];

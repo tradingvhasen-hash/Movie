@@ -1,16 +1,42 @@
 # What needs you
 
-Everything I could do alone is done and pushed. These need your hands, your
-judgement, or an account only you own. Nothing here is urgent — the site works
-today.
+One site, one address: **https://dhawq.onrender.com**
 
-Ordered by how much it changes the outcome.
+There is no separate test site. Everything below is on that address; the
+`/lab` page is where the destructive buttons live, and it is the same app.
+
+Everything I could do alone is done and pushed. What is here needs your hands,
+your judgement, or an account only you own.
 
 ---
 
-## 1 · Try the new flow, and answer one question
+## 0 · First: does the deck behave now?
 
-**Where:** `dhawq.onrender.com/seen` — the "Seen it?" tab.
+**Where:** https://dhawq.onrender.com — the **Swipe** tab.
+
+Wait for Render to finish deploying, then **pull down to refresh once** so the
+browser drops the old code.
+
+Swipe thirty or forty cards at your normal speed, including a fast burst.
+Three things should be true:
+
+- a card you swiped never comes back
+- you never see two cards drawn on top of each other
+- no blue placeholder card slides across
+
+If any of them still happens, film it again the way you did — short is better,
+and your recording found what none of my instruments could.
+
+**What was wrong:** the deck rebuilt itself from a snapshot taken a few hundred
+milliseconds earlier and put a card you had already answered back on top,
+shoving the card you were looking at into second place. It only happened on the
+live site, which is why I could not see it locally for a whole day.
+
+---
+
+## 1 · Try the "Seen it?" grid, and answer one question
+
+**Where:** https://dhawq.onrender.com/seen
 
 Thirty posters a screen. Tap what you have watched, ignore the rest, press
 next. Then open the **Swipe** tab: it now asks *"did you like it?"* about
@@ -35,8 +61,8 @@ across on a phone — right size, or too small?
 
 ## 2 · Swipe a session on the new catalog and export it
 
-**Where:** `/lab` → Reset everything → Erase → swipe as you always do →
-Export.
+**Where:** https://dhawq.onrender.com/lab → Reset everything → Erase → go to
+**Swipe** → swipe as you always do → come back to `/lab` → Export.
 
 The catalog went from 5,555 titles to **12,826**. Arabic 2 → 331, Hindi 6 →
 500, Tamil 0 → 387. Stand-up and talk shows are in. Eight of the eleven titles
@@ -55,6 +81,8 @@ the random seed, and it nearly cost us a good change.
 
 ## 3 · One SQL statement in Supabase
 
+**Where:** your Supabase project → SQL Editor.
+
 ```sql
 alter table public.user_taste
   add column if not exists seen_facets jsonb;
@@ -67,6 +95,8 @@ repeated here in case it never ran.
 ---
 
 ## 4 · Does the site feel slow to open on mobile data?
+
+**Where:** https://dhawq.onrender.com on cellular, with wifi off.
 
 The catalog is now **3.33 MB gzipped**, up from 1.78 MB. Every visitor
 downloads it once. Fixes exist — ship only the languages someone uses, or load
@@ -92,18 +122,18 @@ the opening should be immediate. Your call.
 
 ## Known and open — recorded, not hidden
 
-**`simulate` reports 12/13, and the failure is deliberate.** The
+**`simulate` reports 11/13, and both failures are deliberate.** The
 tunnel-vision guard reads 3.39x against a 1.15x limit. Every way of calming it
-costs the only ruler graded on your real answers, monotonically — 0.8/no curve
-gives 87.6, and the setting that passes the guard gives 69.1. Harvest, the
-ruler that measures your actual goal, is flat throughout. Its own comment calls
-reaching four named titles "a needle", two other tunnel checks pass, and its
-limit was set on a catalog less than half today's size. Left failing in the
+costs the only ruler graded on your real answers, monotonically — the current
+setting gives 88.0, and the setting that passes the guard gives 69.1. Harvest,
+the ruler that measures your actual goal, is flat throughout. Its own comment
+calls reaching four named titles "a needle", two other tunnel checks pass, and
+its limit was set on a catalog less than half today's size. Left failing in the
 open rather than retuned to pass.
 
-**Re-rank time is 33–38ms against a 40ms guard**, up from 24ms because the
-catalog doubled. Measured off the swipe critical path. This machine varies 5ms
-between identical runs, so there is no signal to tune against.
+**Re-rank time is 33–51ms against a 40ms guard**, up from 24ms because the
+catalog doubled. Measured off the swipe critical path, and this machine varies
+5ms between identical runs, so there is no signal to tune against.
 
 **946 titles have no reach estimate** — the Anthropic credit ran out mid-run,
 and the gap skews Malayalam, Tamil and Arabic. Do **not** top it up: the

@@ -93,7 +93,8 @@ async function main() {
   const merged = [...existing, ...added];
   writeFileSync(OUT, JSON.stringify(encodeCatalog(merged)));
   console.log(
-    `\n  added ${added.length} titles · catalog is now ${merged.length} · ${calls} API calls`
+    `\n  added ${added.length} titles · catalog is now ${merged.length} · ${calls} API calls\n` +
+      `  now run: npm run split   (moves summaries off the first-paint payload)`
   );
 
 }

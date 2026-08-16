@@ -211,8 +211,12 @@ export default function SwipeCard({ title, index, onSwipe, forcedExit }: SwipeCa
                 className="overflow-hidden"
               >
                 <div className="mt-3 rounded-2xl bg-black/60 p-3.5 backdrop-blur-md">
+                  {/* summaries load behind the deck, so a card opened in the
+                      first second may not have one yet */}
                   <p className="text-[13px] leading-relaxed text-white/85">
-                    {title.overview[locale]}
+                    {title.overview[locale] || (
+                      <span className="text-white/50">…</span>
+                    )}
                   </p>
                   {title.people.director && (
                     <p className="mt-2 text-[11px] text-white/60">

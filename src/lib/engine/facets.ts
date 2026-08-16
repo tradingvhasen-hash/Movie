@@ -645,15 +645,20 @@ export function seenScore(tables: FacetTables, tokens: TitleTokens): number {
   return weightSum > 0 ? weighted / weightSum : 0;
 }
 
+const seenEnv = (k: string, d: number) =>
+  typeof process !== "undefined" && process.env?.[`SW_${k.toUpperCase()}`]
+    ? Number(process.env[`SW_${k.toUpperCase()}`])
+    : d;
+
 export const SEEN_WEIGHTS: FacetWeights = {
-  story: 0.6,
-  genre: 1.4,
-  cast: 0.5,
-  director: 0.4,
-  era: 1.1,
-  language: 0.8,
+  story: seenEnv("story", 0.6),
+  genre: seenEnv("genre", 1.4),
+  cast: seenEnv("cast", 0.5),
+  director: seenEnv("director", 0.4),
+  era: seenEnv("era", 1.1),
+  language: seenEnv("language", 0.8),
   // the strongest single predictor on the only unbiased sample we have
-  fame: 1.6,
+  fame: seenEnv("fame", 1.6),
 };
 
 const round3 = (x: number) => Math.round(x * 1000) / 1000;

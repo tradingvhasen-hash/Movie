@@ -46,6 +46,30 @@ function assetUrl(path: string): string {
   return `${base}${path}`;
 }
 
+/**
+ * Plot summaries, fetched after the deck is already on screen.
+ *
+ * They are a third of the download and are read in one place: the panel behind
+ * the info button. Blocking the first card on 1.13 MB of prose nobody has
+ * asked to read yet is the wrong trade, so they arrive behind it and are
+ * patched into the titles in place — every consumer holds the same objects by
+ * reference, so a card that is already rendered simply has its description the
+ * next time the panel opens.
+ */
+async function attachOverviews(titles: Title[]): Promise<void> {
+  try {
+    const res = await fetch(assetUrl("/overviews.json"), { cache: "force-cache" });
+    if (!res.ok) return;
+    const map = (await res.json()) as Record<string, [string, string]>;
+    for (const t of titles) {
+      const o = map[t.id];
+      if (o) t.overview = { en: o[0], ar: o[1] || o[0] };
+    }
+  } catch {
+    /* a card without its description is still a card */
+  }
+}
+
 /** Best-effort: the prior improves if it arrives, and nothing breaks if not. */
 async function attachReach(titles: Title[]): Promise<void> {
   try {
@@ -79,7 +103,10 @@ export function loadCatalog(): Promise<CandidateItem[]> {
        * the vote count exactly as before. Not worth a schema change.
        */
       await attachReach(titles);
-      return build(titles);
+      const ready = build(titles);
+      // deliberately not awaited: the deck does not need prose to deal a card
+      void attachOverviews(titles);
+      return ready;
     } catch {
       return fallback();
     }

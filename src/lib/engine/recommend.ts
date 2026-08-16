@@ -346,7 +346,35 @@ const num = (key: string, fallback: number) =>
 
 const TIER_PER_SEEN = num("TIER_PER_SEEN", 5);
 const TIER_PER_UNSEEN = num("TIER_PER_UNSEEN", 30);
-const TIER_MAX = num("TIER_MAX", 3000);
+/**
+ * THE CEILING, AND THE THIRD OF HIS LIBRARY THAT SAT ABOVE IT.
+ *
+ * Take the nine titles the unbiased calibration sample says he has actually
+ * watched, and ask where each one sits in the fame order of its own kind:
+ *
+ *     gate    900   reaches 0 of 9
+ *     gate  1,800   reaches 2 of 9
+ *     gate  3,000   reaches 6 of 9      <- the old ceiling
+ *     gate  6,000   reaches 9 of 9
+ *
+ * The opening gate reaches **none** of them, which is the clearest statement
+ * of the problem this file has: fame is a real signal and a weak one, and a
+ * pool sized by fame alone is not where a particular person's viewing lives.
+ * The old ceiling left a third of his sampled library unreachable at any
+ * session length — not ranked badly, never a candidate.
+ *
+ * Raising it costs nothing measurable. At 1,500 cards the floor is already
+ * 4,500, so the cap does not bind: harvest reads 438.1 at both 4,500 and 6,000
+ * against 435.3 at 3,000, and replay is unchanged at 186.8 because a 600-card
+ * session never gets near it. The ceiling only binds past roughly 1,350
+ * answered cards — by which point the exposure model has 1,350 answers to sort
+ * that depth with, which is the same evidence-gated argument the floor makes.
+ *
+ * Nine titles is a thin base and this is one person; it is recorded here as
+ * the reason rather than as a proof, and a second calibration round is the
+ * thing that would confirm it.
+ */
+const TIER_MAX = num("TIER_MAX", 6000);
 /**
  * The floor, and the reason it is the only part of this that ever ran.
  *
@@ -393,9 +421,12 @@ const TIER_MAX = num("TIER_MAX", 3000);
  * answers contract the pool and the pool is the denominator. Part of what it
  * was rewarding was the gate closing, not the taste surviving.
  *
- * What the wider floor buys, on the probe least able to fake it: `deck-drift`
- * had **one** horror title left in the gate by swipe 150. The deck was starving
- * and no ranking could have fixed it.
+ * `deck-drift` cannot see any of this and it is worth saying so rather than
+ * quoting it: its probes run 150 swipes, where this floor is identical to the
+ * old one by construction. (It does show the old gate holding **one** horror
+ * title by swipe 150 under a 6x floor's comparison — a real description of the
+ * starvation, but not evidence for what shipped.) The evidence here is harvest
+ * at 1,500 cards and replay, which run long enough for the floor to bind.
  *
  * WRITTEN AS SUPPLY, WHICH IS THE ONLY REASON THE FLOOR EXISTS. A plain
  * `3 x answered + 400` scores the same but opens the session on a wider pool

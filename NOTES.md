@@ -203,9 +203,42 @@ moves only the part that was broken.
 full library, so the floor — which is driven by how much has been *answered* —
 never binds there. It cannot see this class of fault at all.
 
-The probe least able to fake it is `deck-drift`. A horror viewer had **one**
-horror title left in the gate by swipe 150. The deck was starving, and no
-ranking on earth could have fixed that.
+**A correction to my own first write-up of this.** I claimed `deck-drift`
+showed the fix rescuing a starving pool — a horror viewer with **one** horror
+title left in the gate by swipe 150, becoming forty-nine. That is true of the
+6x floor I measured and did *not* ship. The floor that shipped is identical to
+the old one for the first ~300 cards by construction, so at swipe 150 it reads
+450 either way and `deck-drift` cannot see the change at all. The starvation
+finding stands as a description of the old gate; it is not evidence for the new
+one. The evidence for the new one is `harvest` at 1,500 cards and `replay`,
+both of which run long enough for the floor to bind.
+
+### The ceiling, and the third of his library above it
+
+The floor was only half of it. Take the nine titles the calibration sample says
+he has actually watched, and ask where each sits in the fame order of its kind:
+
+    gate    900   reaches 0 of 9
+    gate  1,800   reaches 2 of 9
+    gate  3,000   reaches 6 of 9      <- the old ceiling
+    gate  6,000   reaches 9 of 9
+
+**The opening gate reaches none of them.** That is the sharpest statement of
+this file's whole problem: fame is a real signal and a weak one, and a pool
+sized by fame alone is not where any particular person's viewing lives. The old
+ceiling of 3,000 left a third of his sampled library unreachable at any session
+length — not ranked badly, never a candidate at all.
+
+TIER_MAX is now 6,000, and it costs nothing measurable: at 1,500 cards the
+floor is already 4,500, so harvest reads 438.1 at both 4,500 and 6,000 against
+435.3 at 3,000, and replay is unchanged at 186.8 because a 600-card session
+never approaches it. The ceiling binds past roughly 1,350 answered cards — by
+which point the exposure model has 1,350 answers to sort that depth with, which
+is the same evidence-gated argument the floor makes.
+
+Nine titles is a thin base and it is one person. This is recorded as the reason
+for the change, not as proof of it; a second calibration round is what would
+confirm or kill it.
 
 ---
 

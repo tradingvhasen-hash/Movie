@@ -109,8 +109,8 @@ If it does not, tell me and I will have been wrong twice.
 
 | | before | after |
 |---|---|---|
-| `harvest`, 30 people × 1,500 cards | 417.0 | **435.3** |
-| lost because the gate never offered it | 15.2% | **8.8%** |
+| `harvest`, 30 people × 1,500 cards | 417.0 | **438.1** |
+| lost because the gate never offered it | 15.2% | **6.4%** |
 | replay on your own labels | 175.4 | **186.8** |
 | — your cards 301–400 | 19.2 | **30.0** |
 
@@ -132,11 +132,19 @@ There was nothing to win. A day saved by counting before building.
 
 ## Known and open — recorded, not hidden
 
-**`simulate` is 12/13.** The failure is a re-rank timing guard: the rebuild
-costs 40ms on this machine against its 40ms limit, up from 33ms, because the
-catalog grew 18% and the pool now widens with the session. It runs in idle time
-between swipes and never sits between your finger and the next card. I have
-profiled it and know where the time goes; it is next.
+**`simulate` is 12/13.** The failure is a re-rank timing guard. I profiled it
+and cut the rebuild from 37.5ms to 33.8ms by not recomputing three per-title
+constants on every pass; the guard tests the single worst of twelve samples,
+which is 44.7ms and mostly garbage collection. It runs in idle time between
+swipes and never sits between your finger and the next card.
+
+**One correction to yesterday's write-up, before you find it yourself.** I said
+the fix rescued a starving pool in the `deck-drift` probe — one horror title
+left in the gate becoming forty-nine. That is true of a more aggressive version
+I measured and did not ship. What shipped is identical to the old gate for the
+first ~300 cards by design, so that probe cannot see it either way. The
+evidence for what shipped is `harvest` at 1,500 cards and the replay of your
+own labels, both long enough for the change to bind.
 
 **MovieLens has no television at all**, so the goal ruler is blind to 3,076 of
 the 15,083 titles. No fix; the data does not exist.

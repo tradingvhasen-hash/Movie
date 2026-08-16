@@ -647,6 +647,88 @@ const GATE_WIDTH =
  * 1.39x it exposed is what the engine read *before* any of this shipped.
  */
 
+/**
+ * Fame measured inside a language, for the languages the viewer reads.
+ *
+ * `fameLists` already does exactly this for film versus television, with the
+ * right reasoning: a vote count is only comparable inside its own scale, and
+ * ranking series against films quietly deleted television from the deck.
+ * Language is a scale in the same way and for a stronger reason — TMDB's
+ * voters are overwhelmingly Western, so a vote count *is* an English scale. An
+ * Egyptian film fifty million people watched carries eighty votes.
+ *
+ * RANKING EVERY TITLE BY ITS OWN-LANGUAGE PERCENTILE WAS TRIED AND COST 16% OF
+ * HARVEST. That is a real result and this is not that. That version applied to
+ * everybody and split the gate across 34 languages, handing a monolingual
+ * English viewer a deck proportional to the *catalog's* languages instead of
+ * to theirs. This applies only to languages the viewer actually reads, so for
+ * an English-only viewer — which is every subject in every ruler here — it
+ * changes nothing at all, by construction.
+ *
+ * Which also means no instrument in this repository can score it. It is
+ * shipped on the strength of the mechanism and the requirement that harvest
+ * and replay do not move.
+ */
+const langFameIndex = new WeakMap<CandidateItem[], Map<string, number>>();
+
+function languageFame(pool: CandidateItem[]): Map<string, number> {
+  const cached = langFameIndex.get(pool);
+  if (cached) return cached;
+  const out = new Map<string, number>();
+  const groups = new Map<string, CandidateItem[]>();
+  for (const c of pool) {
+    const key = `${c.title.originalLanguage}|${c.title.type}`;
+    const list = groups.get(key);
+    if (list) list.push(c);
+    else groups.set(key, [c]);
+  }
+  for (const list of groups.values()) {
+    list.sort((a, b) => b.title.voteCount - a.title.voteCount);
+    for (let i = 0; i < list.length; i++) {
+      out.set(list[i].title.id, 1 - i / list.length);
+    }
+  }
+  langFameIndex.set(pool, out);
+  return out;
+}
+
+/** the exposure prior for one title, conditioned on who is looking at it */
+function famePrior(
+  title: Title,
+  home: Set<string> | null,
+  index: Map<string, number> | null
+): number {
+  const base = reachPrior(title);
+  if (!home || !index || !home.has(title.originalLanguage)) return base;
+  return Math.max(base, index.get(title.id) ?? 0);
+}
+
+/**
+ * For a language the viewer reads, silence is not a "no".
+ *
+ * `watchLikelihood` blends the prior with what the seen-facet tables say, and
+ * those tables say nothing about Arabic until an Arabic card has been dealt.
+ * "Nothing" enters the blend as the neutral 0.5 and drags a well-known Arabic
+ * film below a well-known English one — so the prior that was supposed to open
+ * the language is cancelled by the absence of the evidence it exists to go and
+ * collect. Two Arabic titles in two hundred cards, from zero.
+ *
+ * So while a home language carries no evidence either way, the prior stands on
+ * its own. The moment the person answers about that language in either
+ * direction, the tables take over and this stops applying.
+ */
+function homeFloor(
+  profile: TasteProfile,
+  title: Title,
+  home: Set<string> | null,
+  prior: number,
+  blended: number
+): number {
+  if (!home || !home.has(title.originalLanguage)) return blended;
+  const [, mass] = profile.seenFacets.language[title.originalLanguage] ?? [0, 0];
+  return mass >= LANG_DOOR_MASS ? blended : Math.max(blended, prior);
+}
+
 export function fameGate(
   pool: CandidateItem[],
   limit: number,
@@ -655,12 +737,19 @@ export function fameGate(
   homeLanguages?: string[]
 ): CandidateItem[] {
   const { movie, tv } = fameLists(pool);
+  const home = homeLanguages?.length ? new Set(homeLanguages) : null;
+  const langIndex = home ? languageFame(pool) : null;
   const shareOf = (n: number) =>
     !Number.isFinite(n) || n >= pool.length ? 1 : n / Math.max(pool.length, 1);
 
-  // zero when the viewer has taught us nothing, so the work is skipped
-  // entirely on the first cards rather than computed and thrown away
-  const personal = profile && seenTrust(profile) > 0 ? profile : null;
+  /**
+   * Zero when the viewer has taught us nothing — except that reading Arabic is
+   * something we know before the first card, and the first card is exactly
+   * when it matters. Skipping the re-order at cold start meant a new Arabic
+   * reader saw the plain global fame slice: 200 cards, zero Arabic, and the
+   * language facet stays empty, so the door never opens later either.
+   */
+  const personal = profile && (seenTrust(profile) > 0 || home) ? profile : null;
   const door = languageDoor(profile, homeLanguages);
   const langs = door.size > 0 ? languageLists(pool) : null;
 
@@ -696,7 +785,16 @@ export function fameGate(
     }
     const scored = window.map((c) => ({
       c,
-      w: watchLikelihood(personal, titleTokens(c.title), reachPrior(c.title)),
+      w: (() => {
+        const prior = famePrior(c.title, home, langIndex);
+        return homeFloor(
+          personal,
+          c.title,
+          home,
+          prior,
+          watchLikelihood(personal, titleTokens(c.title), prior)
+        );
+      })(),
     }));
     scored.sort((a, b) => b.w - a.w);
     return scored.slice(0, keep).map((s) => s.c);
@@ -1404,6 +1502,8 @@ export function recommend(
    *
    * The gate stands alone.
    */
+  const homeSet = opts.homeLanguages?.length ? new Set(opts.homeLanguages) : null;
+  const langIndex = homeSet ? languageFame(pool) : null;
   const gated = fameGate(
     pool,
     fameTierSize(profile, mode),
@@ -1453,7 +1553,14 @@ export function recommend(
      * The weight below is untouched: what changed is that the number it
      * multiplies is about this person rather than about the world.
      */
-    const known = watchLikelihood(profile, tokens, reachPrior(c.title));
+    const prior = famePrior(c.title, homeSet, langIndex);
+    const known = homeFloor(
+      profile,
+      c.title,
+      homeSet,
+      prior,
+      watchLikelihood(profile, tokens, prior)
+    );
     const score =
       W_QUALITY * q +
       wRecognition * known +

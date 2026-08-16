@@ -169,11 +169,33 @@ const DISCOVER_DIVERSITY_SCALE =
  * it into the percentage shown to the user. Roughly the centre and half-width
  * of the range scores occupy in Discover.
  */
-/** 0 = rank by highest P(watched); 0.5 = rank by most informative */
+/**
+ * AIM SLIGHTLY BELOW CERTAIN.
+ *
+ * Both reviewers argued the deck asks the wrong question: it ranks by the
+ * probability a card is one the viewer has watched, when the informative card
+ * is the one whose answer is least predictable. Both named 0.5.
+ *
+ * Measured on sixty real viewing histories, 0.5 is a catastrophe and they were
+ * still right about the direction:
+ *
+ *     target   0     0.5    0.65    0.75    0.8     0.85    0.9
+ *     harvest  232.3 171.3  230.2   236.4   238.1   238.6   238.3
+ *
+ * A little doubt is worth paying for and a lot is not. The plateau from 0.75
+ * to 0.9 is flat, so this is a region rather than a fitted constant, and his
+ * own answers agree independently: replay 173.2 -> 176.0.
+ *
+ * Their reasoning for 0.5 was that information per card stops decaying, so it
+ * should win over a long session even if it loses early. Tested at 1,500 cards
+ * it loses by more, not less — 360.9 against 408.0. The premise that a maximal
+ * -entropy question is worth its card does not survive contact with a ruler
+ * that counts titles rather than bits.
+ */
 const TARGET_SEEN =
   typeof process !== "undefined" && process.env?.TARGET_SEEN
     ? Number(process.env.TARGET_SEEN)
-    : 0;
+    : 0.85;
 
 const RANK_MIDPOINT = 0.4;
 /**

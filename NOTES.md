@@ -102,6 +102,106 @@ against the improved engine, not the old one.
 
 ---
 
+## The measurement was the thing that was broken (2026-08-16)
+
+199 titles, drawn uniformly at random from the whole catalog, seen or not-seen
+answered by the person this is being built for. The first data in this project
+that the engine did not choose. It cost him ten minutes and it overturned the
+premise of the last several weeks.
+
+### Fame was never worthless
+
+    AUC of vote count, measured on cards the deck chose        0.500
+    AUC of vote count, measured on the random sample           0.799
+
+The deck draws from roughly the top 900 titles by vote count. Every label we
+had was therefore collected from a sample already truncated on the very
+quantity being tested, and AUC collapses toward 0.5 under range restriction as
+a matter of arithmetic. "Fame is a coin flip, therefore worthless as an
+exposure prior" was read off that 0.500. It shaped the reach model, the gate
+reserve, and a long line of experiments that were all trying to replace
+something that was working.
+
+A second reviewer predicted this exact artefact from the code alone, before the
+sample existed. That is the fifth and sixth time an instrument here has been
+the broken thing, and the first time someone called it in advance.
+
+### What a person's exposure actually looks like
+
+    votes        asked   watched
+    under 100       49         0
+    100 - 500       55         0
+    500 - 2k        50         4
+    2k - 6k         33         5
+    over 6k         12         0
+
+A hill, not a ramp. Nothing below five hundred votes and nothing above six
+thousand — the nine he had seen carry 1,176 to 5,914. Alien, Spirited Away,
+Toy Story, Django Unchained: not watched.
+
+Fitted as a fixed curve it scores 0.861 against the monotonic 0.799, and 0.841
+with the centre never seeing the held-out point. Then measured against sixty
+real viewing histories it is a rout the other way: harvest 225.4 to 161.5.
+MovieLens users are film enthusiasts and they *have* watched the most-famous
+titles.
+
+Both results are true. The peak is a fact about a person, not about a catalog,
+and a constant is the wrong container for it. So fame became the seventh facet:
+a title carries a band token, the exposure tables learn which bands this viewer
+answers yes to, and their peak is placed by their own swipes. Replayed through
+his 1,478 real answers the tables recover the same curve the random sample
+found independently — 2k-5k and 5k-12k at -0.47 and -0.46, everything either
+side at -0.87 to -1.00.
+
+    harvest 225.4 -> 234.2 · ranking loss 35.8% -> 34.2% · replay 169.7 -> 171.6
+
+### Reading a language is not watching films in it
+
+Of **129 non-English titles he was asked about, he had watched none**. Not one.
+He reads Arabic.
+
+Four passes of work that same morning had taken an Arabic reader from 0 Arabic
+titles in 200 cards to 56, by seeding the language door from
+`navigator.languages`. Every one of those 56 would have been a wasted swipe. It
+was built on an assumption that felt too obvious to test, and the first data
+that could test it refuted it in an afternoon. Strength set to zero the same
+day it shipped.
+
+### And the number that resized the product
+
+A 4.5% base rate over 12,826 titles put his entire watchable library inside the
+catalog at about 580 titles, against the 245 he had recorded. Some of the decay
+everyone had been chasing was not a ranking failure at all. He was running out.
+
+Which turned the question from "how do we rank better" to "what is missing",
+and TMDB answered that directly:
+
+    English films      TMDB has    we had    coverage
+    500 - 2,000            4,067     1,363        34%
+    2,000 - 6,000          1,771     1,770       100%
+    6,000 - 12,000           570       570       100%
+
+Complete above two thousand and a third below, because `LANG_FLOORS.en` was
+1,000 and cut exactly there — in the one band the only unbiased evidence says
+he lives. 2,257 titles added, 850 of them comedies, and his library inside the
+catalog goes from about 580 to about 828.
+
+No ruler here can score that: MovieLens histories contain no 500-vote films and
+his old labels came from a catalog without them. harvest 234.2 -> 232.3 and
+replay 171.6 -> 173.2 are what "did no harm" looks like, and the evidence is
+TMDB's own counts rather than any instrument of ours.
+
+### What this changes about how to work here
+
+Every label this project owned was chosen by the model being tested. Six broken
+instruments in, the pattern is not bad luck: an engine that selects its own
+evaluation data will confirm itself, and no amount of care inside that loop
+gets out of it. `npm run calibrate` makes the outside sample a permanent
+instrument. It is one person and cannot fit a population — but a reference does
+not need to be a population to show that a gauge reads wrong.
+
+---
+
 ## The stutter was the site writing down what you just told it (2026-08-16)
 
 "There is a slight hitch in the swipe, it is not smooth enough."

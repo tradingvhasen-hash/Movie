@@ -25,6 +25,24 @@ export const FACET_KINDS = [
   "director",
   "era",
   "language",
+  /**
+   * How famous a title is, as something the viewer *answers about* rather than
+   * something we assume.
+   *
+   * Every version of "have you heard of this?" in this project has been a fixed
+   * function of the vote count, and the first unbiased sample says that
+   * function has a peak whose location is a fact about the person. One real
+   * viewer had watched none of the 104 titles under 500 votes he was shown, and
+   * none of the 12 over 6,000 either — every one of his was in the wide middle.
+   * Sixty MovieLens histories say the opposite: those are film enthusiasts and
+   * they have watched the most-famous titles. Imposing either shape on the
+   * other costs a third of the harvest.
+   *
+   * So fame stops being an assumption and becomes a question. A title carries a
+   * band token, the exposure tables learn which bands this person answers yes
+   * to, and the peak — if they have one — is placed by their own swipes.
+   */
+  "fame",
 ] as const;
 
 export type FacetKind = (typeof FACET_KINDS)[number];
@@ -68,6 +86,13 @@ const DEFAULT_WEIGHTS: FacetWeights = {
   // over-weighting it would bury a great match from the wrong decade.
   era: 0.55,
   language: 0.45,
+  /**
+   * Zero, on purpose: fame answers "have you watched it", never "did you like
+   * it". A taste model that learns "I like famous films" is a taste model that
+   * has learned the shape of its own gate — the closed loop this whole facet
+   * exists to break. The exposure tables read it at 1.6; taste reads nothing.
+   */
+  fame: 0,
 };
 
 /** learning rate for facet importance; deliberately slow and bounded */
@@ -85,6 +110,8 @@ const MAX_TOKENS: Record<FacetKind, number> = {
   director: 500,
   era: 24,
   language: 48,
+  // eight bands, and there will never be more
+  fame: 8,
 };
 
 export function emptyFacets(): FacetTables {
@@ -95,6 +122,7 @@ export function emptyFacets(): FacetTables {
     director: {},
     era: {},
     language: {},
+    fame: {},
   };
 }
 
@@ -114,6 +142,25 @@ const tokenCache = new Map<string, TitleTokens>();
  * The facet values of a title. Cached by id — the catalog is immutable once
  * loaded, and this runs for every candidate on every re-rank.
  */
+/**
+ * Vote count, bucketed by order of magnitude and a half.
+ *
+ * Wide enough that a band collects evidence in a handful of swipes, narrow
+ * enough to separate "the middle" from "the most-voted films on earth" — the
+ * distinction the measurement turned on. Eight bands cover 0 to 40,000+.
+ */
+export function fameBand(voteCount: number): string {
+  const v = Math.max(0, voteCount);
+  if (v < 100) return "f0";
+  if (v < 300) return "f1";
+  if (v < 800) return "f2";
+  if (v < 2000) return "f3";
+  if (v < 5000) return "f4";
+  if (v < 12000) return "f5";
+  if (v < 30000) return "f6";
+  return "f7";
+}
+
 export function titleTokens(title: Title): TitleTokens {
   const hit = tokenCache.get(title.id);
   if (hit) return hit;
@@ -126,6 +173,7 @@ export function titleTokens(title: Title): TitleTokens {
     director: title.people.director ? [norm(title.people.director)] : [],
     era: [decade],
     language: [norm(title.originalLanguage)],
+    fame: [fameBand(title.voteCount)],
   };
   tokenCache.set(title.id, tokens);
   return tokens;
@@ -165,6 +213,7 @@ const rarity: Record<FacetKind, Record<string, number>> = {
   director: {},
   era: {},
   language: {},
+  fame: {},
 };
 let rarityReady = false;
 
@@ -186,6 +235,7 @@ export function buildRarityIndex(titles: Title[]): void {
     director: new Map(),
     era: new Map(),
     language: new Map(),
+    fame: new Map(),
   };
 
   for (const title of titles) {
@@ -453,6 +503,7 @@ const SKIP_SCALE: Record<FacetKind, number> = {
   director: 1,
   era: 1,
   language: 1,
+  fame: 1,
 };
 
 /** the evidence one swipe writes, per facet */
@@ -469,6 +520,8 @@ export function facetSignals(action: SwipeAction): Record<FacetKind, number> {
   for (const kind of FACET_KINDS) {
     out[kind] = action === "not_seen" ? base * SKIP_SCALE[kind] : base;
   }
+  // fame is an exposure fact, never a taste one — see FACET_WEIGHTS.fame
+  out.fame = 0;
   return out;
 }
 
@@ -599,6 +652,8 @@ export const SEEN_WEIGHTS: FacetWeights = {
   director: 0.4,
   era: 1.1,
   language: 0.8,
+  // the strongest single predictor on the only unbiased sample we have
+  fame: 1.6,
 };
 
 const round3 = (x: number) => Math.round(x * 1000) / 1000;
@@ -817,6 +872,7 @@ function labelFor(title: Title, kind: FacetKind, token: string): string {
     director: title.people.director ? [title.people.director] : [],
     era: [`${Math.floor(title.year / 10) * 10}s`],
     language: [title.originalLanguage.toUpperCase()],
+    fame: [`${title.voteCount.toLocaleString()} votes`],
   };
   return pools[kind].find((v) => norm(v) === token) ?? token;
 }

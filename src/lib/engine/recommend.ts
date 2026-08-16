@@ -410,23 +410,32 @@ function languageLists(pool: CandidateItem[]): Map<string, CandidateItem[]> {
 const LANG_DOOR_MASS = 2;
 
 /**
- * The languages a person reads, which is free and was being thrown away.
+ * TRIED, SHIPPED, AND WITHDRAWN THE SAME DAY BY THE FIRST UNBIASED DATA.
  *
- * The door below opens a language once the viewer has demonstrated they watch
- * it. They cannot demonstrate it for a language they are never shown, and the
- * best Tamil film in this catalog sits at global rank 6,140 — so for an Arabic
- * or Hindi or Turkish speaker the door is logically unopenable. A real
- * 1,100-card session: 1,045 English cards, and zero in any of those three.
+ * The reasoning was clean: the door below opens a language only once the
+ * viewer demonstrates they watch it, they cannot demonstrate it for a language
+ * they are never shown, and the best Tamil film in this catalog sits at global
+ * rank 6,140. `navigator.languages` breaks that circle for free. Four passes
+ * of work took an Arabic reader from 0 Arabic titles in 200 cards to 56.
  *
- * `navigator.languages` answers the question directly and costs nothing. It is
- * a prior, not a verdict — it opens the door at half strength and the exposure
- * model decides from there, exactly as demonstrated evidence does.
+ * Then 199 titles drawn uniformly at random from the whole catalog were put in
+ * front of that same Arabic-reading viewer, and of the **129 non-English
+ * titles he was asked about he had watched none**. Not one. Every title he had
+ * seen was English.
  *
- * Not measurable by any ruler here: harvest's population is MovieLens, which
- * is English-speaking, so this can only be checked against a real viewer who
- * is not. The rulers can say it does no harm; only he can say it helps.
- */
-const HOME_LANG_STRENGTH = 0.5;
+ * Reading a language is not watching films in it. The whole mechanism was
+ * built on an assumption that felt too obvious to test, and the first data
+ * that could test it refuted it in a single afternoon. Fifty-six cards of an
+ * Arabic reader's deck would have been fifty-six wasted swipes.
+ *
+ * The strength is zero. The code stays because the *fame-within-language*
+ * correction below is separate and still right — a vote count is an English
+ * scale — and because the next viewer may be someone who does watch in the
+ * language they read. Turning it on again needs their calibration sample, not
+ * an argument.
+ */const HOME_LANG_STRENGTH = Number(
+  (typeof process !== "undefined" && process.env?.HOME_LANG) || 0
+);
 
 function languageDoor(
   profile: TasteProfile | undefined,

@@ -214,7 +214,72 @@ const REACH_GAMMA = 0.38;
 const REACH_SCALE_A = 0.0;
 const REACH_SCALE_B = 1.16;
 
+/**
+ * WHAT SOMEONE HAS WATCHED IS NOT MONOTONIC IN FAME. IT HAS A PEAK.
+ *
+ * Measured for the first time on an unbiased sample: 199 titles drawn
+ * uniformly across the whole catalog, seen/not-seen answered by a real person,
+ * with nothing in the sampling chosen by this engine.
+ *
+ *     votes        asked   watched
+ *     under 100       49         0
+ *     100 - 500       55         0
+ *     500 - 2k        50         4      8%
+ *     2k - 6k         33         5     15%
+ *     over 6k         12         0
+ *
+ * Nothing below five hundred votes, and nothing above six thousand either.
+ * A person watches the wide middle: films famous enough to reach them and not
+ * so famous that they belong to a different audience. The nine he had seen
+ * carry 1,176 to 5,914 votes, and TMDB's most-voted titles — Alien, Spirited
+ * Away, Toy Story, Django Unchained — he had not.
+ *
+ * So the ramp becomes a hill. Measured on that sample, against the monotonic
+ * version this replaces:
+ *
+ *     monotonic (what shipped)     AUC 0.799
+ *     peaked, centre 2,500         AUC 0.860
+ *     leave-one-out, centre never
+ *       sees the held-out point    AUC 0.841
+ *
+ * The centre is not a knife edge: anywhere from 1,500 to 6,000 scores 0.82 or
+ * better, and only below 800 does it collapse. It is set from one person's
+ * answers, which is one person too few, so it is a shape with a plausible
+ * centre rather than a fitted constant — and it is measured against the
+ * population rulers before it ships.
+ *
+ * NOTE ON THE 0.500 THIS REPLACES. Vote count was measured at AUC 0.500
+ * against the same person and declared worthless, and that measurement was
+ * taken on cards the deck had chosen — a sample already truncated by vote
+ * count. On an untruncated sample the same number scores 0.799. The premise
+ * that fame is useless as an exposure prior, which shaped weeks of work, came
+ * from range restriction.
+ */
+const PEAK_VOTES = 2500;
+const PEAK_WIDTH = 1.6;
+
 export function recognizability(voteCount: number): number {
   const MAX_LOG = Math.log10(40000);
-  return Math.max(0, Math.min(1, Math.log10(1 + voteCount) / MAX_LOG));
+  const ramp = Math.max(0, Math.min(1, Math.log10(1 + voteCount) / MAX_LOG));
+  /**
+   * OFF BY DEFAULT, BECAUSE IT IS HIS SHAPE AND NOT EVERYONE'S.
+   *
+   * Fitted to his answers it is a clear win (AUC 0.799 -> 0.861, 0.841 held
+   * out). Measured against sixty real viewing histories it is a rout in the
+   * other direction: harvest 225.4 -> 161.5, and the ranking loss went from
+   * 35.8% to 49.3%. MovieLens users are film enthusiasts who *have* watched
+   * the most-famous titles, so suppressing them deletes exactly what they saw.
+   *
+   * Both results are true. The peak is real and it is personal — its location
+   * is a fact about a viewer, not about a catalog — which means a constant is
+   * the wrong way to carry it. See the `fame` facet, where each person's own
+   * answers place their own band.
+   */
+  if (process.env?.PEAK !== "1") return ramp;
+  // distance from the peak in natural logs, squashed to a 0..1 multiplier
+  const d = Math.abs(Math.log(1 + voteCount) - Math.log(PEAK_VOTES)) / PEAK_WIDTH;
+  const hill = Math.exp(-0.5 * d * d);
+  // the ramp still carries "obscure means unwatched"; the hill removes the
+  // assumption that the most-voted title on earth is the most likely watched
+  return Math.max(0, Math.min(1, 0.35 * ramp + 0.65 * hill));
 }

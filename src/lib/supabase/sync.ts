@@ -100,26 +100,59 @@ export async function syncLocalToCloud(userId: string): Promise<void> {
   const swipes = Object.values(state.swipes);
 
   if (swipes.length > 0) {
-    const allIds = [...new Set(swipes.map((s) => s.titleId))];
-    const known = new Set<string>();
-    for (let i = 0; i < allIds.length; i += 200) {
-      const { data } = await supabase
-        .from("titles")
-        .select("id")
-        .in("id", allIds.slice(i, i + 200));
-      for (const row of data ?? []) known.add(row.id);
-    }
+    /**
+     * SWIPES USED TO BE THROWN AWAY HERE, SILENTLY, AND MOST OF THEM WERE.
+     *
+     * `swipes.title_id` carries a foreign key into `titles`, and `titles` holds
+     * whatever the seed script last uploaded — a few hundred rows — while the
+     * catalog the browser ranks against is 15,083. So this filtered every swipe
+     * whose title was not in that small table and uploaded the remainder, with
+     * no error anywhere: a person could swipe a thousand cards, sign in on a
+     * second device, and find almost none of it. Migration 0006 drops the
+     * constraint, because the browser's catalog is the source of truth for what
+     * a title id means and the database has no business disagreeing with it.
+     *
+     * Both paths stay live, because the migration is run by hand and this must
+     * not depend on that having happened. Everything goes up first; only if the
+     * database rejects the batch do we find out which ids it will accept and
+     * send those. And the failure is now returned instead of swallowed.
+     */
+    const rows = swipes.map((s) => ({
+      user_id: userId,
+      title_id: s.titleId,
+      action: s.action,
+      created_at: new Date(s.at).toISOString(),
+    }));
 
-    const rows = swipes
-      .filter((s) => known.has(s.titleId))
-      .map((s) => ({
-        user_id: userId,
-        title_id: s.titleId,
-        action: s.action,
-        created_at: new Date(s.at).toISOString(),
-      }));
+    let known: Set<string> | null = null;
+    const knownIds = async (batch: typeof rows) => {
+      if (known) return known;
+      known = new Set<string>();
+      const ids = [...new Set(rows.map((r) => r.title_id))];
+      for (let i = 0; i < ids.length; i += 200) {
+        const { data } = await supabase
+          .from("titles")
+          .select("id")
+          .in("id", ids.slice(i, i + 200));
+        for (const row of data ?? []) known.add(row.id);
+      }
+      return known;
+    };
+
     for (let i = 0; i < rows.length; i += 500) {
-      await supabase.from("swipes").upsert(rows.slice(i, i + 500));
+      const batch = rows.slice(i, i + 500);
+      const { error } = await supabase.from("swipes").upsert(batch);
+      if (!error) continue;
+      const ok = await knownIds(batch);
+      const kept = batch.filter((r) => ok.has(r.title_id));
+      if (kept.length === 0) continue;
+      const retry = await supabase.from("swipes").upsert(kept);
+      if (retry.error) {
+        console.warn(
+          `dhawq: ${batch.length} swipes rejected by the database`,
+          retry.error.message
+        );
+      }
     }
   }
 

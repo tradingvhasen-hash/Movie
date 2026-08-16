@@ -169,6 +169,12 @@ const DISCOVER_DIVERSITY_SCALE =
  * it into the percentage shown to the user. Roughly the centre and half-width
  * of the range scores occupy in Discover.
  */
+/** 0 = rank by highest P(watched); 0.5 = rank by most informative */
+const TARGET_SEEN =
+  typeof process !== "undefined" && process.env?.TARGET_SEEN
+    ? Number(process.env.TARGET_SEEN)
+    : 0;
+
 const RANK_MIDPOINT = 0.4;
 /**
  * Widened after using the app: at 0.6 a heavy user saw four cards all reading
@@ -1570,9 +1576,26 @@ export function recommend(
       prior,
       watchLikelihood(profile, tokens, prior)
     );
+    /**
+     * TESTING THE ACTIVE-LEARNING CLAIM.
+     *
+     * Both reviewers argued the deck asks the wrong question. It maximises the
+     * probability that a card is one the viewer has watched, and the
+     * information-optimal card is the one they are *least sure* about — a
+     * question whose answer you can already predict teaches nothing, and his
+     * opening blocks run at 74-78% against a 4.5% base rate, which is a lot of
+     * cards spent confirming.
+     *
+     * `TARGET_SEEN=0.5` ranks by nearness to that probability instead of by
+     * height. Off by default until the goal ruler says otherwise; the whole
+     * point of having it is that the argument is testable rather than
+     * persuasive.
+     */
+    const recognitionTerm =
+      TARGET_SEEN > 0 ? 1 - Math.abs(known - TARGET_SEEN) * 2 : known;
     const score =
       W_QUALITY * q +
-      wRecognition * known +
+      wRecognition * recognitionTerm +
       confidence * W_FACETS * fs.total +
       JITTER * jitterFor(c.title.id, seed) +
       coWatchScale * coWatchTerm(coWatch?.get(c.title.id)?.score ?? 0) +

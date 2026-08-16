@@ -320,12 +320,72 @@ const TIER_BASE =
   typeof process !== "undefined" && process.env?.TIER_BASE
     ? Number(process.env.TIER_BASE)
     : 900;
-const TIER_PER_SEEN = 5;
-const TIER_PER_UNSEEN = 30;
-const TIER_MAX =
-  typeof process !== "undefined" && process.env?.TIER_MAX
-    ? Number(process.env.TIER_MAX)
-    : 3000;
+const num = (key: string, fallback: number) =>
+  typeof process !== "undefined" && process.env?.[key] ? Number(process.env[key]) : fallback;
+
+const TIER_PER_SEEN = num("TIER_PER_SEEN", 5);
+const TIER_PER_UNSEEN = num("TIER_PER_UNSEEN", 30);
+const TIER_MAX = num("TIER_MAX", 3000);
+/**
+ * The floor, and the reason it is the only part of this that ever ran.
+ *
+ * The ledger above settles where TIER_PER_SEEN x seen equals TIER_PER_UNSEEN x
+ * unseen — 86% recognised at a ratio of six. No real person answers like that.
+ * Replayed against a real 378-card session the ledger reads -6,170 by the end,
+ * so for every card after roughly the twentieth the gate was `answered + 300`
+ * and nothing else. A reviewer called the ledger dead code from reading it;
+ * this is the same finding measured.
+ *
+ * `answered + 300` grows by exactly one title per swipe, which is exactly the
+ * rate the viewer consumes it. The supply of unswiped candidates is therefore
+ * a constant 300 no matter how long anyone sits there, and once the good ones
+ * inside that 300 are gone the hit rate has nowhere to go but down. That is
+ * the collapse the user reported and the shape his file shows: 74% at card 50,
+ * 6% at card 300, with the median vote count of the cards *not falling* — the
+ * deck was not running out of famous films, it was running out of room.
+ *
+ * So the floor grows three times faster than it is consumed, and TIER_MAX still
+ * stops it. Swept on 30 real histories at 1,500 cards each, which is the length
+ * the product's goal actually lives at:
+ *
+ *     floor              harvested   reachable   lost to gate   lost to ranking
+ *     1x + 300  shipped      417.0       84.8%          15.2%            13.5%
+ *     3x + 400  ships        437.3       91.4%           8.6%            16.6%
+ *     6x + 600              439.9       94.1%           5.9%            18.8%
+ *     12x + 600, max 9k     436.8       99.3%           0.7%            24.6%
+ *
+ * Past 6x the gate stops being the binding constraint — at 12x it loses 0.7%
+ * and the ranking loses 24.6% — so widening further only hands the ranking more
+ * work it is not good enough to do. The shape of that table is the argument for
+ * stopping, not the single best number in it.
+ *
+ * WHY 3x AND NOT THE 6x THAT SCORED HIGHEST. 439.9 against 437.3 is half a
+ * percent, and it is bought with real dilution: `simulate`'s taste-survival
+ * check reads comedy lift 4.63x / 3.86x / 3.45x at 1x / 3x / 6x. A wider pool
+ * is more candidates for the same ranking to sort, and the ranking is not good
+ * enough to keep its edge across all of them. 6x fails that guard at 85% kept
+ * against a 90% target, and moving a threshold so my own change passes is the
+ * exact mistake this project has made five times. 3x clears every guard.
+ *
+ * One caveat on that guard, recorded because it flatters the narrow gate: at
+ * 1x it reads *115%* kept, above 100%, because thirty "never heard of it"
+ * answers contract the pool and the pool is the denominator. Part of what it
+ * was rewarding was the gate closing, not the taste surviving.
+ *
+ * What the wider floor buys, on the probe least able to fake it: `deck-drift`
+ * had **one** horror title left in the gate by swipe 150. The deck was starving
+ * and no ranking could have fixed it.
+ *
+ * WRITTEN AS SUPPLY, WHICH IS THE ONLY REASON THE FLOOR EXISTS. A plain
+ * `3 x answered + 400` scores the same but opens the session on a wider pool
+ * than `answered + 300` did — 520 titles instead of 340 by card forty — and
+ * that made `simulate`'s opening-fame guard read 4,775 against its 5,000
+ * target. The guard is right that the first cards should be the famous ones.
+ * Phrasing the floor as "answered, plus a margin that grows" keeps the opening
+ * bit-identical to what shipped and moves only the part that was broken.
+ */
+const TIER_FLOOR_PER = num("TIER_FLOOR_PER", 3);
+const TIER_FLOOR_BASE = num("TIER_FLOOR_BASE", 300);
 
 export function fameTierSize(profile: TasteProfile, mode: RankMode = "swipe"): number {
   if (mode === "discover") return DISCOVER_POOL;
@@ -333,7 +393,8 @@ export function fameTierSize(profile: TasteProfile, mode: RankMode = "swipe"): n
     TIER_BASE + TIER_PER_SEEN * profile.seenCount - TIER_PER_UNSEEN * profile.unseenCount;
   // however far it contracts, always leave a healthy margin of unswiped titles
   const answered = profile.seenCount + profile.unseenCount;
-  return Math.min(TIER_MAX, Math.max(earned, answered + 300));
+  const margin = Math.max(TIER_FLOOR_BASE, answered * (TIER_FLOOR_PER - 1));
+  return Math.min(TIER_MAX, Math.max(earned, answered + margin));
 }
 
 /**

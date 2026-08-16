@@ -31,7 +31,7 @@
  * to the peaked prior, and why fame became a facet the viewer answers about
  * instead of a curve imposed on them.
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { decodeCatalog, type EncodedCatalog } from "../src/lib/data/catalog-codec";
 import { reachPrior, recognizability } from "../src/lib/engine/features";
 import { fameBand } from "../src/lib/engine/facets";
@@ -90,7 +90,46 @@ const priors: [string, (r: Row) => number][] = [
   ],
   ["is it English", (r) => (r.lang === "en" ? 1 : 0)],
   ["is it a film", (r) => (r.type === "movie" ? 1 : 0)],
+  [
+    "English, then vote count",
+    (r) => (r.lang === "en" ? 1 : 0) + recognizability(r.voteCount) * 0.999,
+  ],
 ];
+/**
+ * Wikipedia readership, if it has been collected. A second opinion on the same
+ * latent quantity from people who never opened a film-database account — and
+ * the only signal we own that is measured separately per language.
+ * `python3 scripts/wiki-clicks.py` produces it.
+ */
+type Clicks = { clicks: Record<string, Record<string, [number, number, number]>> };
+if (existsSync(".cache/wiki-clicks.json")) {
+  const wiki = JSON.parse(readFileSync(".cache/wiki-clicks.json", "utf8")) as Clicks;
+  const sum = (r: Row, slot: 0 | 1 | 2, langs?: string[]) => {
+    const e = wiki.clicks[r.id];
+    if (!e) return 0;
+    let n = 0;
+    for (const [lang, v] of Object.entries(e)) {
+      if (langs && !langs.includes(lang)) continue;
+      n += v[slot];
+    }
+    return n;
+  };
+  priors.push(
+    ["wikipedia reads, all languages", (r) => sum(r, 0)],
+    ["wikipedia reads, English only", (r) => sum(r, 0, ["en"])],
+    ["wikipedia reads, arrived by search", (r) => sum(r, 2)],
+    ["wikipedia reads, arrived by link", (r) => sum(r, 1)],
+    [
+      "votes x wikipedia",
+      (r) => Math.log1p(r.voteCount) * Math.log1p(sum(r, 0)),
+    ],
+    [
+      "votes + wikipedia (equal weight)",
+      (r) => Math.log1p(r.voteCount) / Math.log(1e5) + Math.log1p(sum(r, 0)) / Math.log(1e7),
+    ]
+  );
+}
+
 for (const [name, f] of priors) {
   console.log(`  ${name.padEnd(34)} ${auc(f).toFixed(3)}`);
 }

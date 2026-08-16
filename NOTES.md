@@ -102,6 +102,167 @@ against the improved engine, not the old one.
 
 ---
 
+## The deck was not running out of films. It was running out of room. (2026-08-16)
+
+He said the hit rate collapses after card 300. His last three sessions read
+63% → 22% → 12%, and every fix aimed at that curve had missed. Here is the
+curve from the 378-card file he sent, in blocks of fifty, with the median vote
+count of the cards in each block beside it:
+
+    cards       he had watched it     median votes
+      1-50            74.0%                4,537
+     51-100           62.0%                6,980
+    101-150           34.0%                6,561
+    151-200           28.0%                6,605
+    201-250           22.0%                7,114
+    251-300           10.0%                6,292
+    301-350            6.0%                5,409
+    351-378           14.3%                7,824
+
+**The median vote count does not fall.** The deck was not sinking into obscurity
+and running out of famous films — it was offering films exactly as famous at
+card 350 as at card 50, and he had not watched them. That kills the obvious
+explanation and points at the pool instead of the ranking.
+
+The pool is `fameTierSize`. It was:
+
+    min(3000, max(900 + 5*seen - 30*unseen, answered + 300))
+
+Replay his session through it. By the end: seen 122, unseen 256, so the ledger
+term reads `900 + 610 - 7,680 = -6,170`. It is negative from about card twenty
+onward. **For every card after the twentieth the gate was `answered + 300` and
+nothing else** — a reviewer called the ledger dead code from reading it, and
+this is that finding measured on a real session.
+
+And `answered + 300` grows by exactly one title per swipe, which is exactly the
+rate a person consumes it. The supply of unswiped candidates is a constant 300,
+forever, however long anyone sits there. Once the ones he had watched inside
+that 300 were gone, the hit rate had nowhere to go.
+
+Worse, the numbers say where the gate was standing. A gate of 678 — his value
+at card 378 — reaches down to **8,064 votes** in film. His own calibration
+sample says his watch rate by band is:
+
+    under 800 votes    0%        2k - 5k     14%
+    800 - 2k          11%        5k - 12k    11%
+    2k - 12k          13%        over 12k     0/8
+
+He lives between 800 and 12,000 votes. The gate stopped at 8,064, and its
+*ceiling* of 3,000 titles only ever reached 2,339 votes. **The band where most
+of his library lives was never fully inside the pool**, which is also why
+`Snatch` and `American Pie` never appeared in 1,100 cards.
+
+### The fix, and why it is phrased the way it is
+
+The floor is now written as supply rather than as a rank: `answered` plus a
+margin that grows with the session, `max(300, 2 x answered)`, still capped by
+TIER_MAX. Swept on 30 real histories at 1,500 cards — the length the product's
+goal actually lives at:
+
+| floor | harvested | reachable | lost to gate | lost to ranking |
+|---|---|---|---|---|
+| `answered + 300` (shipped) | 417.0 | 84.8% | 15.2% | 13.5% |
+| **`answered + max(300, 2x)`** | **435.3** | **91.2%** | **8.8%** | 16.7% |
+| `6x + 600` | 439.9 | 94.1% | 5.9% | 18.8% |
+| `12x + 600`, max 9,000 | 436.8 | 99.3% | 0.7% | 24.6% |
+
+Past 6x the gate stops being the binding constraint at all — 0.7% lost to the
+gate against 24.6% lost to the ranking — so widening further only hands the
+ranking more work it is not good enough to do.
+
+**Why not the 6x that scored highest.** 439.9 against 435.3 is one percent, and
+it is bought with real dilution: `simulate`'s taste-survival check reads comedy
+lift 4.63x / 3.86x / 3.45x at 1x / 3x / 6x, and 6x fails that guard at 85% kept
+against a 90% target. Moving a threshold so my own change can pass is the exact
+mistake this project has made five times. The shipped value clears every guard.
+
+**And a caveat on that guard, because it flatters the old gate.** At 1x it
+reads *115%* kept — above 100% — because thirty "never heard of it" answers
+contract the pool, and the pool is the denominator. Part of what it was
+rewarding was the gate closing, not the taste surviving.
+
+**Why "supply" and not `3 x answered + 400`.** They score the same, but the
+multiplier form opens the *first forty cards* onto 520 titles instead of 340,
+and `simulate`'s opening-fame guard caught it: lowest vote count 4,775 against
+its 5,000 target. Phrasing the floor as "answered, plus a margin" leaves the
+opening bit-identical to what shipped — the guard reads 5,379 either way — and
+moves only the part that was broken.
+
+### What it is worth, on every ruler
+
+| | before | after |
+|---|---|---|
+| `harvest`, 30 people x 1,500 cards | 417.0 | **435.3** |
+| `harvest`, 60 people x 500 cards | 238.6 | **243.9** |
+| `replay`, his own 1,226 labels | 175.4 | **186.8** |
+| — his cards 301-400 in that replay | 19.2 | **30.0** |
+| `human`, swipe mode | 32.5% | 32.5% (untouched) |
+| `simulate` | 12/13 | 12/13, same one failing |
+
+`human` not moving is expected and worth stating: it builds a page from half a
+full library, so the floor — which is driven by how much has been *answered* —
+never binds there. It cannot see this class of fault at all.
+
+The probe least able to fake it is `deck-drift`. A horror viewer had **one**
+horror title left in the gate by swipe 150. The deck was starving, and no
+ranking on earth could have fixed that.
+
+---
+
+## Tried and rejected: Wikipedia readership as an exposure prior (2026-08-16)
+
+Everything this project knows about "has this person probably heard of it"
+comes from one number, the TMDB vote count, and a reviewer named its bias
+exactly: science fiction 3.0x, comedy 0.70x, romance 0.57x. Voters are not
+viewers. So a second, independent measurement of the same latent thing was
+worth a morning.
+
+Wikipedia publishes a monthly clickstream per language: every (source article
+-> target article) pair with ten or more clicks. Summed over sources, that is
+how many people went and read about a film last month, in that language.
+Nobody has to open an account. `scripts/wiki-clicks.py` joins it to our titles
+through the article maps already in `.cache` — 21 languages, 61 million rows,
+two minutes, 144,227 titles with any readership at all.
+
+Then the only honest test: score it on the 199 answers the engine did not
+choose.
+
+| prior | AUC |
+|---|---|
+| vote count — what ships | **0.799** |
+| wikipedia reads, all 21 languages | 0.578 |
+| wikipedia reads, arrived by link | 0.616 |
+| wikipedia reads, arrived by search | 0.573 |
+| wikipedia reads, English only | 0.487 |
+| votes x wikipedia | 0.719 |
+| votes + wikipedia, equal weight | 0.726 |
+
+Not close, and mixing it in makes vote count *worse*. Rejected, nothing
+shipped, and the collector is kept because it took two minutes to run and the
+next person to have this idea deserves the number rather than the argument.
+
+**The obvious explanation is wrong.** The first guess was recency — July 2026
+traffic measuring what is in the news rather than what people have seen. It is
+not that: the median reads by release decade run 3,074 for the 1980s, 25,635
+for the 1990s, 20,335 for the 2000s and **924** for the 2010s. The 2010s, the
+most-watched decade in the sample, are the *quietest* on Wikipedia. Whatever
+readership measures, it is not exposure.
+
+One caveat recorded rather than hidden: only 93 of the 199 sampled titles have
+an English article in our map, so the English-only row is confounded with
+coverage. Restricted to covered titles the sample holds four positives, which
+is too thin to conclude anything from, and the multilingual rows — which do
+cover all 199 — lost on their own.
+
+**A second null, worth as much as the first.** The same sample says "is it
+English" scores 0.839, higher than vote count, because he had watched none of
+129 non-English titles. That reads like an argument for an English-first gate
+until you measure what the gate already does: across his real sessions the
+deck was **95.0% and 97.1% English**. Non-English is 11 cards out of 378. There
+was nothing to win, and a day was saved by counting before building.
+
+---
+
 ## The measurement was the thing that was broken (2026-08-16)
 
 199 titles, drawn uniformly at random from the whole catalog, seen or not-seen

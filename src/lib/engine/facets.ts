@@ -510,54 +510,61 @@ const SKIP_SCALE: Record<FacetKind, number> = {
 };
 
 /**
- * WHAT A DISLIKE IS ALLOWED TO BLAME — and the measurement that set it.
+ * WHAT A DISLIKE IS ALLOWED TO BLAME — and the two rulers that pull apart.
  *
  * `SKIP_SCALE` above already refuses to charge a genre for "never heard of
- * it", with the right reasoning: charging `comedy`, which a fifth of the
- * catalog carries, is charging the viewer's whole world for one card. It then
- * states that a dislike is different and writes the full negative everywhere.
- * That was an assumption, and it is wrong.
+ * it": charging `comedy`, which a fifth of the catalog carries, is charging
+ * the viewer's whole world for one card. It then asserted that a dislike is
+ * different and wrote the full negative everywhere. That assertion was wrong,
+ * and the user found it before any instrument here did.
  *
- * The user found it before any instrument here did. He has watched The Office,
- * New Girl, The Big Bang Theory and How I Met Your Mother, dislikes all four,
- * and swipes *up* on them — because a left swipe would teach the tables that
- * he dislikes sitcoms and cost him Modern Family and Brooklyn Nine-Nine, which
- * he loves. His two real sessions contain **6 dislikes in 1,100 swipes and 1
- * in 378**. A third of the interface is dead, and he was right to kill it.
+ * He has watched The Office, New Girl, The Big Bang Theory and How I Met Your
+ * Mother, dislikes all four, and swipes *up* on them — because a left swipe
+ * would teach the tables he dislikes sitcoms and cost him Modern Family and
+ * Brooklyn Nine-Nine, which he loves. His files show how complete the
+ * workaround is: **6 dislikes in 1,100 swipes, 1 in 378.** A third of the
+ * interface was dead and he was right to kill it.
  *
- * `scripts/mixed-taste.ts` measures exactly his claim on 250 MovieLens people
- * who both love and hate films inside the same genres: give the engine the
- * dislikes, or hide them, and count how many of their held-back loves come
- * back in a page of twelve.
+ * `scripts/mixed-taste.ts` puts a number on it — 250 MovieLens people who both
+ * love and hate films inside the same genres, their hates either swiped left
+ * or hidden exactly as he hides them. Being honest cost **6.0 points** of page
+ * quality in the deck, helping 48 people and hurting 136.
  *
- *     what the dislike was allowed to touch     cost of being honest
- *     everything (what shipped)                       -6.0 points
- *     genre alone                                     -5.1
- *     era alone                                       -3.1
- *     story alone                                     -2.6
- *     director alone                                  -1.1
- *     cast alone                                      -0.7  (noise)
+ * THE FIRST FIX WAS WRONG AND HE CAUGHT THAT TOO. Confining a dislike to cast
+ * and director removes the damage — and removes the ability to ever learn that
+ * someone hates a category. His words: "I don't like superhero films. Does
+ * that mean I swipe left a thousand times and keep being shown superhero
+ * films?" `scripts/hated-genre.ts` is that question as a ruler, and the answer
+ * was yes: 28 left swipes moved the genre's share of the deck 23% to 12% and
+ * it climbed again.
  *
- * Not one facet is positive. A dislike, spread automatically, carries no
- * recoverable information in this model — only damage, and the damage lives
- * where the viewer's identity lives. So it is confined to the two most
- * specific facets, where it means "not this actor, not this director" and
- * cannot reach a whole category.
+ * The two rulers pull in opposite directions, which is why fixing either alone
+ * is not a fix:
  *
- * Two other fixes were measured and are not what shipped. Weakening the
- * dislike closes the gap (-6.0 to -0.2 at a quarter strength) by *muting* it,
- * not by making it useful — which is the honest verdict on adding half-like
- * and half-dislike buttons. Scaling the negative down on tokens the viewer
- * already loves (`CONTRAST`) recovers most of it and keeps some signal, but
- * still tops out at -1.2 and needs undo to record per-token deltas. It stays
- * behind an env flag as the better idea if a dislike ever has to say more.
+ *     dislike design                    learns a hated genre   cost of honesty
+ *     blames everything (the old code)      23% -> 3%              -6.0
+ *     cast + director only                  23% -> 12%             -0.9
+ *     everything, scaled by support         15% -> 2%              -1.2
  *
- * On the other rulers, confining it is free or better:
+ * So a dislike may still blame every facet — and the negative is scaled down
+ * on tokens the viewer's own history already supports. One bad comedy among
+ * twenty liked ones barely dents `comedy`; twenty disliked action films with
+ * no action ever liked land in full. The blame goes where the evidence is,
+ * which is what a person means by both sentences.
  *
- *     harvest, 60 people x 500 cards      243.9  ->  250.1
- *     replay on his own labels            186.8  ->  188.2
+ * On the rulers that were already here it is free:
+ *
+ *     harvest, 60 x 500 cards       243.9  ->  248.0
+ *     replay on his own labels      186.8  ->  187.5
+ *     human / vibe / simulate       unchanged
+ *
+ * Rejected on the way, and worth recording: simply weakening the dislike. It
+ * closes the honesty gap to -0.2 at quarter strength, but by *muting* the
+ * signal — at no strength does an honest dislike beat a hidden one, and the
+ * hated genre is learned even more weakly. That is the measured verdict on
+ * adding half-like and half-dislike buttons, which was the other proposal.
  */
-const DISLIKE_FACETS = new Set<FacetKind>(["cast", "director"]);
+const DISLIKE_FACETS = new Set<FacetKind>(FACET_KINDS);
 
 /** the evidence one swipe writes, per facet */
 export function facetSignals(action: SwipeAction): Record<FacetKind, number> {
@@ -736,7 +743,7 @@ const round3 = (x: number) => Math.round(x * 1000) / 1000;
 const CONTRAST =
   typeof process !== "undefined" && process.env?.CONTRAST
     ? Number(process.env.CONTRAST)
-    : 0;
+    : 1.5;
 
 /** never let a token become completely immune to new evidence */
 const CONTRAST_FLOOR = 0.15;
@@ -744,7 +751,15 @@ const CONTRAST_FLOOR = 0.15;
 export function applyFacets(
   tables: FacetTables,
   tokens: TitleTokens,
-  signals: Record<FacetKind, number>
+  signals: Record<FacetKind, number>,
+  /**
+   * Only a dislike gets the contrastive treatment. A skip is negative too, and
+   * applying it there changed the signal that fires on 70% of real swipes —
+   * `replay` on the user's own labels read 186.8 against 181.6 before this was
+   * separated out. A skip already has `SKIP_SCALE`, which zeroes genre for its
+   * own reasons, and it means "I have not seen it", not "I did not like it".
+   */
+  contrast = false
 ): FacetTables {
   const next = { ...tables };
   for (const kind of FACET_KINDS) {
@@ -775,7 +790,7 @@ export function applyFacets(
        * which is where the reason for the dislike almost always is.
        */
       let s = signal;
-      if (signal < 0 && CONTRAST > 0 && prev) {
+      if (contrast && signal < 0 && CONTRAST > 0 && prev) {
         const support = Math.max(0, prev[0] / (prev[1] + TOKEN_K));
         s = signal * Math.max(CONTRAST_FLOOR, 1 - CONTRAST * support);
       }
@@ -793,20 +808,46 @@ export function applyFacets(
 export function revertFacets(
   tables: FacetTables,
   tokens: TitleTokens,
-  signals: Record<FacetKind, number>
+  signals: Record<FacetKind, number>,
+  contrast = false
 ): FacetTables {
   const next = { ...tables };
   for (const kind of FACET_KINDS) {
     const list = tokens[kind];
     const signal = signals[kind];
     if (list.length === 0 || signal === 0) continue;
-    const mass = Math.abs(signal);
     const table = { ...next[kind] };
     for (const token of list) {
       const prev = table[token];
       if (!prev) continue;
-      const s = round3(prev[0] - signal);
-      const n = round3(prev[1] - mass);
+      /**
+       * Undo has to invert the *scaled* write, and the scale was computed from
+       * the table as it stood before the write — which is the thing being
+       * reconstructed. One equation, one unknown: solve it.
+       *
+       *   after = before + d,  d = signal * f(before)
+       *
+       * f is a bounded, smooth function of `before`, so a handful of fixed
+       * point steps from d = signal converge to well inside the 0.001 the
+       * tables are rounded to. Cheap, deterministic, and exact at that
+       * resolution — checked by `npm run roundtrip`.
+       */
+      let d = signal;
+      if (contrast && signal < 0 && CONTRAST > 0) {
+        for (let i = 0; i < 12; i++) {
+          const beforeNet = prev[0] - d;
+          const beforeMass = prev[1] + d; // d < 0, and mass grew by |d|
+          const support = Math.max(0, beforeNet / (beforeMass + TOKEN_K));
+          const next = signal * Math.max(CONTRAST_FLOOR, 1 - CONTRAST * support);
+          if (Math.abs(next - d) < 1e-9) {
+            d = next;
+            break;
+          }
+          d = next;
+        }
+      }
+      const s = round3(prev[0] - d);
+      const n = round3(prev[1] - Math.abs(d));
       if (n <= 0.001) delete table[token];
       else table[token] = [s, n];
     }

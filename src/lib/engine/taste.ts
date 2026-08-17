@@ -205,7 +205,7 @@ export function applySwipe(
 
   const next: TasteProfile = {
     ...profile,
-    facets: pruneFacets(applyFacets(profile.facets, tokens, signals)),
+    facets: pruneFacets(applyFacets(profile.facets, tokens, signals, action === "disliked")),
     // every action teaches the exposure model, including the one that teaches
     // taste the least
     seenFacets: pruneFacets(applyFacets(profile.seenFacets, tokens, seenSignals(action))),
@@ -281,7 +281,7 @@ export function revertSwipe(
 
   const next: TasteProfile = {
     ...profile,
-    facets: revertFacets(profile.facets, tokens, signals),
+    facets: revertFacets(profile.facets, tokens, signals, action === "disliked"),
     seenFacets: revertFacets(profile.seenFacets, tokens, seenSignals(action)),
     // an undone swipe should not keep a theme benched
     streaks: { runs: {}, cooldown: profile.streaks.cooldown },

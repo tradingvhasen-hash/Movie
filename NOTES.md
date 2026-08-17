@@ -159,31 +159,56 @@ Not one facet is positive. **A dislike, spread automatically, carries no
 recoverable information in this model** — only damage, concentrated exactly
 where a person's identity lives.
 
-### Two fixes measured and rejected, one shipped
+### The first fix was wrong, and he caught that too
+
+Confining a dislike to cast and director removes the damage — and removes the
+ability to ever learn that someone hates a category. His reply, immediately:
+*"I don't like superhero films. Does that mean I swipe left a thousand times
+and keep being shown superhero films?"*
+
+`scripts/hated-genre.ts` is that question as a ruler: a cold viewer who swipes
+left on every card of one genre. The answer was yes, he was right — 28 left
+swipes moved action's share of the deck from 23% to 12%, and it climbed again
+by the last block.
+
+**The two rulers pull in opposite directions, which is why fixing either alone
+is not a fix.**
+
+| dislike design | learns a hated genre | cost of honesty |
+|---|---|---|
+| blames everything (the old code) | 23% → 3% ✅ | −6.0 ❌ |
+| cast + director only | 23% → 12% ❌ | −0.9 ✅ |
+| **everything, scaled by existing support** | **15% → 2%** ✅ | **−1.2** ✅ |
+
+### What shipped
+
+A dislike still blames every facet, and the negative is scaled down on tokens
+the viewer's own history already supports. One bad comedy among twenty liked
+ones barely dents `comedy`; twenty disliked action films with no action ever
+liked land in full. The blame follows the evidence, which is what a person
+means by both sentences.
+
+    harvest, 60 x 500 cards       243.9  ->  248.0
+    replay on his own labels      186.8  ->  187.5
+    human / vibe / simulate       unchanged (32.5% / 58% / 12 of 13)
+
+Undo had to invert a write whose scale was computed from the table as it stood
+*before* that write — the thing being reconstructed. One equation, one unknown,
+solved by a dozen fixed-point steps, exact at the 0.001 the tables round to and
+checked by `roundtrip`.
+
+**One trap, found by the numbers disagreeing.** The first version scaled every
+negative signal, and a skip is negative too. Skips are 70% of real swipes, so
+it quietly changed the signal that fires most: `replay` read 181.6 against
+186.8. Restricting it to dislikes recovered it. A skip already has SKIP_SCALE,
+and it means "I have not seen it", not "I did not like it".
 
 **Rejected: more gradations.** His other suggestion, and the obvious one — half
-a like, half a dislike. Simulated by weakening the negative: the gap closes
-from -6.0 to -0.2 at a quarter strength. But it closes by *muting* the dislike,
-not by making it useful; at no strength does an honest dislike beat a hidden
-one. More buttons buy a quieter mistake, not a better model.
-
-**Rejected for now: contrastive blame.** Scale the negative down on tokens the
-viewer's own history already supports, so one bad comedy cannot dent `comedy`
-for someone who has liked twenty. Recovers most of it (-6.0 to -1.2) and keeps
-some signal, which is better in principle than muting. It stops at -1.2, and it
-needs undo to record per-token deltas. Kept behind `CONTRAST` as the better
-idea if a dislike ever has to say more than it does now.
-
-**Shipped: confine the dislike to cast and director.** The two most specific
-facets, where a negative means "not this actor, not this director" and cannot
-reach a whole category. `SKIP_SCALE` already refused to charge a genre for
-"never heard of it" with exactly this reasoning, then asserted a dislike was
-different. That assertion was the bug.
-
-    mixed-taste, deck mode      -6.0   ->   -0.9   (inside the noise)
-    harvest, 60 x 500 cards    243.9   ->  250.1
-    replay on his own labels   186.8   ->  188.2
-    human / vibe / simulate     unchanged (32.5% / 58% / 12 of 13)
+a like, half a dislike. Simulated by weakening the negative: the honesty gap
+closes from −6.0 to −0.2 at quarter strength, but by *muting* the dislike. At
+no strength does an honest dislike beat a hidden one, and the hated genre is
+learned even more weakly than before. More buttons buy a quieter mistake, not a
+better model.
 
 ### What is still open, and it is his idea
 

@@ -1,127 +1,125 @@
 # What needs you
 
-One site, one address: **https://dhawq.onrender.com**
-
-Everything I could do alone is done and pushed. Wait for Render to finish
-deploying, then **pull down to refresh once** so the browser drops the old code.
+**https://dhawq.onrender.com** — pull down to refresh once so the browser drops
+the old code.
 
 ---
 
-> The SQL in §1 is **done** — he ran it. Removed.
+## 1 · Swipe a full session
 
-## 1 · ⭐ Calibration round — /calibrate
+Home page → **Swipe**. Then `/lab` → **Export**, and send me the file.
 
-**Where:** https://dhawq.onrender.com/calibrate
+**Export before you close the tab.** Your browser clears storage on close. If
+something interrupts you, `/lab` → **Import a file** puts an exported file back.
 
-You did 199 and it remains the most valuable ten minutes anyone has spent on
-this project. Today it killed a second feature before I built it — see the
-bottom of this file.
+### There is a new button, and it matters more than it looks
 
-**Why again:** the catalog is 15,083 titles instead of 12,826, and the new ones
-sit exactly in the band your answers said you live in. The old sample cannot
-measure the new catalog. And nine watched titles out of 199 is a thin base for
-everything now resting on it; another 200 roughly halves the error on every
-number derived from it.
+The row under the card is now: 👎 · undo · ↑ · **👁** · ❤️
 
-Tap **شاهدته** or **لم أشاهده**, "not watched" is worth exactly as much as
-"watched", press تصدير, send me the file.
+**👁 means "I watched it, no strong feeling."** Use it for every Joker — every
+work you have seen and felt nothing much about, in either direction.
 
----
+Until today that answer did not exist and you had three lies to choose from.
+The one that feels least dishonest, ↑ "haven't seen it", is the most damaging:
+it teaches the site you never saw a film you did see, and the title drops out
+of your library entirely. Your last file had **812 "haven't seen" answers in
+1,100 cards**. Some unknown share of those are really 👁.
 
-## 2 · Swipe 400 cards — the home page, then /lab
+### And swipe left honestly now
 
-**Where:** https://dhawq.onrender.com → **Swipe** → then `/lab` → Export.
-**Do not reset first.**
-
-**This is the test of today's main fix.** Your last file collapsed from 74% at
-card 50 to 6% at card 350, and I found why: the pool the deck draws from grew
-by exactly one title per swipe, which is exactly the rate you consume it. The
-supply of unseen candidates was a constant 300 forever, so once the ones you
-had watched inside that 300 ran out, there was nothing left to find. It was
-never running out of famous films — the films at card 350 were just as famous
-as at card 50. It was running out of room.
-
-Replayed against your own 1,226 labelled titles, cards 301–400 went from 19.2
-to **30.0**. That is the number I want your file to confirm or refute.
+👎 no longer blames a whole genre for one bad title. Hating The Office will not
+cost you Modern Family — measured — and twenty disliked action films with no
+action ever liked will still teach it properly. Your last two files contained
+**6 dislikes in 1,100 swipes and 1 in 378**. That was rational before. It is not
+any more.
 
 ---
 
-## 3 · Search — /search
+## 2 · The two numbers I want
 
-**Where:** https://dhawq.onrender.com/search
+**Does the decline keep slowing?** Last session, per 50 cards: 27 · 22 · 28 ·
+22 · 29 · 15 · 16 · 14 · 15 · 11 · 15 · 7 · 10 · 11 · 4 · 9 · 11 · 1 · 1 · 8 ·
+5 · 2.
 
-Type film names you remember and add them. Try `Snatch` and `American Pie`
-first: both were in the catalog the whole time, and I now know exactly why the
-deck never showed you either — they sit below where the gate could reach.
-
-**What I want to know:** how many do you type that come back with nothing? That
-number is the honest size of the catalog's remaining gap, and no instrument I
-have can measure it.
+**Do more first-time works appear?** Last session 61 of your 283 likes were
+works never shown to you in four earlier sessions. Every one below film rank
+3,000 was a first appearance.
 
 ---
 
-## 4 · The grid — /seen
+## 3 · Optional · another calibration round
 
-**Where:** https://dhawq.onrender.com/seen
+https://dhawq.onrender.com/calibrate — tap only what you have watched, one tap
+anywhere on a card, a second tap undoes it. Everything untapped counts as not
+watched.
 
-Yesterday I told you the grid had never worked and that the database was
-rejecting every tap. **I tested it properly today, with real touch events on a
-phone-sized screen, and the grid works.** Five taps recorded five titles as
-watched and the other twenty-five as not watched, exactly as designed.
-
-So the 219 posters in your session that came back with zero taps are more
-likely to be eight screens where you pressed the button without tapping
-anything — it reads "None of these · next" and advances either way.
-
-Worth thirty seconds: tap five or six you have watched on one screen, press the
-button, and check the counter at the bottom left goes to "6 added · 1 screens".
-If it does not, tell me and I will have been wrong twice.
+Two rounds are done (399 titles). A third would tighten every band estimate,
+and those estimates now set where the gate stops. Not urgent.
 
 ---
 
-## What changed today
+## 4 · `/seen` is gone from the navigation
+
+You were right about it. The arithmetic was in its favour — thirty questions a
+screen against the deck's one a gesture — and the product judgement was wrong.
+A faster chore is still a chore nobody does. The route still exists if you ever
+want it; it is simply no longer offered.
+
+**`/search` stays**, deliberately secondary. Your point about it is the sharpest
+thing anyone has said about this product: nobody can *name* thirty films, and
+everybody *recognises* a thousand. That is the whole argument for the deck.
+
+---
+
+## What changed in this update
 
 | | before | after |
 |---|---|---|
-| `harvest`, 30 people × 1,500 cards | 417.0 | **438.1** |
-| lost because the gate never offered it | 15.2% | **6.4%** |
-| replay on your own labels | 175.4 | **186.8** |
-| — your cards 301–400 | 19.2 | **30.0** |
+| `harvest` — the goal ruler | 248.0 | **263.0** |
+| — lost because the ranking did not deal it | 32.0% | **29.0%** |
+| `replay` on your own 1,226 labels | 187.5 | **196.2** |
+| `human`, deck mode | 32.5% | **33.8%** |
+| — long tail only | 12.9% | **14.3%** |
+| `simulate` | 12/13 | **13/13** |
 
-**Rejected today, with numbers rather than an opinion.** Wikipedia publishes
-how many people read each film's article each month, in every language. It is a
-measurement of "have you heard of this" made by people who never opened a film
-database, so it should have been better than a TMDB vote count. Scored against
-your 199 answers it reads **0.578 against vote count's 0.799**, and blending
-the two makes vote count *worse*. Two minutes of collection, twenty of
-analysis, and it is not shipped.
+**The graph's share of the deck went up four times.** You said you mostly only
+see keyword relationships — measured, you were right: 83% taste against 14%
+graph. The graph is the only mechanism that can reach a title sharing *no*
+keywords with anything you liked, which is the founding idea of this site, and
+it was throttled by a limit set back when the pool held 700 titles.
 
-**Also rejected, and this one your data killed for free.** Your sample says "is
-it English" predicts what you have watched better than fame does, which reads
-like an argument for an English-first deck — until you count what the deck
-already serves you: **95% and 97% English** across your two real sessions.
-There was nothing to win. A day saved by counting before building.
+**Your reverse-graph idea was implemented and rejected**, on both rulers at
+once — the code is in, switched off, with the reason written beside it. A film
+you disliked is a film you *watched*, so its neighbours are things you have
+probably also watched. Walking away from them walks away from your own library.
 
 ---
 
-## Known and open — recorded, not hidden
+## What I got wrong, and the number that replaces it
 
-**`simulate` is 12/13.** The failure is a re-rank timing guard. I profiled it
-and cut the rebuild from 37.5ms to 33.8ms by not recomputing three per-title
-constants on every pass; the guard tests the single worst of twelve samples,
-which is 44.7ms and mostly garbage collection. It runs in idle time between
-swipes and never sits between your finger and the next card.
+I told you the improvement had hit its limit. That was wrong twice: I used a
+film vote-count threshold on a catalog that is 20% television, and I measured
+what the gate *could* offer instead of what you were actually shown.
 
-**One correction to yesterday's write-up, before you find it yourself.** I said
-the fix rescued a starving pool in the `deck-drift` probe — one horror title
-left in the gate becoming forty-nine. That is true of a more aggressive version
-I measured and did not ship. What shipped is identical to the old gate for the
-first ~300 cards by design, so that probe cannot see it either way. The
-evidence for what shipped is `harvest` at 1,500 cards and the replay of your
-own labels, both long enough for the change to bind.
+    the band worth asking about (top 30% of each kind)   4,526 works
+    asked about across five sessions                     1,585   (35%)
+    never asked, inside what the deck already reaches    2,941
+    your library inside the catalog                       ~754
+    found so far                                           321
+    still in there, unasked                               ~433
 
-**MovieLens has no television at all**, so the goal ruler is blind to 3,076 of
-the 15,083 titles. No fix; the data does not exist.
+The gate stopped being the bottleneck. That is not the same as nothing being
+left. **433 of your own films are sitting inside territory the deck can already
+reach**, and while that number is large the work is not finished.
+
+---
+
+## Known and open
+
+**MovieLens has no television**, so the goal ruler is blind to 3,076 of the
+15,083 titles. No fix — the data does not exist.
+
+**Non-English is settled**: 3 watched of 226 across both calibration rounds.
 
 **Do not top up the Anthropic credit.** That feature measured worse and ships
 disabled.

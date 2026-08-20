@@ -8,7 +8,14 @@ import TastePicker from "./TastePicker";
 import { useDeck } from "@/lib/useDeck";
 import { useDhawq } from "@/lib/store";
 import { GlowButton, HeartButton, NeuButton } from "./ui";
-import { ArrowUpIcon, ClapperIcon, PopcornIcon, ThumbsDownIcon, UndoIcon } from "./ui/Icons";
+import {
+  ArrowUpIcon,
+  ClapperIcon,
+  EyeIcon,
+  PopcornIcon,
+  ThumbsDownIcon,
+  UndoIcon,
+} from "./ui/Icons";
 import { EASE_SWEEP, FADE_UP, SECTION, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
 import { t } from "@/lib/i18n";
 import type { SwipeAction, Title } from "@/lib/types";
@@ -96,6 +103,7 @@ export default function SwipeDeck() {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       if (e.key === "ArrowRight") trigger("liked");
       else if (e.key === "ArrowLeft") trigger("disliked");
+      else if (e.key === "ArrowDown") trigger("seen");
       else if (e.key === "ArrowUp") {
         e.preventDefault();
         trigger("not_seen");
@@ -375,6 +383,29 @@ export default function SwipeDeck() {
             className="h-11 w-11"
           >
             <ArrowUpIcon size={17} />
+          </NeuButton>
+        </motion.div>
+        {/**
+         * The fourth answer, which the model has had since the grid shipped and
+         * the deck could never send: watched it, no strong feeling.
+         *
+         * Without it a lukewarm title has three lies available — love it, hate
+         * it, or "never seen it", and the last is the one people pick because
+         * it feels least dishonest. It is the most damaging: the exposure
+         * tables are then taught that a film he watched is a film he has not,
+         * and the library loses the entry entirely. The user described exactly
+         * this about Joker, and his file shows 812 "haven't seen" answers in
+         * 1,100 cards — some unknown share of which are this.
+         */}
+        <motion.div variants={FADE_UP} whileTap={{ scale: 0.88 }} transition={SPRING_SNAPPY}>
+          <NeuButton
+            round
+            aria-label={t("swipe.seen")}
+            title={t("swipe.seen")}
+            onClick={() => trigger("seen")}
+            className="h-11 w-11"
+          >
+            <EyeIcon size={17} />
           </NeuButton>
         </motion.div>
         <motion.div variants={FADE_UP} className="neu-btn neu-btn-round h-14 w-14">

@@ -149,6 +149,7 @@ for (let seed = 1; seed <= SEEDS; seed++) {
   let p = emptyProfile();
   const shown = new Set<string>();
   const likedTitles: Title[] = [];
+  const dislikedTitles: Title[] = [];
   for (const id of OPENING) {
     const t = byId.get(id);
     if (!t) continue;
@@ -165,6 +166,7 @@ for (let seed = 1; seed <= SEEDS; seed++) {
       seed,
       vectorFor: vf,
       likedTitles,
+      dislikedTitles,
       mode: "swipe",
     });
     if (batch.length === 0) break;
@@ -178,6 +180,8 @@ for (let seed = 1; seed <= SEEDS; seed++) {
       if (a === "liked") {
         likedTitles.push(r.title);
         liked[b]++;
+      } else if (a === "disliked") {
+        dislikedTitles.push(r.title);
       }
       // an unlabelled card is shown and forgotten; only real answers teach
       if (a) p = applySwipe(p, r.title, vf(r.title), a);

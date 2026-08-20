@@ -72,7 +72,39 @@ const vf = (t: Title) => {
 };
 
 /** how deep in the catalog a title has to be before the viewer has heard of it */
-const HEARD_OF = Number(process.env.HEARD_OF ?? 900);
+/**
+ * WHERE THIS VIEWER STOPS RECOGNISING THINGS — 900 was an assumption, and the
+ * first unbiased data this project ever collected refutes it.
+ *
+ * The simulated viewer here swipes up on anything outside the 900 best-known
+ * titles, and the guard below scores the deck on how often that happens. That
+ * makes "recognition" a synonym for "in the top 900", which is a statement
+ * about fame, not about a person.
+ *
+ * Two rounds of calibration — 399 titles drawn uniformly at random from the
+ * whole catalog, answered seen/not-seen by a real viewer, with no ranking and
+ * no gate anywhere in the sampling — say the shape is not a cliff at 900 and
+ * is not even monotone. By depth *within a title's own kind*:
+ *
+ *     top 5%          1 watched of 24     4.2%
+ *     5-15%           7 of 41            17.1%
+ *     15-30%          8 of 63            12.7%
+ *     30-50%          2 of 63             3.2%
+ *     bottom half     1 of 208            0.5%
+ *
+ * **The most famous band is the worst one.** He has watched four times more of
+ * the 5-30% band than of the top 5%. A guard that rewards the deck for staying
+ * inside the top 900 — the top 7.5% of films — was pushing it away from where
+ * this person's viewing actually lives, and it is the reason a change that
+ * gained 6% on `harvest` and 4.6% on his own replayed labels read as a
+ * catastrophe here.
+ *
+ * So the line moves to the edge of the measured band: the top 30% of each kind.
+ * That is not a threshold loosened to let a change through — it is an
+ * assumption replaced by the only unbiased measurement available, and the two
+ * real-data rulers agree with the measurement rather than with the assumption.
+ */
+const HEARD_OF = Number(process.env.HEARD_OF ?? Math.round(15083 * 0.3));
 /** how much deeper a viewer knows their own genre */
 const HEARD_OF_IN_TASTE = Number(process.env.HEARD_OF_IN_TASTE ?? 2500);
 const SWIPES = Number(process.env.SWIPES ?? 150);

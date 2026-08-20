@@ -95,8 +95,10 @@ const W_QUALITY = 0.25;
  * established: a perfectly-matched film with 300 ratings is still a film the
  * user has never heard of, and a deck of those reads as random.
  */
-const W_RECOGNITION_COLD = 0.9;
-const W_RECOGNITION_WARM = 0.55;
+const num2 = (k: string, d: number) =>
+  typeof process !== "undefined" && process.env?.[k] ? Number(process.env[k]) : d;
+const W_RECOGNITION_COLD = num2("W_REC_COLD", 0.9);
+const W_RECOGNITION_WARM = num2("W_REC_WARM", 0.55);
 /**
  * In Discover, recognisability is barely rewarded at all — it is kept only
  * to break ties away from titles with almost no ratings. Ranking a
@@ -1218,7 +1220,42 @@ const CO_WATCH_MAX =
  * hunt by its own admission, and its absolute numbers now say the deck finds
  * them in 305 swipes where the build that set the 1.15 limit took 547.
  */
-const CO_WATCH_DECK_SCALE = 0.8;
+/**
+ * THE DECK'S SHARE OF THE GRAPH — quadrupled, on the user's reading of it.
+ *
+ * He asked what percentage of a card is decided by keywords and what by "people
+ * who watched this also watched that". `scripts/score-share.ts` was built to
+ * answer it honestly — as the share of the *spread* between candidates each
+ * term explains, because the weights multiply quantities on different scales
+ * and cannot be compared directly. The answer after forty cards was 83% taste,
+ * 14% graph. His reading of the product — "I mostly only see the relationship
+ * between the keywords" — was correct.
+ *
+ * That mattered because the graph is the only mechanism here that can find a
+ * title sharing *no keywords* with anything the viewer liked, which is the
+ * founding requirement of this product: recommendation by meaning rather than
+ * by words.
+ *
+ * The 0.8 it sat at was set when the gate held roughly 700 titles, and the
+ * reasoning recorded for it was crowding: "every like drags in only its own ~8
+ * neighbours, so 20 likes pin roughly 160 titles to the top of every batch".
+ * With a gate that now holds 5,774 across a session, 160 pinned titles is no
+ * longer a crowd. The constraint that set this number is gone.
+ *
+ *     deck scale     harvest        replay on his own labels
+ *       0.8 (was)      248.0                187.5
+ *       1.6            257.9                192.4
+ *       2.4            261.4                193.1
+ *       3.2 (ships)    263.0                196.2
+ *       4.0            263.0                196.9
+ *       5.5            261.9                196.8
+ *
+ * It flattens at 3.2 and turns over by 5.5. Shipped at 3.2 rather than 4.0
+ * because that is the value `simulate` was run at, and it passed all thirteen
+ * checks — including both co-watch guards and the tunnel-vision guard the
+ * original 0.8 existed to protect.
+ */
+const CO_WATCH_DECK_SCALE = 3.2;
 
 /**
  * Discover's share of the graph signal.
@@ -1247,6 +1284,41 @@ const CO_WATCH_DECK_SCALE = 0.8;
  * a single-taste library together (simulate check 8).
  */
 const CO_WATCH_DISCOVER_SCALE = 1.6;
+
+/**
+ * How hard the graph pushes *away* from what a viewer rejected.
+ *
+ * Zero until measured. See the aversion walk in `recommend`.
+ */
+/**
+ * TRIED, AND REFUTED ON BOTH RULERS AT ONCE. Kept behind a flag, at zero.
+ *
+ * The user's proposal, and a good one: "if people who liked Batman liked
+ * Joker, then someone who *dislikes* Batman probably dislikes Joker — use the
+ * same technique upside down." It deserved the test because the graph is the
+ * one signal that is not a property of the title: an edge is a statement about
+ * audiences, so running it backwards should say "not your kind of thing"
+ * without touching a genre.
+ *
+ *     aversion    harvest    cost of an honest dislike (mixed-taste)
+ *       0 (ships)   263.0                  -1.2
+ *       1.6         250.6                  -4.8
+ *       3.2         234.9                  -6.4
+ *
+ * Worse on the extraction ruler *and* worse on the recommendation ruler, which
+ * is as clear as this project gets. The reason is the premise: a film you
+ * disliked is a film you **watched**. Its co-watch neighbours are therefore
+ * things you have probably also watched, and often liked. Walking away from
+ * them walks away from your own library. The graph encodes "the same people
+ * chose both", not "the same people enjoyed both" — so backwards it does not
+ * read "you will dislike this", it reads "you are not this kind of viewer",
+ * and that is false. He *is* that kind of viewer; he simply did not like that
+ * particular one.
+ */
+const CO_WATCH_AVERSION =
+  typeof process !== "undefined" && process.env?.AVERSION
+    ? Number(process.env.AVERSION)
+    : 0;
 
 /** measurement only, deck side. Unset in the browser. */
 const DECK_ENV =
@@ -1567,6 +1639,11 @@ export interface RecommendOptions {
    * "because you loved…" line.
    */
   likedTitles?: Title[];
+  /**
+   * Everything the viewer disliked, so the same co-watch graph can be walked
+   * *backwards*. See CO_WATCH_AVERSION.
+   */
+  dislikedTitles?: Title[];
   /** BCP-47 primary subtags the viewer reads, e.g. ["ar"], from the browser */
   homeLanguages?: string[];
   /** candidate id → bonus from collaborative co-occurrence (cloud path) */
@@ -1635,6 +1712,32 @@ export function recommend(
       ? coWatchBonus(opts.likedTitles)
       : walkBonus(pool, opts.likedTitles)
     : null;
+
+  /**
+   * THE SAME GRAPH, WALKED BACKWARDS FROM WHAT THEY REJECTED.
+   *
+   * The user's idea, and the first thing anyone has proposed that treats a
+   * dislike as a first-class signal rather than a like with a minus sign:
+   * "if people who liked Batman liked Joker, then someone who dislikes Batman
+   * probably dislikes Joker — use the same technique upside down."
+   *
+   * It is worth taking seriously here specifically because the graph is not a
+   * keyword. Everything else the dislike touches is a property of the title —
+   * its genre, its cast, its decade — and the whole difficulty with dislikes is
+   * that those properties are shared with things the person loves. A co-watch
+   * edge is not a property; it is a statement about *audiences*. Two films
+   * joined by an edge are joined because the same people chose both, which is
+   * exactly the relation "if that one was not for you, this one is not either"
+   * needs, and it carries no genre with it.
+   *
+   * Scaled separately from the positive walk because there is no reason for
+   * the two to be symmetric, and because a person gives far fewer dislikes
+   * than likes, so the walk starts from a much smaller frontier.
+   */
+  const aversion =
+    CO_WATCH_AVERSION > 0 && opts.dislikedTitles?.length
+      ? walkBonus(pool, opts.dislikedTitles)
+      : null;
 
   /**
    * TRIED AND REJECTED: a door in the gate for the viewer's own taste.
@@ -1740,7 +1843,8 @@ export function recommend(
       wRecognition * recognitionTerm +
       confidence * W_FACETS * fs.total +
       JITTER * (c._jit as number) +
-      coWatchScale * coWatchTerm(coWatch?.get(c.title.id)?.score ?? 0) +
+      coWatchScale * coWatchTerm(coWatch?.get(c.title.id)?.score ?? 0) -
+      CO_WATCH_AVERSION * coWatchTerm(aversion?.get(c.title.id)?.score ?? 0) +
       confidence * W_SOUL * soulSim(c.title.id) +
       (opts.coOccurrenceBonus?.get(c.title.id) ?? 0);
 

@@ -159,3 +159,18 @@ export const LoginIcon = (p: IconProps) => (
     <path d="M10 17l5-5-5-5M15 12H3" />
   </svg>
 );
+
+/**
+ * "Watched it, no strong feeling."
+ *
+ * The one answer the deck could not send. Someone who saw Joker and thought it
+ * was fine has three gestures available: like it (a lie), dislike it (a lie),
+ * or say they never saw it (the lie the engine believes most). An eye, because
+ * this is a statement about having watched, not about having enjoyed.
+ */
+export const EyeIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z" />
+    <circle cx="12" cy="12" r="2.6" />
+  </svg>
+);

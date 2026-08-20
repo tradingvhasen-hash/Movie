@@ -3,13 +3,26 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { BooksIcon, GridIcon, CardsIcon, SearchIcon, SparklesIcon } from "./ui/Icons";
+import { BooksIcon, CardsIcon, SearchIcon, SparklesIcon } from "./ui/Icons";
 
 /* labels inline so the shell renders in any context, including the 404 page */
 const TABS = [
   { href: "/", label: "Swipe", Icon: CardsIcon },
-  // the fast lane: thirty questions a screen instead of one a gesture
-  { href: "/seen", label: "Seen it?", Icon: GridIcon },
+  /**
+   * `/seen` — the thirty-at-once grid — is deliberately NOT here any more.
+   *
+   * It was built on a real piece of arithmetic: a grid asks thirty questions
+   * per screen against the deck's one per gesture, and on paper that is 3,656
+   * titles an hour against 1,667. The arithmetic was right and the product
+   * judgement was wrong. The user opened it, looked at it, and closed it —
+   * "every site has this page, it is boring, I got bored just looking at it".
+   * Across 219 posters he tapped nothing.
+   *
+   * That is the whole differentiator being handed away. The deck is not slower
+   * by accident; it is a game, and people finish games. A page is a chore, and
+   * a faster chore is still a chore nobody does. The route still exists for
+   * anyone who wants it — it is simply no longer offered.
+   */
   /**
    * The escape hatch, promoted to the nav.
    *

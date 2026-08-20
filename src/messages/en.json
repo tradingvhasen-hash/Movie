@@ -22,7 +22,8 @@
     "emptyTitle": "No more cards for now!",
     "emptyBody": "You've swiped everything we have. Come back later or browse Discover.",
     "reset": "Reset all cards",
-    "keyboard": "Keyboard: ← not for me • → loved it • ↑ haven't seen"
+    "keyboard": "Keyboard: ← not for me • → loved it • ↑ haven't seen",
+    "seen": "Seen it, no strong feeling"
   },
   "onboarding": {
     "welcomeTitle": "Welcome to Dhawq",

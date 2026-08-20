@@ -143,6 +143,7 @@ for (const [, history] of users) {
   let profile = emptyProfile();
   const shown = new Set<string>();
   const liked: Title[] = [];
+  const disliked: Title[] = [];
   /** every title the gate has admitted at any point for this person */
   const reachedIds = new Set<string>();
 
@@ -171,6 +172,7 @@ for (const [, history] of users) {
             seed: 7,
             vectorFor: vf,
             likedTitles: liked,
+            dislikedTitles: disliked,
             mode: "swipe",
           }).map((r) => r.title);
     if (batch.length === 0) {
@@ -202,6 +204,7 @@ for (const [, history] of users) {
         found++;
       }
       if (action === "liked") liked.push(title);
+      else if (action === "disliked") disliked.push(title);
       if (MODE !== "grid") seconds += SECONDS_PER_CARD;
       profile = applySwipe(profile, title, vf(title), action);
       shown.add(title.id);

@@ -162,6 +162,11 @@ function computeLocalBatch(excludeExtra: string[] = []): Title[] {
     .map((s) => getLocalItem(s.titleId)?.title ?? s.title)
     .filter((t): t is Title => Boolean(t));
 
+  const dislikedTitles = Object.values(state.swipes)
+    .filter((s) => s.action === "disliked")
+    .map((s) => getLocalItem(s.titleId)?.title ?? s.title)
+    .filter((t): t is Title => Boolean(t));
+
   const pending = pendingVerdicts(new Set(excludeExtra)).slice(0, BATCH);
   if (pending.length >= BATCH) return pending;
 
@@ -171,6 +176,7 @@ function computeLocalBatch(excludeExtra: string[] = []): Title[] {
     seed: state.seed,
     vectorFor: vectorOf,
     likedTitles,
+    dislikedTitles,
     homeLanguages: homeLanguages(),
   }).map((r) => r.title);
   return [...pending, ...rest];

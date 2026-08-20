@@ -102,6 +102,163 @@ against the improved engine, not the old one.
 
 ---
 
+## The user asked what made it better, and the answer was not what I said (2026-08-16)
+
+He ran the first full session on the fixed gate — 1,100 cards, 283 liked
+against 201 on the previous 1,100 — and asked the only question worth asking:
+**which change did that, so it can be made bigger.**
+
+Three new instruments were built to answer it. `scripts/why-new.ts` replays a
+real session and records the union of everything the gate admitted, so a title
+can be attributed to the gate or to the ranking. `scripts/score-share.ts`
+measures what share of the *spread between candidates* each scoring term
+explains — the only honest answer to "what percentage is keywords", because the
+weights multiply quantities on different scales. `scripts/mixed-taste.ts` and
+`scripts/hated-genre.ts` came earlier the same day.
+
+### What they said
+
+61 of his 283 likes were works never shown to him once across four earlier
+sessions. Every single like below film rank 3,000 was a first-time appearance.
+Under the old gate 25 of those 61 were reachable; under the new one, 60. The
+catalog extension contributed exactly one.
+
+    his likes by film fame rank        liked   of them new
+      top 500                             70             3
+      500-1,500                           90             1
+      1,500-3,000                         76            20
+      3,000-5,000                         37            37
+      5,000+                               0             0
+
+### Then I told him it was finished, and that was wrong
+
+I measured the gate's *union across a session* — 5,774 titles — and concluded
+the useful universe was covered and depth was exhausted as a lever. Two things
+were wrong with that.
+
+**The first was a unit error.** I set the useful floor at 800 TMDB votes, which
+is a statement about films, applied to a catalog that is 20% television. Redone
+as depth *within a title's own kind*, across both calibration rounds:
+
+    top 5%           1 watched of 24     4.2%
+    5-15%            7 of 41            17.1%
+    15-30%           8 of 63            12.7%
+    30-50%           2 of 63             3.2%
+    bottom half      1 of 208            0.5%
+
+**The most famous band is his worst.** He watches four times more of the 5-30%
+band than of the top 5%.
+
+**The second was worse, because it was the wrong question.** The union is what
+the gate *could* have offered. It never occurred to me to ask how much of it he
+was actually shown:
+
+    the band worth asking about (top 30% of each kind)   4,526 works
+    asked about across five sessions                     1,585   (35%)
+    never asked, inside what the gate already reaches    2,941
+    his library inside the catalog                       ~754
+    found so far                                          321
+    still in there, unasked                              ~433
+
+The gate stopped being the bottleneck; that is not the same as there being
+nothing left. **433 of his own films are sitting inside territory the deck can
+already reach.** The constraint moved to the ranking, and I reported the move
+as an ending.
+
+### What decides a card, measured
+
+    after        taste   co-watch   have-you-seen-it   quality
+      0 cards       0%         0%               71%        29%
+     40 cards      75%        19%                1%         5%
+    400 cards      82%        15%                1%         2%
+  1,099 cards      83%        14%                0%         2%
+
+His reading of the product was right: overwhelmingly keyword, genre and cast
+similarity, with the graph a distant second. (A first version of this script
+approximated the graph term from raw edge counts and reported 1%; running the
+actual walk puts it at 14-19%. Corrected.)
+
+The exposure model carries the opening and then decides almost nothing. It
+earns its keep through the gate, not through the score.
+
+### The change that came out of it
+
+The graph is the only mechanism here that can reach a title sharing **no
+keywords** with anything the viewer liked — which is the founding requirement
+of this product. Its deck weight of 0.8 was set when the gate held ~700 titles,
+to stop 20 likes pinning ~160 neighbours to the top of every batch. With a gate
+holding 5,774, that constraint no longer exists.
+
+    deck scale     harvest     replay on his own labels
+      0.8 (was)      248.0              187.5
+      1.6            257.9              192.4
+      2.4            261.4              193.1
+      3.2 (ships)    263.0              196.2
+      4.0            263.0              196.9
+      5.5            261.9              196.8
+
+### And the seventh broken ruler
+
+`deck-drift` read this as a catastrophe: comedy recognition 86% -> 54%. Its
+simulated viewer swipes up on anything **outside the top 900 by fame**, so its
+"recognition" is a synonym for "is this famous" — and the calibration above
+says the top band is the one he watches least. The guard was pushing the deck
+away from where his viewing actually lives.
+
+The line moved to the edge of the measured band, the top 30% of each kind. That
+is an assumption replaced by the only unbiased measurement this project owns,
+not a threshold loosened to let a change through — and the two real-data rulers
+agree with the measurement rather than with the assumption. Like-for-like on
+the corrected probe:
+
+    comedy recognition   88% -> 85%      horror   100% -> 100%
+
+Three points, not thirty-two. It is the seventh time in this project that the
+ruler was the fault.
+
+### Rejected, with numbers, on two rulers at once
+
+His second idea: walk the co-watch graph **backwards** from dislikes — "if
+people who liked Batman liked Joker, someone who dislikes Batman probably
+dislikes Joker". Implemented as `CO_WATCH_AVERSION`, and it is worse
+everywhere:
+
+    aversion    harvest    cost of an honest dislike (mixed-taste)
+      0 (ships)   263.0                  -1.2
+      1.6         250.6                  -4.8
+      3.2         234.9                  -6.4
+
+The premise is what fails. **A film you disliked is a film you watched.** Its
+co-watch neighbours are things you have probably also watched and often liked,
+so walking away from them walks away from your own library. The graph encodes
+"the same people chose both", not "the same people enjoyed both" — backwards it
+does not say "you will dislike this", it says "you are not this kind of
+viewer", which is false. He *is* that kind of viewer; he did not like that one.
+
+Also rejected: ranking harder by "have you watched it" mid-session. Raising the
+warm recognition weight from 0.55 to 2.0 reads 246.6 against 248.0 — the
+apparent gain in the first sweep came from the *cold* weight, and the mid-
+session one costs. The exposure model belongs in the gate, where it already is.
+
+### Two product changes his session forced
+
+**The deck can send a fourth answer.** `seen` — watched it, no strong feeling —
+has existed in the model since the grid shipped and the deck had no gesture for
+it. Without it a lukewarm title has three lies available, and people pick
+"never seen it" because it feels least dishonest; it is the most damaging,
+because the exposure tables are then taught that a film he watched is one he
+has not, and the library loses the entry. He described exactly this about
+Joker. His file shows 812 "haven't seen" answers in 1,100 cards.
+
+**`/seen` leaves the navigation.** The grid asks thirty questions a screen
+against the deck's one a gesture — 3,656 titles an hour against 1,667. The
+arithmetic was right and the product judgement was wrong: he opened it, looked
+at it, and closed it. "Every site has this page, it is boring." Across 219
+posters he tapped nothing. A faster chore is still a chore nobody does. The
+route still exists; it is no longer offered.
+
+---
+
 ## A third of the interface was dead, and the user knew why before I did (2026-08-16)
 
 He described working around this engine rather than using it. He has watched

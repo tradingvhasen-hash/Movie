@@ -164,6 +164,7 @@ function score(person: Person, tellTheTruth: boolean): number {
     vectorFor: vf,
     mode: (process.env.MODE as "swipe" | "discover") ?? "discover",
     likedTitles: library,
+    dislikedTitles: tellTheTruth ? person.hates : [],
   });
   return recs.filter((r) => held.has(r.title.id)).length / PAGE;
 }

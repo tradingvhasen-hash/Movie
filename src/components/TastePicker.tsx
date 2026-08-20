@@ -7,7 +7,7 @@ import { GlowButton } from "./ui";
 import { HeartIcon } from "./ui/Icons";
 import { getLocalCatalog } from "@/lib/catalog";
 import { resolveSeeds } from "@/lib/data/taste-seeds";
-import { FADE_UP, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
+import { EASE_OUT, FADE_UP, QUICK, staggerContainer } from "@/lib/motion";
 import { useDhawq } from "@/lib/store";
 
 /** how many titles the grid offers */
@@ -94,9 +94,15 @@ export default function TastePicker({ onDone }: { onDone: () => void }) {
       <motion.h1 variants={FADE_UP} className="text-3xl font-bold tracking-tight">
         Pick a few you love
       </motion.h1>
-      <motion.p variants={FADE_UP} className="mt-2 leading-relaxed text-ink-dim">
-        Three or more. This tells us more in one tap than forty swipes can.
-      </motion.p>
+      {/*
+        The line that stood here — "Three or more. This tells us more in one tap
+        than forty swipes can." — was deleted on the user's exact objection, and
+        he is right for a reason worth keeping: the heading already says *what*
+        to do and the button already says *how many*. A third sentence
+        explaining why the instruction is a good instruction is the writer
+        arguing with the reader. Anything a control already states does not need
+        a sentence next to it saying the same thing more slowly.
+      */}
 
       <motion.div
         variants={staggerContainer(0.02)}
@@ -110,21 +116,44 @@ export default function TastePicker({ onDone }: { onDone: () => void }) {
               title={t}
               onClick={() => toggle(t.id)}
               overlay={
+                /**
+                 * SELECTED, NOT CELEBRATED.
+                 *
+                 * What was here scaled a white circle from 0.4 to 1 on a snappy
+                 * spring behind a 45% flood of accent blue. Three separate
+                 * things made it read as cheap, and they are the same three
+                 * that made the swipe burst read as cheap:
+                 *
+                 *   · it overshoots. A mark being *revealed* has no momentum to
+                 *     carry it past its size; only a thrown object does.
+                 *   · it starts at 0.4, so most of the animation is the eye
+                 *     tracking growth rather than registering a state.
+                 *   · the flood hides the poster it is confirming, which
+                 *     removes the one thing the person is looking at.
+                 *
+                 * A selection should read instantly and get out of the way. So
+                 * the poster stays visible under a light scrim, the tile takes
+                 * a ring in the accent — the ring is the state, and rings are
+                 * how every native platform says "chosen" — and the mark fades
+                 * up from 0.86 with no bounce at all.
+                 */
                 <AnimatePresence>
                   {on && (
                     <motion.div
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
-                      className="pointer-events-none absolute inset-0 flex items-center justify-center bg-accent/45 backdrop-blur-[1px]"
+                      transition={{ duration: QUICK, ease: EASE_OUT }}
+                      className="pointer-events-none absolute inset-0 rounded-[inherit] bg-accent/18 ring-2 ring-inset ring-accent"
                     >
                       <motion.span
-                        initial={{ scale: 0.4 }}
-                        animate={{ scale: 1 }}
-                        transition={SPRING_SNAPPY}
-                        className="rounded-full bg-white/95 p-2 text-accent shadow-lg"
+                        initial={{ scale: 0.86, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        exit={{ scale: 0.92, opacity: 0 }}
+                        transition={{ duration: QUICK, ease: EASE_OUT }}
+                        className="absolute end-1.5 top-1.5 grid h-7 w-7 place-items-center rounded-full bg-accent text-[color:var(--color-on-accent)] shadow-sm"
                       >
-                        <HeartIcon size={20} filled />
+                        <HeartIcon size={15} filled />
                       </motion.span>
                     </motion.div>
                   )}
@@ -135,8 +164,22 @@ export default function TastePicker({ onDone }: { onDone: () => void }) {
         })}
       </motion.div>
 
-      {/* the action bar floats so the grid can be scrolled behind it */}
-      <div className="fixed inset-x-0 bottom-[74px] z-20 bg-gradient-to-t from-bg via-bg to-transparent px-5 pb-4 pt-8">
+      {/*
+        FLUSH AGAINST THE NAVIGATION, NOT HOVERING A CENTIMETRE ABOVE IT.
+ 
+        `bottom-[74px]` put this bar exactly the height of the tab bar off the
+        floor, and the gap between the two — a strip of page showing through —
+        is what the user saw: two bars that clearly belong together, held apart
+        by nothing. Two stacked surfaces read as one object only when they
+        touch.
+ 
+        So it sits at `bottom-0` with the tab bar's height as bottom padding,
+        which puts its content immediately above the tabs with no seam, and it
+        carries the same blurred material as the tab bar instead of a gradient
+        fading into the page. A gradient was doing the job of a boundary, and a
+        boundary drawn in fog is the reason the whole area felt unresolved.
+      */}
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-bg/85 px-5 pb-[calc(74px+env(safe-area-inset-bottom))] pt-3 backdrop-blur-xl">
         <div className="mx-auto flex max-w-md items-center gap-3">
           <GlowButton
             onClick={confirm}

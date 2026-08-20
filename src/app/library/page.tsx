@@ -62,9 +62,21 @@ export default function LibraryPage() {
       <motion.h1 variants={FADE_UP} className="text-2xl font-bold tracking-tight">
         {t("library.title")}
       </motion.h1>
-      <motion.p variants={FADE_UP} className="mt-1 text-sm text-ink-dim">
-        {t("library.subtitle")}
-      </motion.p>
+      {/*
+        The subtitle that stood here is gone, and so is every other line in
+        this app whose only job was to restate its own heading. The test each
+        one had to pass: **does this sentence stop somebody being confused or
+        losing something?** "Everything you've ever watched, in one place"
+        under a heading that says "My Library" fails it — the reader already
+        knows, and the sentence costs them a line of screen and a beat of
+        attention to learn nothing.
+
+        What survived the sweep are the two kinds that pass: an error saying
+        why something failed, and an empty state that carries an *action*. The
+        empty states below keep their button and lost their sentence, because
+        an icon and a button labelled "Start swiping" already say the whole of
+        "your library is empty, start swiping to fill it".
+      */}
 
       {/* signing in is optional and lives here rather than in the nav: this is
           the page about a person's own data, and it is the only place the
@@ -122,8 +134,7 @@ export default function LibraryPage() {
             exit="exit"
             className="mt-12 flex flex-col items-center text-center"
           >
-            <FilmIcon size={44} strokeWidth={1.6} className="text-ink-faint" />
-            <p className="mt-4 text-ink-dim">{t("library.empty")}</p>
+            <FilmIcon size={52} strokeWidth={1.4} className="text-ink-faint" />
             <Link href="/" className="mt-5">
               <motion.span
                 whileHover={{ y: -2 }}

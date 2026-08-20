@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import SwipeCard from "./SwipeCard";
 import SwipeBurst from "./SwipeBurst";
 import TastePicker from "./TastePicker";
+import WelcomeDemo, { demoAlreadyShown } from "./WelcomeDemo";
 import { useDeck } from "@/lib/useDeck";
 import { useDhawq } from "@/lib/store";
 import { GlowButton, HeartButton, NeuButton } from "./ui";
@@ -49,7 +50,12 @@ export default function SwipeDeck() {
   const [forcedExit, setForcedExit] = useState<SwipeAction | null>(null);
   /** welcome → pick a few you love → deck */
   const [picking, setPicking] = useState(false);
-  const [hintChecks, setHintChecks] = useState([false, false, false]);
+  /**
+   * The demo runs when nothing has been swiped and it has not already run
+   * since this page was loaded. Read once into state so the answer cannot
+   * change under the component mid-render.
+   */
+  const [showDemo, setShowDemo] = useState(false);
   const [burst, setBurst] = useState<{ id: number; action: SwipeAction } | null>(null);
 
   /**
@@ -97,6 +103,10 @@ export default function SwipeDeck() {
       document.body.style.overflow = prev;
     };
   }, [deckVisible]);
+
+  useEffect(() => {
+    if (hydrated && answered === 0 && !demoAlreadyShown()) setShowDemo(true);
+  }, [hydrated, answered]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -165,51 +175,27 @@ export default function SwipeDeck() {
     );
   }
 
-  if (!onboardingSeen) {
-    const hints = [t("swipe.hintRight"), t("swipe.hintLeft"), t("swipe.hintUp")];
+  /**
+   * THE DEMO, IN PLACE OF THREE SENTENCES EXPLAINING A GESTURE.
+   *
+   * Shown on a first visit and after a refresh, in both cases only while
+   * nothing has been swiped yet — and never on a return from another tab,
+   * which is what `demoAlreadyShown()` remembers. See WelcomeDemo.
+   */
+  if (showDemo) {
     return (
-      <AnimatePresence mode="wait">
-        <motion.div
-          key="onboarding"
-          variants={staggerContainer(0.08, 0.08)}
-          initial="hidden"
-          animate="show"
-          exit="exit"
-          className="mx-auto flex max-w-md flex-col items-center px-6 pb-28 pt-10 text-center"
-        >
-          <motion.div variants={FADE_UP}>
-            <ClapperIcon size={48} strokeWidth={1.6} className="text-accent" />
-          </motion.div>
-          <motion.h1 variants={FADE_UP} className="mt-4 text-3xl font-bold tracking-tight">
-            {t("onboarding.welcomeTitle")}
-          </motion.h1>
-          <motion.p variants={FADE_UP} className="mt-3 leading-relaxed text-ink-dim">
-            {t("onboarding.welcomeBody")}
-          </motion.p>
-
-          {/* swipe hints as animated checklist — Uiverse.io by JkHuger */}
-          <motion.div variants={FADE_UP} className="checklist mt-6 w-full text-start">
-            {hints.map((hint, i) => (
-              <HintRow
-                key={i}
-                id={`hint-${i}`}
-                checked={hintChecks[i]}
-                onChange={(v) =>
-                  setHintChecks((prev) => prev.map((c, j) => (j === i ? v : c)))
-                }
-                label={hint}
-              />
-            ))}
-          </motion.div>
-
-          <motion.div variants={FADE_UP} className="mt-7 w-full">
-            <GlowButton onClick={() => setPicking(true)} className="w-full text-lg">
-              {t("onboarding.start")}
-            </GlowButton>
-          </motion.div>
-        </motion.div>
-      </AnimatePresence>
+      <WelcomeDemo
+        onDone={() => {
+          setShowDemo(false);
+          if (!onboardingSeen) setPicking(true);
+        }}
+      />
     );
+  }
+
+  if (!onboardingSeen) {
+    setTimeout(() => setPicking(true), 0);
+    return null;
   }
 
   /* ── deck: fits the viewport, never scrolls ── */

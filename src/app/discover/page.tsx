@@ -187,8 +187,7 @@ export default function DiscoverPage() {
             exit="exit"
             className="mt-12 flex flex-col items-center text-center"
           >
-            <SparklesIcon size={44} strokeWidth={1.6} className="text-ink-faint" />
-            <p className="mt-4 text-ink-dim">{t("discover.empty")}</p>
+            <SparklesIcon size={52} strokeWidth={1.4} className="text-ink-faint" />
             <Link href="/" className="mt-5">
               <motion.span
                 whileHover={{ y: -2 }}

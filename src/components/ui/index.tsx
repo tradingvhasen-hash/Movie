@@ -122,6 +122,36 @@ export function HeartButton({
 }
 
 /* ── rich tooltip (Uiverse.io by themrsami, tooltip part) ── */
+/**
+ * AN EXPLAINER THAT CANNOT LAND OFF-SCREEN, AND OPENS ON A TAP.
+ *
+ * The user reported that tapping the ⓘ next to "Discover" produced a panel he
+ * could not read, because it rendered outside the screen. Two bugs, and the
+ * second is worse than the first.
+ *
+ *   1. It was anchored `left: 50%` on a 240px-wide box, centred on a 17px
+ *      icon that sits near the left edge of a phone. The panel's left edge
+ *      lands about 100px outside the viewport. It also opened *upwards*, from
+ *      a trigger that lives in the page heading — so on a small screen it had
+ *      nowhere to go in either axis.
+ *
+ *   2. It opened on `:hover`. There is no hover on a touch screen. It appeared
+ *      at all only because mobile browsers synthesise a hover on tap, which
+ *      then sticks until you tap elsewhere. The control had no real open state.
+ *
+ * WHY A SHEET RATHER THAN SMARTER POSITIONING. The usual fix is collision
+ * detection — measure the trigger, measure the viewport, flip and shift. That
+ * is a real solution and it is the wrong one here: it needs measurement on
+ * every open, it fights every scroll container, and on a 390px-wide screen the
+ * "corrected" position is a panel jammed against an edge either way.
+ *
+ * Every native platform solves this the same way instead: a popover anchored
+ * to its trigger on a roomy screen becomes a sheet from the bottom edge on a
+ * compact one. A sheet cannot overflow — it is defined by the viewport rather
+ * than by the trigger — it gives the text a comfortable measure, and it is the
+ * gesture people already expect from a phone. Below 640px this is a sheet;
+ * above it, the anchored panel, which has room.
+ */
 export function RichTooltip({
   trigger,
   title,
@@ -131,18 +161,38 @@ export function RichTooltip({
   title?: string;
   children: React.ReactNode;
 }) {
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [open]);
+
   return (
-    <div className="group relative inline-block">
-      {trigger}
-      <div className="rich-tooltip">
-        <div className="rich-tooltip-panel">
-          {title && (
-            <h3 className="mb-1 text-sm font-semibold text-ink">{title}</h3>
-          )}
-          <div className="text-xs leading-relaxed text-ink-dim">{children}</div>
-          <div className="rich-tooltip-arrow"></div>
-        </div>
-      </div>
-    </div>
+    <span className="relative inline-block">
+      <span onClick={() => setOpen((v) => !v)} role="button" tabIndex={0}
+        onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setOpen((v) => !v)}>
+        {trigger}
+      </span>
+
+      {open && (
+        <>
+          {/* tapping anywhere else closes it — the state this never had */}
+          <span
+            className="fixed inset-0 z-40 block"
+            onClick={() => setOpen(false)}
+            aria-hidden
+          />
+          <span className="rich-tooltip" data-open="true">
+            <span className="rich-tooltip-panel block">
+              {title && <span className="mb-1 block text-sm font-semibold text-ink">{title}</span>}
+              <span className="block text-xs leading-relaxed text-ink-dim">{children}</span>
+            </span>
+          </span>
+        </>
+      )}
+    </span>
   );
 }

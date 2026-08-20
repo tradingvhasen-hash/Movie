@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 /**
  * THE PAGE ABOUT THE PERSON, WHICH DID NOT EXIST.
  *
@@ -114,6 +116,12 @@ export default function ProfilePanel() {
           </motion.button>
         </motion.div>
       )}
+      <motion.div variants={FADE_UP} className="mt-12 flex justify-center">
+        <Link href="/legal" className="text-xs text-ink-faint underline underline-offset-4">
+          Privacy &amp; Terms
+        </Link>
+      </motion.div>
+
     </motion.div>
   );
 }

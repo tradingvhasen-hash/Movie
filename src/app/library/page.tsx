@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
 import TitleTile from "@/components/TitleTile";
-import { FilmIcon, HeartIcon, ThumbsDownIcon, TrashIcon, UserIcon } from "@/components/ui/Icons";
+import { BooksIcon, FilmIcon, HeartIcon, ThumbsDownIcon, TrashIcon, UserIcon } from "@/components/ui/Icons";
 import { matches } from "@/lib/search";
 import { getLocalTitle } from "@/lib/catalog";
 import { EASE_OUT, FADE_UP, OVERLAY, POP_IN, QUICK, SECTION, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
@@ -61,13 +61,30 @@ export default function LibraryPage() {
           never blinking; it was moving. Nothing on this page changes size
           asynchronously any more.
         */}
-        <Link
-          href="/profile"
-          aria-label="Profile"
-          className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-line bg-surface text-ink-dim transition-colors hover:text-ink"
-        >
-          <UserIcon size={18} />
-        </Link>
+        <span className="flex shrink-0 items-center gap-2">
+          {/*
+            Lists live here rather than in the tab bar. The bar has four tabs
+            and a fifth makes every one a smaller target on the screen size
+            this product is built for — and lists are made *out of* the library
+            and looked at right after it, so "the things I made" belongs beside
+            the library's own header rather than competing with Swipe for a
+            permanent seat.
+          */}
+          <Link
+            href="/lists"
+            aria-label="Lists"
+            className="grid h-9 w-9 place-items-center rounded-full border border-line bg-surface text-ink-dim transition-colors hover:text-ink"
+          >
+            <BooksIcon size={17} />
+          </Link>
+          <Link
+            href="/profile"
+            aria-label="Profile"
+            className="grid h-9 w-9 place-items-center rounded-full border border-line bg-surface text-ink-dim transition-colors hover:text-ink"
+          >
+            <UserIcon size={18} />
+          </Link>
+        </span>
       </motion.div>
       {/*
         The subtitle that stood here is gone, and so is every other line in

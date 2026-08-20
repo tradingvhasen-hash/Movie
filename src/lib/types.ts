@@ -84,6 +84,14 @@ export interface UserList {
   isPublic: boolean;
   titleIds: string[];
   createdAt: number;
+  /**
+   * Share anonymously. A per-list choice rather than an account setting,
+   * because a person may want their name on a carefully built list and not on
+   * a guilty-pleasures one.
+   */
+  hideOwner?: boolean;
+  /** the slug this list is reachable at once it has been shared */
+  slug?: string;
 }
 
 export interface Recommendation {

@@ -144,6 +144,18 @@ interface DhawqState {
   renameList: (id: string, name: string) => void;
   toggleListItem: (listId: string, titleId: string) => void;
   setListPublic: (listId: string, isPublic: boolean) => void;
+  setListHideOwner: (listId: string, hide: boolean) => void;
+  /**
+   * Put many titles into a list at once.
+   *
+   * The four ways a list gets built — hand-picking, typing names, taking every
+   * comedy, and copying somebody else's — are all "here are N ids" underneath.
+   * Doing them through `toggleListItem` in a loop would write the store N
+   * times, and at 300 comedies that is 300 renders and 300 localStorage
+   * writes for one tap.
+   */
+  addToList: (listId: string, titleIds: string[]) => void;
+  removeFromList: (listId: string, titleIds: string[]) => void;
 }
 
 /**
@@ -295,6 +307,31 @@ export const useDhawq = create<DhawqState>()(
         set((s) => ({
           lists: s.lists.map((l) => (l.id === id ? { ...l, name } : l)),
         })),
+
+      setListHideOwner: (listId, hide) =>
+        set((s) => ({
+          lists: s.lists.map((l) => (l.id === listId ? { ...l, hideOwner: hide } : l)),
+        })),
+
+      addToList: (listId, titleIds) =>
+        set((s) => ({
+          lists: s.lists.map((l) =>
+            l.id === listId
+              ? { ...l, titleIds: [...new Set([...l.titleIds, ...titleIds])] }
+              : l
+          ),
+        })),
+
+      removeFromList: (listId, titleIds) => {
+        const drop = new Set(titleIds);
+        set((s) => ({
+          lists: s.lists.map((l) =>
+            l.id === listId
+              ? { ...l, titleIds: l.titleIds.filter((id) => !drop.has(id)) }
+              : l
+          ),
+        }));
+      },
 
       toggleListItem: (listId, titleId) =>
         set((s) => ({

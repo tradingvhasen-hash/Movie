@@ -174,3 +174,10 @@ export const EyeIcon = (p: IconProps) => (
     <circle cx="12" cy="12" r="2.6" />
   </svg>
 );
+
+/** "there is more, downward" — the only glyph everyone reads without learning */
+export const ChevronDownIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="m6 9 6 6 6-6" />
+  </svg>
+);

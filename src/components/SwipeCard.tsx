@@ -9,9 +9,15 @@ import {
   type PanInfo,
 } from "framer-motion";
 import PosterArt from "./PosterArt";
-import { ArrowUpIcon, HeartIcon, InfoIcon, StarIcon, ThumbsDownIcon } from "./ui/Icons";
+import {
+  ArrowUpIcon,
+  ChevronDownIcon,
+  HeartIcon,
+  StarIcon,
+  ThumbsDownIcon,
+} from "./ui/Icons";
 import { genreLabel } from "@/lib/genres";
-import { EASE_SWEEP, SPRING_SETTLE, SPRING_SNAPPY } from "@/lib/motion";
+import { EASE_OUT, EASE_SWEEP, SLOW, SPRING_SETTLE, SPRING_SNAPPY } from "@/lib/motion";
 import { locale, t } from "@/lib/i18n";
 import type { SwipeAction, Title } from "@/lib/types";
 
@@ -191,12 +197,33 @@ export default function SwipeCard({ title, index, onSwipe, forcedExit }: SwipeCa
                */
               onPointerDownCapture={(e) => e.stopPropagation()}
               aria-label={t("swipe.details")}
-              whileTap={{ scale: 0.88 }}
-              animate={{ rotate: showDetails ? 180 : 0 }}
+              aria-expanded={showDetails}
+              whileTap={{ scale: 0.94 }}
               transition={SPRING_SNAPPY}
-              className="shrink-0 rounded-full bg-white/15 p-2 text-white/95 backdrop-blur transition-colors duration-300 hover:bg-white/30"
+              /**
+               * A CHEVRON ON A REAL SURFACE, NOT AN ⓘ ON A GREY DISC.
+               *
+               * The old button was a translucent white circle holding an info
+               * glyph, spun 180 degrees when opened. Three things were wrong.
+               * An ⓘ promises a definition; this opens a panel, and a chevron
+               * is the only glyph everyone already reads as "there is more,
+               * downward". Spinning it 180 degrees is motion that describes
+               * nothing — a chevron that *flips* says open and closed, a
+               * chevron that rotates a full half-turn says neither. And
+               * `bg-white/15` over an arbitrary poster is not a material: on a
+               * pale poster it disappears, on a dark one it glares. A blurred
+               * dark surface with a hairline reads identically over every
+               * poster in the catalog, which is the whole job.
+               */
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-white/15 bg-black/35 text-white backdrop-blur-md transition-colors hover:bg-black/50"
             >
-              <InfoIcon size={18} />
+              <motion.span
+                animate={{ rotate: showDetails ? 180 : 0 }}
+                transition={SPRING_SNAPPY}
+                className="grid place-items-center"
+              >
+                <ChevronDownIcon size={18} strokeWidth={2.2} />
+              </motion.span>
             </motion.button>
           </div>
 
@@ -207,10 +234,19 @@ export default function SwipeCard({ title, index, onSwipe, forcedExit }: SwipeCa
                 initial={{ opacity: 0, height: 0, y: 10 }}
                 animate={{ opacity: 1, height: "auto", y: 0 }}
                 exit={{ opacity: 0, height: 0, y: 6 }}
-                transition={{ duration: 0.38, ease: EASE_SWEEP }}
+                transition={{ duration: SLOW, ease: EASE_OUT }}
                 className="overflow-hidden"
               >
-                <div className="mt-3 rounded-2xl bg-black/60 p-3.5 backdrop-blur-md">
+                {/*
+                  `bg-black/60` is a box drawn on top of a photograph — you can
+                  see both, and neither wins. What a modern platform does here
+                  is a *material*: heavy blur, low opacity, a hairline of light
+                  along the top edge where it catches the poster behind it, and
+                  a shadow so it reads as lifted rather than painted on. The
+                  poster stays legible through it, which is the point of
+                  putting it over the poster at all.
+                */}
+                <div className="mt-3 rounded-2xl border border-white/12 bg-black/45 p-4 shadow-[0_8px_28px_rgba(0,0,0,0.45)] backdrop-blur-2xl">
                   {/* summaries load behind the deck, so a card opened in the
                       first second may not have one yet */}
                   <p className="text-[13px] leading-relaxed text-white/85">

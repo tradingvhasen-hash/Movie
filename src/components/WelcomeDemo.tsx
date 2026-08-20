@@ -81,6 +81,13 @@ export default function WelcomeDemo({ onDone }: { onDone: () => void }) {
       new Promise<void>((resolve) => setTimeout(resolve, ms));
 
     (async () => {
+      // the card arrives before the script starts: the beats below own x, y and
+      // rotate only, so without this it would run the whole demo at opacity 0
+      await controls.start({
+        opacity: 1,
+        y: 0,
+        transition: { duration: 0.32, ease: EASE_OUT },
+      });
       for (const { beat, hold } of BEATS) {
         if (cancelled.current) return;
         setBadge(beat.badge);
@@ -122,17 +129,7 @@ export default function WelcomeDemo({ onDone }: { onDone: () => void }) {
               className="soft-card relative flex h-full w-full flex-col items-center justify-center overflow-hidden"
               animate={controls}
               initial={{ x: 0, y: 24, rotate: 0, opacity: 0 }}
-              onAnimationStart={undefined}
             >
-              {/* the card fades in on its own so the first beat has something
-                  to move; the script then owns every later transform */}
-              <motion.div
-                className="absolute inset-0"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.3, ease: EASE_OUT }}
-              />
-
               <Wordmark size={40} arabic />
 
               {/* the verdict tint, washing in from the side the card leaned */}

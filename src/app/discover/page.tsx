@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import TitleTile from "@/components/TitleTile";
+import SeedPicker from "@/components/SeedPicker";
 import { HeartButton, NeuButton, RichTooltip } from "@/components/ui";
 import {
   HeartIcon,
@@ -37,6 +38,19 @@ export default function DiscoverPage() {
       cancelled = true;
     };
   }, []);
+
+  /**
+   * Two questions, one screen.
+   *
+   *   "from mine"   what should I watch, given everything I have told you
+   *   "from a few"  what should I watch, given only these two films
+   *
+   * They are the same question with a different amount of evidence, so they
+   * belong in one place. Putting the second on its own page would mean the
+   * product answers "what should I watch" in two different tabs, and a person
+   * would have to know which one they were in to know what they were getting.
+   */
+  const [source, setSource] = useState<"mine" | "few">("mine");
 
   const recs: Recommendation[] = useMemo(() => {
     if (!hydrated) return [];
@@ -104,6 +118,45 @@ export default function DiscoverPage() {
         </RichTooltip>
       </motion.div>
 
+      <motion.div
+        variants={FADE_UP}
+        className="mt-4 flex rounded-full border border-line bg-surface-2 p-1"
+        dir="ltr"
+      >
+        {(
+          [
+            ["mine", "From your library"],
+            ["few", "From a few films"],
+          ] as const
+        ).map(([m, label]) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => setSource(m)}
+            className={`relative flex-1 rounded-full px-3 py-2 text-xs font-semibold transition-colors ${
+              source === m ? "text-on-accent" : "text-ink-dim"
+            }`}
+          >
+            {source === m && (
+              <motion.span
+                layoutId="discover-source"
+                transition={SPRING_SNAPPY}
+                className="absolute inset-0 rounded-full bg-accent"
+              />
+            )}
+            <span className="relative">{label}</span>
+          </button>
+        ))}
+      </motion.div>
+
+      {source === "few" && (
+        <div className="mt-4">
+          <SeedPicker />
+        </div>
+      )}
+
+      {source === "mine" && (
+      <>
       {/* live search — no button */}
       <motion.div variants={FADE_UP} className="relative mt-4">
         <span className="pointer-events-none absolute inset-y-0 start-4 z-10 flex items-center text-ink-faint">
@@ -260,6 +313,8 @@ export default function DiscoverPage() {
           </motion.div>
         )}
       </AnimatePresence>
+      </>
+      )}
     </motion.div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import PosterArt from "./PosterArt";
+import { normalise, searchText } from "@/lib/search";
 import { getLocalCatalog, loadCatalog } from "@/lib/catalog";
 import { useDhawq } from "@/lib/store";
 import { HeartIcon, ThumbsDownIcon } from "./ui/Icons";
@@ -24,19 +25,6 @@ import type { Title } from "@/lib/types";
  *
  * The catalog is already in memory. This costs one input and a scan.
  */
-function normalise(s: string): string {
-  return s
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
-    // Arabic orthography a person will not type consistently
-    .replace(/[ـً-ْ]/g, "")
-    .replace(/[أإآ]/g, "ا")
-    .replace(/ى/g, "ي")
-    .replace(/ة/g, "ه")
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .trim();
-}
 
 export default function TitleSearch() {
   const [ready, setReady] = useState(false);
@@ -53,7 +41,13 @@ export default function TitleSearch() {
     if (!ready) return [] as { t: Title; hay: string }[];
     return getLocalCatalog().map((c) => ({
       t: c.title,
-      hay: `${normalise(c.title.title.en)} ${normalise(c.title.title.ar)}`,
+      /**
+       * Three names, not two. The English one, the Arabic translation, and —
+       * new — the name in the work's own script. Without the third, searching
+       * `الفيل الأزرق` found nothing, because a film whose own name is Arabic
+       * has no Arabic *translation* for us to have stored.
+       */
+      hay: searchText(c.title),
     }));
   }, [ready]);
 

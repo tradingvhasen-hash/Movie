@@ -17,14 +17,87 @@
   --color-accent: #0ea5e9;
   --color-accent-soft: #38bdf8;
   --color-danger: #ff4545;
+  /* a solid dark used for a couple of controls, and the colour text takes when
+     it sits on the accent — both need to flip with the theme */
+  --color-ink-strong: #3a4150;
+  --color-on-accent: #ffffff;
+
+  /* ── the same colours as raw triplets ─────────────────────────────────
+     Shadows and glows need a colour with an alpha, and `rgba(29, 41, 61,
+     0.08)` written forty-five times is why this file had no dark mode: the
+     palette was tokenised and everything *derived* from it was not. With the
+     triplet in a variable, one override below re-themes every shadow, every
+     ring and every scrim in the app. */
+  --rgb-shadow: 29 41 61;
+  --rgb-accent: 14 165 233;
+  --rgb-surface: 255 255 255;
+  --rgb-scrim: 10 20 30;
+
+  /* ── one motion scale, and nothing invents its own ────────────────────
+     Three durations and three curves. Interfaces read as cheap when every
+     component picks its own timing, because the eye reads the *inconsistency*
+     long before it reads any single animation. These are the only values any
+     component may use.
+
+       quick   a control acknowledging a finger      120ms
+       base    something entering or leaving          220ms
+       slow    a surface or a page changing           380ms
+
+     `--ease-out` for anything arriving, `--ease-in` for anything leaving,
+     `--ease-spring` only where a physical object is being thrown. */
+  --duration-quick: 120ms;
+  --duration-base: 220ms;
+  --duration-slow: 380ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.55, 0, 0.85, 0.35);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --font-sans: var(--font-plex-arabic), var(--font-geist-sans), system-ui,
     sans-serif;
   --radius-card: 24px;
 }
 
+/* ─────────────────────────────────────────────────────────────
+   DARK, FOLLOWING THE PHONE.
+
+   No toggle, by request and by judgement: a person who has set their phone to
+   dark has already answered this question, and asking again in-app is a second
+   place for the answer to be wrong. `prefers-color-scheme` is that answer.
+
+   Only the tokens change. Because every shadow, ring and scrim in this file
+   now derives from a triplet above, re-theming the whole app is the sixteen
+   declarations below rather than a second stylesheet — and nothing can drift,
+   because there is no second copy to drift from.
+
+   The dark palette is not the light one inverted. Inverting produces pure
+   black and blown-out white; this keeps a soft near-black ground so posters
+   sit on it without a halo, lifts the surfaces just enough to separate, and
+   dims the accent slightly because a saturated sky blue that reads as crisp on
+   white reads as neon on black.
+   ───────────────────────────────────────────────────────────── */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #0f1216;
+    --color-surface: #171b21;
+    --color-surface-2: #1f242c;
+    --color-line: #2a3038;
+    --color-ink: #f2f4f7;
+    --color-ink-dim: #a3abb8;
+    --color-ink-faint: #6f7885;
+    --color-accent: #38bdf8;
+    --color-accent-soft: #7dd3fc;
+    --color-ink-strong: #e6e9ee;
+    --color-on-accent: #06212e;
+    /* shadows go black rather than blue-grey, and lift instead of press */
+    --rgb-shadow: 0 0 0;
+    --rgb-accent: 56 189 248;
+    --rgb-surface: 40 47 57;
+    --rgb-scrim: 0 0 0;
+  }
+}
+
 html {
   background: var(--color-bg);
-  color-scheme: light;
+  color-scheme: light dark;
   scroll-behavior: smooth;
   /* pull-to-refresh and rubber-banding both steal upward swipes */
   overscroll-behavior: none;
@@ -78,7 +151,7 @@ svg,
 }
 
 ::selection {
-  background: rgba(14, 165, 233, 0.25);
+  background: rgb(var(--rgb-accent) / 0.25);
 }
 
 .no-scrollbar::-webkit-scrollbar {
@@ -107,8 +180,8 @@ svg,
 .card-sheen {
   background: linear-gradient(
     to top,
-    rgba(10, 20, 30, 0.88) 0%,
-    rgba(10, 20, 30, 0.45) 34%,
+    rgb(var(--rgb-scrim) / 0.88) 0%,
+    rgb(var(--rgb-scrim) / 0.45) 34%,
     transparent 62%
   );
 }
@@ -117,17 +190,17 @@ svg,
 .soft-card {
   border-radius: 24px;
   background: var(--color-surface);
-  box-shadow: 0 8px 24px rgba(29, 41, 61, 0.08);
+  box-shadow: 0 8px 24px rgb(var(--rgb-shadow) / 0.08);
 }
 .soft-card-sm {
   border-radius: 18px;
   background: var(--color-surface);
-  box-shadow: 0 4px 14px rgba(29, 41, 61, 0.07);
+  box-shadow: 0 4px 14px rgb(var(--rgb-shadow) / 0.07);
 }
 .soft-inset {
   border-radius: 14px;
   background: var(--color-surface-2);
-  box-shadow: inset 0 1px 3px rgba(29, 41, 61, 0.08);
+  box-shadow: inset 0 1px 3px rgb(var(--rgb-shadow) / 0.08);
 }
 
 /* ── push button — Uiverse.io by ke1221 (presses inset on :active) ── */
@@ -141,19 +214,19 @@ svg,
   cursor: pointer;
   border: 1px solid var(--color-line);
   transition: all 0.3s;
-  box-shadow: 0 4px 12px rgba(29, 41, 61, 0.08);
+  box-shadow: 0 4px 12px rgb(var(--rgb-shadow) / 0.08);
 }
 .neu-btn:active,
 .neu-btn[data-pressed="true"] {
   color: var(--color-ink-faint);
   transform: scale(0.94);
   box-shadow:
-    inset 3px 3px 8px rgba(29, 41, 61, 0.12),
-    inset -3px -3px 8px rgba(255, 255, 255, 0.9);
+    inset 3px 3px 8px rgb(var(--rgb-shadow) / 0.12),
+    inset -3px -3px 8px rgb(var(--rgb-surface) / 0.9);
 }
 .neu-btn[data-pressed="true"] {
   color: var(--color-accent);
-  border-color: rgba(14, 165, 233, 0.35);
+  border-color: rgb(var(--rgb-accent) / 0.35);
 }
 .neu-btn:disabled {
   opacity: 0.35;
@@ -172,13 +245,13 @@ svg,
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background-color: #3a4150;
+  background-color: var(--color-ink-strong);
   border: none;
   font-weight: 600;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 12px rgba(29, 41, 61, 0.18);
+  box-shadow: 0 4px 12px rgb(var(--rgb-shadow) / 0.18);
   cursor: pointer;
   transition-duration: 0.3s;
   overflow: hidden;
@@ -310,7 +383,7 @@ svg,
   grid-template-columns: 24px auto;
   align-items: center;
   row-gap: 12px;
-  box-shadow: 0 4px 14px rgba(29, 41, 61, 0.07);
+  box-shadow: 0 4px 14px rgb(var(--rgb-shadow) / 0.07);
 }
 .checklist label {
   color: var(--text);
@@ -463,12 +536,12 @@ svg,
   0% {
     opacity: 1;
     box-shadow:
-      0 0 0 -2px #0ea5e9,
-      0 0 0 -2px #0ea5e9,
-      0 0 0 -2px #0ea5e9,
-      0 0 0 -2px #0ea5e9,
-      0 0 0 -2px #0ea5e9,
-      0 0 0 -2px #0ea5e9;
+      0 0 0 -2px var(--color-accent),
+      0 0 0 -2px var(--color-accent),
+      0 0 0 -2px var(--color-accent),
+      0 0 0 -2px var(--color-accent),
+      0 0 0 -2px var(--color-accent),
+      0 0 0 -2px var(--color-accent);
   }
   30% {
     opacity: 1;
@@ -476,12 +549,12 @@ svg,
   100% {
     opacity: 0;
     box-shadow:
-      0 -12px 0 0px #0ea5e9,
-      11px -6px 0 0px #0ea5e9,
-      11px 6px 0 0px #0ea5e9,
-      0 12px 0 0px #0ea5e9,
-      -11px 6px 0 0px #0ea5e9,
-      -11px -6px 0 0px #0ea5e9;
+      0 -12px 0 0px var(--color-accent),
+      11px -6px 0 0px var(--color-accent),
+      11px 6px 0 0px var(--color-accent),
+      0 12px 0 0px var(--color-accent),
+      -11px 6px 0 0px var(--color-accent),
+      -11px -6px 0 0px var(--color-accent);
   }
 }
 
@@ -493,16 +566,16 @@ svg,
   outline: none;
   color: var(--color-ink);
   background: var(--color-surface);
-  box-shadow: 0 4px 14px rgba(29, 41, 61, 0.07);
+  box-shadow: 0 4px 14px rgb(var(--rgb-shadow) / 0.07);
   border: 1px solid var(--color-line);
   border-radius: 12px;
   transition: all 0.3s;
 }
 .neu-input:focus {
-  border-color: rgba(14, 165, 233, 0.55);
+  border-color: rgb(var(--rgb-accent) / 0.55);
   box-shadow:
-    0 0 0 4px rgba(14, 165, 233, 0.14),
-    0 6px 18px rgba(14, 165, 233, 0.12);
+    0 0 0 4px rgb(var(--rgb-accent) / 0.14),
+    0 6px 18px rgb(var(--rgb-accent) / 0.12);
 }
 .neu-input::placeholder {
   color: var(--color-ink-faint);
@@ -520,8 +593,8 @@ svg,
   padding: 0.8rem 1.5rem;
   font-size: 0.95rem;
   font-weight: 700;
-  color: #ffffff;
-  background: linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%);
+  color: var(--color-on-accent);
+  background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-soft) 100%);
   border: none;
   border-radius: 0.75rem;
   cursor: pointer;
@@ -529,7 +602,7 @@ svg,
   overflow: hidden;
 }
 .glow-btn:hover {
-  box-shadow: 0 8px 24px rgba(14, 165, 233, 0.35);
+  box-shadow: 0 8px 24px rgb(var(--rgb-accent) / 0.35);
 }
 .glow-btn:active {
   transform: scale(0.98);
@@ -564,11 +637,11 @@ svg,
 .rich-tooltip-panel {
   position: relative;
   padding: 1rem;
-  background: rgba(255, 255, 255, 0.96);
+  background: rgb(var(--rgb-surface) / 0.96);
   backdrop-filter: blur(12px);
   border-radius: 1rem;
   border: 1px solid var(--color-line);
-  box-shadow: 0 12px 32px rgba(29, 41, 61, 0.16);
+  box-shadow: 0 12px 32px rgb(var(--rgb-shadow) / 0.16);
 }
 .rich-tooltip-arrow {
   position: absolute;
@@ -577,7 +650,7 @@ svg,
   transform: translateX(-50%) rotate(45deg);
   width: 12px;
   height: 12px;
-  background: rgba(255, 255, 255, 0.96);
+  background: rgb(var(--rgb-surface) / 0.96);
   border-right: 1px solid var(--color-line);
   border-bottom: 1px solid var(--color-line);
 }

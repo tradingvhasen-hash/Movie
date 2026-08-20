@@ -7,6 +7,7 @@ import AccountPanel from "@/components/AccountPanel";
 import TitleTile from "@/components/TitleTile";
 import { DeleteButton } from "@/components/ui";
 import { FilmIcon, HeartIcon, ThumbsDownIcon } from "@/components/ui/Icons";
+import { matches } from "@/lib/search";
 import { getLocalTitle } from "@/lib/catalog";
 import {
   FADE_UP,
@@ -43,14 +44,9 @@ export default function LibraryPage() {
     let rows = watched;
     if (filter !== "all") rows = rows.filter((sw) => sw.action === filter);
     if (query.trim()) {
-      const q = query.trim().toLowerCase();
       rows = rows.filter((sw) => {
         const title = getLocalTitle(sw.titleId) ?? sw.title;
-        return (
-          title &&
-          (title.title.ar.toLowerCase().includes(q) ||
-            title.title.en.toLowerCase().includes(q))
-        );
+        return Boolean(title && matches(title, query));
       });
     }
     return rows;

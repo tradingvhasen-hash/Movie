@@ -199,7 +199,13 @@ export async function fetchOne(type: TitleType, id: number): Promise<Title | nul
       id: `${type}-${id}`,
       type,
       tmdbId: id,
-      title: { en: titleEn, ar: ar?.title || ar?.name || titleEn },
+      title: {
+        en: titleEn,
+        ar: ar?.title || ar?.name || titleEn,
+        // the name in its own script, so search can find الفيل الأزرق and
+        // ワンピース. See catalog-codec's note on position 17.
+        original: String(d.original_title ?? d.original_name ?? ""),
+      },
       // Arabic overviews are omitted: the UI is English-only right now and
       // they cost ~30% of the payload every visitor downloads. Arabic
       // titles stay (cheap, and useful for search).

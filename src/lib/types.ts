@@ -5,7 +5,18 @@ export interface Title {
   id: string;
   type: TitleType;
   tmdbId?: number;
-  title: { en: string; ar: string };
+  title: {
+    en: string;
+    ar: string;
+    /**
+     * The name in its own script — "الفيل الأزرق", "ワンピース". Empty when the
+     * work is English or when TMDB's original matches the English title.
+     * Searched, never displayed: the user's own example settles it — Three
+     * Idiots is better known by its English name than by 3 इडियट्स, so
+     * recognition keeps English and only recall needs the native name.
+     */
+    original?: string;
+  };
   overview: { en: string; ar: string };
   year: number;
   genres: string[];

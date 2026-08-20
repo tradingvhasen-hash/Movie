@@ -228,3 +228,18 @@ export const TrashIcon = (p: IconProps) => (
     <path d="M10.5 11v5M13.5 11v5" />
   </svg>
 );
+
+/** confirmation, in the same stroke vocabulary as the rest */
+export const CheckIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="m4.5 12.5 5 5 10-11" />
+  </svg>
+);
+
+/** a link, for the share control */
+export const LinkIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M10.5 13.5a4 4 0 0 0 5.7 0l3-3a4 4 0 1 0-5.7-5.7l-1.4 1.4" />
+    <path d="M13.5 10.5a4 4 0 0 0-5.7 0l-3 3a4 4 0 1 0 5.7 5.7l1.4-1.4" />
+  </svg>
+);

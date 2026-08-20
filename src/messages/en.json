@@ -16,15 +16,12 @@
     "notSeen": "Haven't seen",
     "undo": "Undo",
     "details": "Details",
-    "emptyTitle": "No more cards for now!",
-    "emptyBody": "You've swiped everything we have. Come back later or browse Discover.",
     "reset": "Reset all cards",
     "seen": "Seen it, no strong feeling"
   },
   "onboarding": {
     "start": "Let's go",
     "progress": "Building your taste fingerprint",
-    "done": "Your taste fingerprint is ready! Recommendations are now personal",
     "calibrating": "Calibration round: {count} of {total}"
   },
   "card": {
@@ -58,7 +55,7 @@
     "markWatched": "Log as watched",
     "becauseYouLiked": "Because you loved",
     "howTitle": "How do recommendations work?",
-    "howBody": "Every swipe sharpens your taste fingerprint, so we suggest titles that match what you loved in story and spirit — not just genre.",
+    "howBody": "Ranked by what you have liked, and by what people who liked those went on to watch.",
     "searchBtn": "Search"
   },
   "lists": {
@@ -74,8 +71,7 @@
     "addItems": "Add titles from your library",
     "public": "Public",
     "private": "Private",
-    "copied": "Link copied!",
-    "shareRequiresAccount": "Public link sharing requires the cloud account (Supabase) — see README"
+    "copied": "Link copied!"
   },
   "share": {
     "libraryOf": "{name}'s library",
@@ -89,8 +85,7 @@
     "signIn": "Sign in",
     "signOut": "Sign out",
     "guest": "Browsing as guest — your data is stored on this device",
-    "syncNote": "Sign in to save your library to the cloud and share it",
-    "notConfigured": "Cloud account not configured yet — the app runs fully locally"
+    "syncNote": "Sign in to save your library to the cloud and share it"
   },
   "stats": {
     "tasteReady": "Taste fingerprint ready",

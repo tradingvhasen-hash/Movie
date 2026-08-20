@@ -14,7 +14,6 @@ import {
   ClapperIcon,
   EyeIcon,
   HeartIcon,
-  PopcornIcon,
   ThumbsDownIcon,
   UndoIcon,
 } from "./ui/Icons";
@@ -231,10 +230,30 @@ export default function SwipeDeck() {
                   exit="exit"
                   className="soft-card absolute inset-0 flex flex-col items-center justify-center p-8 text-center"
                 >
-                  <PopcornIcon size={42} strokeWidth={1.6} className="text-ink-faint" />
-                  <h3 className="mt-4 text-lg font-bold">{t("swipe.emptyTitle")}</h3>
-                  <p className="mt-2 text-sm text-ink-dim">{t("swipe.emptyBody")}</p>
-                  <motion.div whileTap={{ scale: 0.95 }} className="mt-6">
+                  {/*
+                    An empty deck shows itself empty. The heading and the
+                    sentence under it — "No more cards for now! You've swiped
+                    everything we have. Come back later or browse Discover" —
+                    said three times over what an outline of a card with
+                    nothing in it says once.
+
+                    What survives the cut is the *action*, because that is the
+                    one thing a picture cannot supply: without a button, an
+                    empty state is a dead end that looks deliberate.
+                  */}
+                  <div className="flex items-end gap-2">
+                    {[0, 1, 2].map((i) => (
+                      <motion.span
+                        key={i}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ ...SPRING_SNAPPY, delay: i * 0.07 }}
+                        className="block rounded-xl border border-dashed border-line"
+                        style={{ width: 34, height: i === 1 ? 62 : 50 }}
+                      />
+                    ))}
+                  </div>
+                  <motion.div whileTap={{ scale: 0.95 }} className="mt-7">
                     <NeuButton
                       onClick={() => {
                         resetAll();

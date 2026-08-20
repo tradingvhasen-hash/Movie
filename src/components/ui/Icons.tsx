@@ -181,3 +181,50 @@ export const ChevronDownIcon = (p: IconProps) => (
     <path d="m6 9 6 6 6-6" />
   </svg>
 );
+
+/**
+ * Google's mark, in its four official colours.
+ *
+ * The one icon in this app that does not inherit `currentColor`, and it has to
+ * be: a sign-in button carrying a monochrome G is the classic tell of a badly
+ * assembled auth screen, and Google's brand terms are specific about the mark.
+ * The four paths below are the standard four-colour glyph.
+ */
+export const GoogleIcon = ({ size = 20, className }: { size?: number; className?: string }) => (
+  <svg width={size} height={size} viewBox="0 0 48 48" className={className} aria-hidden>
+    <path
+      fill="#EA4335"
+      d="M24 9.5c3.5 0 6.6 1.2 9 3.6l6.7-6.7C35.6 2.6 30.2 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.8 6.1C12.3 13.5 17.7 9.5 24 9.5z"
+    />
+    <path
+      fill="#4285F4"
+      d="M46.1 24.6c0-1.6-.1-3.2-.4-4.6H24v9.1h12.4c-.5 2.9-2.2 5.3-4.6 6.9l7.6 5.9c4.4-4.1 6.7-10.1 6.7-17.3z"
+    />
+    <path
+      fill="#FBBC05"
+      d="M10.4 28.7A14.5 14.5 0 0 1 9.6 24c0-1.6.3-3.2.8-4.7l-7.8-6.1A24 24 0 0 0 0 24c0 3.9.9 7.5 2.6 10.8l7.8-6.1z"
+    />
+    <path
+      fill="#34A853"
+      d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2.1 1.4-4.9 2.3-8.3 2.3-6.3 0-11.7-4-13.6-9.6l-7.8 6.1C6.5 42.6 14.6 48 24 48z"
+    />
+  </svg>
+);
+
+/** a person, for the account entry point */
+export const UserIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="8" r="3.6" />
+    <path d="M4.8 20a7.2 7.2 0 0 1 14.4 0" />
+  </svg>
+);
+
+/** remove, drawn in the same stroke vocabulary as everything else here */
+export const TrashIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M4 7h16" />
+    <path d="M9.5 7V5.4A1.4 1.4 0 0 1 10.9 4h2.2a1.4 1.4 0 0 1 1.4 1.4V7" />
+    <path d="M6.4 7l.8 11.3A1.8 1.8 0 0 0 9 20h6a1.8 1.8 0 0 0 1.8-1.7L17.6 7" />
+    <path d="M10.5 11v5M13.5 11v5" />
+  </svg>
+);

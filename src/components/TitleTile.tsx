@@ -3,7 +3,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import PosterArt from "./PosterArt";
 import { StarIcon } from "./ui/Icons";
-import { POP_IN, SPRING_SOFT, TILE } from "@/lib/motion";
+import { POP_IN, QUICK, SPRING_SOFT, TILE } from "@/lib/motion";
 import { locale } from "@/lib/i18n";
 import type { Title } from "@/lib/types";
 
@@ -34,9 +34,9 @@ export default function TitleTile({
       animate="show"
       exit="exit"
       whileHover={{ y: -5, transition: SPRING_SOFT }}
-      whileTap={onClick ? { scale: 0.96, transition: { duration: 0.12 } } : undefined}
+      whileTap={onClick ? { scale: 0.955, y: 2, transition: { duration: QUICK } } : undefined}
       onClick={onClick}
-      className={`group relative overflow-hidden rounded-[20px] bg-surface shadow-[0_4px_14px_rgba(29,41,61,0.07)] transition-shadow duration-500 hover:shadow-[0_14px_30px_rgba(29,41,61,0.14)] ${
+      className={`group relative overflow-hidden rounded-[20px] bg-surface shadow-[0_4px_14px_rgb(var(--rgb-shadow)/0.07)] transition-shadow duration-300 hover:shadow-[0_14px_30px_rgb(var(--rgb-shadow)/0.14)] active:shadow-[0_1px_5px_rgb(var(--rgb-shadow)/0.1)] ${
         onClick ? "cursor-pointer" : ""
       }`}
     >

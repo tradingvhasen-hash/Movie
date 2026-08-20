@@ -107,6 +107,16 @@ interface DhawqState {
   profile: TasteProfile;
   seed: number;
   lists: UserList[];
+  /**
+   * Who this person is when they share something.
+   *
+   * A shared list carries a name and a face, or it carries "shared by
+   * somebody" — there is no third option, and the person sharing should be the
+   * one who decides which. Kept locally rather than only in the account so the
+   * profile page works before anyone signs in, and so a guest can still see
+   * what their share page would say.
+   */
+  publicProfile: { name: string; bio: string; avatarUrl: string };
   onboardingSeen: boolean;
 
   /** ids of onboarding tiles shown and not tapped, so they can be replayed */
@@ -128,6 +138,7 @@ interface DhawqState {
   resetAll: () => void;
   setOnboardingSeen: () => void;
 
+  setPublicProfile: (p: { name: string; bio: string; avatarUrl: string }) => void;
   createList: (name: string) => string;
   deleteList: (id: string) => void;
   renameList: (id: string, name: string) => void;
@@ -178,6 +189,7 @@ export const useDhawq = create<DhawqState>()(
       profile: emptyProfile(),
       seed: makeSeed(),
       lists: [],
+      publicProfile: { name: "", bio: "", avatarUrl: "" },
       onboardingSeen: false,
       passed: [],
 
@@ -262,6 +274,8 @@ export const useDhawq = create<DhawqState>()(
         }),
 
       setOnboardingSeen: () => set({ onboardingSeen: true }),
+
+      setPublicProfile: (p) => set({ publicProfile: p }),
 
       createList: (name) => {
         const id = `list-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;

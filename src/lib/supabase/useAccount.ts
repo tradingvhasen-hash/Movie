@@ -31,6 +31,7 @@ export type AccountState = {
   notice: string | null;
   signUp: (email: string, password: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
 };
 
@@ -119,6 +120,46 @@ export function useAccount(): AccountState {
     []
   );
 
+  /**
+   * GOOGLE, AND ONLY GOOGLE.
+   *
+   * Email and password are gone by the user's decision, and his reasoning is
+   * sound enough to record: an address with a password behind it is a free
+   * account for anybody with an imagination, and every fake one costs storage
+   * and pollutes any number derived from "how many people use this". The
+   * alternative — a verification code by email — he has already tried, and the
+   * free tier of that service runs out of codes long before it runs out of
+   * users.
+   *
+   * A Google account is a real person's existing identity, which is the whole
+   * point: nothing to verify, nothing to remember, no password to leak, and no
+   * recovery flow to build. It also arrives carrying a name and an avatar,
+   * which the profile page needs and would otherwise have to ask for.
+   *
+   * REQUIRES ONE MANUAL STEP that cannot be done from code: Google has to be
+   * enabled in Supabase → Authentication → Providers, with a client id and
+   * secret from the Google Cloud console. Until that is done this call returns
+   * a plain error rather than failing silently, which is why `error` is shown
+   * on the profile page.
+   */
+  const signInWithGoogle = useCallback(async () => {
+    const supabase = getSupabase();
+    if (!supabase) return;
+    await run(() =>
+      supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          // come back to where they were, not to the home page: someone who
+          // signed in from a shared list must land back on that list
+          redirectTo:
+            typeof window !== "undefined"
+              ? `${window.location.origin}${window.location.pathname}${window.location.search}`
+              : undefined,
+        },
+      })
+    );
+  }, [run]);
+
   const signUp = useCallback(
     async (email: string, password: string) => {
       const supabase = getSupabase();
@@ -153,5 +194,16 @@ export function useAccount(): AccountState {
     // their own device.
   }, []);
 
-  return { session, ready, enabled, busy, error, notice, signUp, signIn, signOut };
+  return {
+    session,
+    ready,
+    enabled,
+    busy,
+    error,
+    notice,
+    signInWithGoogle,
+    signUp,
+    signIn,
+    signOut,
+  };
 }

@@ -1,62 +1,64 @@
 "use client";
 
-import { useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import { GlowButton } from "./ui";
-import { useAccount } from "@/lib/supabase/useAccount";
-import { useDhawq } from "@/lib/store";
-import { FADE_UP, SPRING_SNAPPY } from "@/lib/motion";
-
 /**
- * Sign in, so a taste outlives a browser.
+ * SIGNING IN, ON THE ONE PAGE THAT IS ABOUT YOU.
  *
- * Deliberately small and deliberately optional. Everything in this app works
- * signed out and always will — the local store is the source of truth on the
- * device and this only adds a copy that survives clearing the browser or
- * moving to a phone. On the static demo build there is no cloud configured and
- * this renders nothing at all rather than a button that cannot work.
+ * This used to sit at the top of the library, and it caused the flicker the
+ * user reported there: it returned `null` until Supabase answered, then
+ * rendered a whole panel, which shoved the filters and the search box down the
+ * page a fifth of a second after they had already been drawn. He described it
+ * as the search bar appearing, disappearing and appearing again — it never
+ * disappeared, it moved.
  *
- * Email and password rather than a magic link: a link needs deliverable mail
- * on a free tier where the built-in sender is rate limited to a handful an
- * hour, and the first thing a new account does here is fail to arrive.
+ * Two fixes, and only the second one is about the flicker. It moved to the
+ * profile page, because a sign-in form is not what somebody came to the
+ * library to look at. And nothing here reserves-then-fills any more: the page
+ * that hosts it has no content below it to shove.
+ *
+ * ONLY GOOGLE. See `signInWithGoogle` for the reasoning; the short version is
+ * that an email and a password is a free account for anybody with an
+ * imagination, and the verification-code alternative runs out of free codes
+ * before it runs out of users.
  */
+import { motion } from "framer-motion";
+import { useAccount } from "@/lib/supabase/useAccount";
+import { FADE_UP } from "@/lib/motion";
+import { GoogleIcon, LoginIcon } from "./ui/Icons";
+
 export default function AccountPanel() {
-  const { session, ready, enabled, busy, error, notice, signUp, signIn, signOut } =
+  const { session, ready, enabled, busy, error, signInWithGoogle, signOut } =
     useAccount();
-  const totalSwipes = useDhawq((s) => s.profile.totalSwipes);
 
-  const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<"in" | "up">("in");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  if (!enabled) {
+    return (
+      <motion.p variants={FADE_UP} className="text-sm text-ink-faint">
+        Accounts are not configured for this deployment.
+      </motion.p>
+    );
+  }
 
-  if (!enabled || !ready) return null;
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (mode === "in") await signIn(email.trim(), password);
-    else await signUp(email.trim(), password);
-  };
+  /* a fixed-height placeholder, so nothing below ever moves when the answer
+     arrives — the whole cause of the flicker this component used to create */
+  if (!ready) {
+    return <div className="h-[52px]" aria-hidden />;
+  }
 
   if (session) {
+    const name =
+      (session.user.user_metadata?.full_name as string | undefined) ??
+      session.user.email ??
+      "Signed in";
     return (
-      <motion.div
-        variants={FADE_UP}
-        className="mt-5 flex items-center justify-between gap-3 rounded-2xl border border-line bg-surface/60 px-4 py-3"
-      >
+      <motion.div variants={FADE_UP} className="flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold">{session.user.email}</p>
-          <p className="mt-0.5 text-xs text-ink-dim">
-            {totalSwipes > 0
-              ? `${totalSwipes} swipes saved to your account`
-              : "Saved to your account"}
-          </p>
+          <p className="truncate font-semibold">{name}</p>
+          <p className="truncate text-xs text-ink-faint">{session.user.email}</p>
         </div>
         <button
           type="button"
-          onClick={() => void signOut()}
+          onClick={signOut}
           disabled={busy}
-          className="shrink-0 rounded-full border border-line px-3 py-1.5 text-xs font-semibold text-ink-dim transition-colors hover:text-ink disabled:opacity-50"
+          className="shrink-0 rounded-full border border-line px-4 py-2 text-sm font-semibold text-ink-dim transition-colors hover:text-ink disabled:opacity-40"
         >
           Sign out
         </button>
@@ -65,97 +67,26 @@ export default function AccountPanel() {
   }
 
   return (
-    <motion.div variants={FADE_UP} className="mt-5">
-      {!open ? (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="flex w-full items-center justify-between gap-3 rounded-2xl border border-line bg-surface/60 px-4 py-3 text-left transition-colors hover:border-accent/40"
-        >
-          <span className="min-w-0">
-            <span className="block text-sm font-semibold">Keep your library</span>
-            <span className="mt-0.5 block text-xs text-ink-dim">
-              Sign in so your taste survives this browser
-            </span>
-          </span>
-          <span className="shrink-0 text-xs font-semibold text-accent">Sign in</span>
-        </button>
-      ) : (
-        <motion.form
-          initial={{ opacity: 0, y: -6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={SPRING_SNAPPY}
-          onSubmit={submit}
-          className="rounded-2xl border border-line bg-surface/60 p-4"
-        >
-          <div className="flex items-center gap-4 text-sm font-semibold">
-            {(["in", "up"] as const).map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => setMode(m)}
-                className={
-                  mode === m ? "text-accent" : "text-ink-faint hover:text-ink-dim"
-                }
-              >
-                {m === "in" ? "Sign in" : "Create account"}
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              className="ml-auto text-xs font-medium text-ink-faint hover:text-ink-dim"
-            >
-              Close
-            </button>
-          </div>
-
-          <input
-            type="email"
-            required
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
-            className="mt-4 w-full rounded-xl border border-line bg-bg px-3 py-2.5 text-sm outline-none transition-colors focus:border-accent"
-          />
-          <input
-            type="password"
-            required
-            minLength={6}
-            autoComplete={mode === "in" ? "current-password" : "new-password"}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Password"
-            className="mt-2 w-full rounded-xl border border-line bg-bg px-3 py-2.5 text-sm outline-none transition-colors focus:border-accent"
-          />
-
-          <div className="mt-4">
-            <GlowButton type="submit" disabled={busy}>
-              {busy ? "…" : mode === "in" ? "Sign in" : "Create account"}
-            </GlowButton>
-          </div>
-
-          <AnimatePresence>
-            {(error || notice) && (
-              <motion.p
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                className={`mt-3 text-xs ${error ? "text-rose-400" : "text-ink-dim"}`}
-              >
-                {error ?? notice}
-              </motion.p>
-            )}
-          </AnimatePresence>
-
-          {totalSwipes > 0 && (
-            <p className="mt-3 text-xs text-ink-faint">
-              Your {totalSwipes} swipes on this device will be kept and uploaded.
-            </p>
-          )}
-        </motion.form>
+    <motion.div variants={FADE_UP} className="flex flex-col gap-3">
+      <button
+        type="button"
+        onClick={signInWithGoogle}
+        disabled={busy}
+        className="flex w-full items-center justify-center gap-3 rounded-2xl border border-line bg-surface px-5 py-3.5 font-semibold text-ink shadow-[0_2px_10px_rgb(var(--rgb-shadow)/0.06)] transition-all hover:shadow-[0_6px_18px_rgb(var(--rgb-shadow)/0.1)] active:scale-[0.98] disabled:opacity-50"
+      >
+        <GoogleIcon size={19} />
+        Continue with Google
+      </button>
+      {error && (
+        /* one of the two kinds of text that survived the sweep: this one says
+           why something failed, and without it a tap that does nothing is a
+           mystery rather than a problem */
+        <p className="text-sm text-danger">{error}</p>
       )}
+      <p className="flex items-center gap-2 text-xs text-ink-faint">
+        <LoginIcon size={14} />
+        Without an account everything stays on this device.
+      </p>
     </motion.div>
   );
 }

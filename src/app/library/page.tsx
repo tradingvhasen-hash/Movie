@@ -3,20 +3,11 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
-import AccountPanel from "@/components/AccountPanel";
 import TitleTile from "@/components/TitleTile";
-import { DeleteButton } from "@/components/ui";
-import { FilmIcon, HeartIcon, ThumbsDownIcon } from "@/components/ui/Icons";
+import { FilmIcon, HeartIcon, ThumbsDownIcon, TrashIcon, UserIcon } from "@/components/ui/Icons";
 import { matches } from "@/lib/search";
 import { getLocalTitle } from "@/lib/catalog";
-import {
-  FADE_UP,
-  OVERLAY,
-  POP_IN,
-  SECTION,
-  SPRING_SNAPPY,
-  staggerContainer,
-} from "@/lib/motion";
+import { EASE_OUT, FADE_UP, OVERLAY, POP_IN, QUICK, SECTION, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
 import { useDhawq } from "@/lib/store";
 import { t } from "@/lib/i18n";
 import type { Swipe } from "@/lib/types";
@@ -59,9 +50,25 @@ export default function LibraryPage() {
       animate="show"
       className="px-5 pb-24 pt-6"
     >
-      <motion.h1 variants={FADE_UP} className="text-2xl font-bold tracking-tight">
-        {t("library.title")}
-      </motion.h1>
+      <motion.div variants={FADE_UP} className="flex items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold tracking-tight">{t("library.title")}</h1>
+        {/*
+          A 36px circle that is always exactly 36px, signed in or out, loading
+          or loaded. The sign-in panel that used to sit here rendered `null`
+          until Supabase answered and then appeared at full height, shoving the
+          filters and the search box down a fifth of a second after they were
+          drawn — which is the "search bar blinking" the user reported. It was
+          never blinking; it was moving. Nothing on this page changes size
+          asynchronously any more.
+        */}
+        <Link
+          href="/profile"
+          aria-label="Profile"
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-line bg-surface text-ink-dim transition-colors hover:text-ink"
+        >
+          <UserIcon size={18} />
+        </Link>
+      </motion.div>
       {/*
         The subtitle that stood here is gone, and so is every other line in
         this app whose only job was to restate its own heading. The test each
@@ -78,10 +85,6 @@ export default function LibraryPage() {
         "your library is empty, start swiping to fill it".
       */}
 
-      {/* signing in is optional and lives here rather than in the nav: this is
-          the page about a person's own data, and it is the only place the
-          question "where does this go?" naturally comes up */}
-      <AccountPanel />
 
       {/* filters — the active pill slides between options */}
       <LayoutGroup id="library-filters">
@@ -94,16 +97,24 @@ export default function LibraryPage() {
                 onClick={() => setFilter(f)}
                 whileTap={{ scale: 0.93 }}
                 transition={SPRING_SNAPPY}
-                className={`relative rounded-[0.6em] border px-3.5 py-1.5 text-sm font-semibold transition-colors duration-300 ${
+                /**
+                 * The same material as every other control in the app, and a
+                 * shadow that survives dark mode. It was a gradient pill with
+                 * a hardcoded blue-grey glow — invisible in dark, and the only
+                 * gradient on a page of flat surfaces. The sliding indicator
+                 * stays, because that motion is doing real work: it shows the
+                 * two filters are one control with one value, not two buttons.
+                 */
+                className={`relative rounded-full border px-4 py-1.5 text-sm font-semibold transition-colors ${
                   active
-                    ? "border-transparent text-white"
-                    : "border-line bg-surface text-ink-dim shadow-[0_4px_12px_rgba(29,41,61,0.08)] hover:text-ink"
+                    ? "border-transparent text-[color:var(--color-on-accent)]"
+                    : "border-line bg-surface text-ink-dim hover:text-ink"
                 }`}
               >
                 {active && (
                   <motion.span
                     layoutId="filter-pill"
-                    className="absolute inset-0 rounded-[0.6em] bg-gradient-to-br from-accent to-accent-soft shadow-[0_6px_16px_rgba(14,165,233,0.35)]"
+                    className="absolute inset-0 rounded-full bg-accent"
                     transition={{ type: "spring", stiffness: 420, damping: 34 }}
                   />
                 )}
@@ -219,28 +230,55 @@ function LibraryTile({
           )}
         </span>
       }
+      /**
+       * DELETE, WITH THE FEELING OF HAVING PRESSED SOMETHING.
+       *
+       * The user's words: "it just appears — I want to feel like the card is
+       * getting pushed". He is describing the difference between a state that
+       * is *revealed* and a surface that *responds*. What was here appeared:
+       * a scrim faded in and a button popped, with the poster underneath
+       * completely inert, so the tap and the result had no physical
+       * relationship.
+       *
+       * Now the tile itself takes the press — it sinks slightly and its
+       * shadow contracts, which is what a real object under a thumb does — and
+       * the scrim and the action arrive on top of that movement rather than
+       * instead of it. The delete control is a plain destructive button on the
+       * app's own material rather than the borrowed expanding widget, which
+       * had its own idea of shape, colour and timing and was one of the five
+       * unrelated vocabularies that made this app read as assembled.
+       */
       overlay={
         <AnimatePresence>
           {selected && (
             <motion.div
               key="actions"
-              variants={OVERLAY}
-              initial="hidden"
-              animate="show"
-              exit="exit"
-              className="absolute inset-0 z-20 flex items-center justify-center rounded-[20px] bg-slate-800/25 backdrop-blur-[3px]"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: QUICK, ease: EASE_OUT }}
+              className="absolute inset-0 z-20 flex items-center justify-center rounded-[20px] bg-[rgb(var(--rgb-scrim)/0.45)] backdrop-blur-[6px]"
               onClick={(e) => {
                 e.stopPropagation();
                 onSelect();
               }}
             >
-              <motion.div
-                variants={POP_IN}
-                onClick={(e) => e.stopPropagation()}
+              <motion.button
+                type="button"
+                aria-label={t("common.delete")}
+                initial={{ scale: 0.88, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.92, opacity: 0 }}
+                transition={{ duration: QUICK, ease: EASE_OUT }}
+                whileTap={{ scale: 0.9 }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemove();
+                }}
+                className="grid h-12 w-12 place-items-center rounded-full bg-danger text-white shadow-[0_6px_20px_rgb(var(--rgb-shadow)/0.35)]"
               >
-                {/* expanding delete — Uiverse.io by vinodjangid07 */}
-                <DeleteButton label={t("common.delete")} onDelete={onRemove} />
-              </motion.div>
+                <TrashIcon size={20} />
+              </motion.button>
             </motion.div>
           )}
         </AnimatePresence>

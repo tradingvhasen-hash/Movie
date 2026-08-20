@@ -9,7 +9,7 @@ import { BooksIcon, CardsIcon, SearchIcon, SparklesIcon } from "./ui/Icons";
 const TABS = [
   { href: "/", label: "Swipe", Icon: CardsIcon },
   /**
-   * `/seen` — the thirty-at-once grid — is deliberately NOT here any more.
+   * `/seen` — the thirty-at-once grid — is gone entirely, page and component.
    *
    * It was built on a real piece of arithmetic: a grid asks thirty questions
    * per screen against the deck's one per gesture, and on paper that is 3,656

@@ -65,7 +65,7 @@ export default function Wordmark({ size = 28, arabic = false, className }: Props
   return (
     <span className={`inline-flex items-center gap-2.5 ${className ?? ""}`}>
       <Logomark size={size} className="text-accent" />
-      <span className="inline-flex flex-col leading-none">
+      <span className="inline-flex flex-col items-start leading-none">
         <span
           className="font-semibold tracking-tight text-ink"
           style={{ fontSize: size * 0.78, letterSpacing: "-0.02em" }}
@@ -75,7 +75,7 @@ export default function Wordmark({ size = 28, arabic = false, className }: Props
         {arabic && (
           <span
             className="mt-1 text-ink-faint"
-            style={{ fontSize: size * 0.42 }}
+            style={{ fontSize: size * 0.42, letterSpacing: "0.04em" }}
             dir="rtl"
           >
             ذوق

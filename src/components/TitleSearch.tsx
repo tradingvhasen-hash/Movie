@@ -5,7 +5,7 @@ import PosterArt from "./PosterArt";
 import { normalise, searchText } from "@/lib/search";
 import { getLocalCatalog, loadCatalog } from "@/lib/catalog";
 import { useDhawq } from "@/lib/store";
-import { HeartIcon, ThumbsDownIcon } from "./ui/Icons";
+import { EyeIcon, HeartIcon, ThumbsDownIcon } from "./ui/Icons";
 import type { Title } from "@/lib/types";
 
 /**
@@ -67,11 +67,20 @@ export default function TitleSearch() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 pb-32 pt-6">
-      <h1 className="text-2xl font-bold tracking-tight">ابحث عمّا شاهدته</h1>
-      <p className="mt-2 text-sm leading-relaxed text-ink-dim">
-        اكتب اسم أي فيلم أو مسلسل تتذكّره وأضفه فورًا. أسرع طريقة لبناء مكتبتك
-        هي أن تخبر الموقع بما تعرفه بدل أن ينتظر حتى يخمّنه.
-      </p>
+      {/*
+        This page was the only Arabic screen in an English app — heading, body,
+        badges and even the button labels — which reads as a page from a
+        different product. The interface language is English; the *catalog* is
+        every language, which is what the placeholder now shows instead of
+        saying it in a paragraph.
+
+        The paragraph is gone under the same test as everywhere else. A search
+        field with a cursor in it, three example titles in three scripts as its
+        placeholder, and results appearing as you type explain this page
+        completely. Two sentences arguing that searching is faster than waiting
+        to be guessed at were arguing with somebody who had already arrived.
+      */}
+      <h1 className="text-2xl font-bold tracking-tight">Search</h1>
 
       <input
         value={q}
@@ -95,16 +104,16 @@ export default function TitleSearch() {
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-semibold">{t.title.en}</div>
                 <div className="text-[11px] text-ink-dim">
-                  {t.year} · {t.type === "movie" ? "فيلم" : "مسلسل"}
+                  {t.year} · {t.type === "movie" ? "Film" : "Series"}
                   {known && (
                     <span className="ms-2 font-semibold text-accent">
                       {known === "liked"
-                        ? "أعجبك"
+                        ? "Loved"
                         : known === "disliked"
-                          ? "لم يعجبك"
+                          ? "Not for you"
                           : known === "seen"
-                            ? "شاهدته"
-                            : "لم تشاهده"}
+                            ? "Watched"
+                            : "Not seen"}
                     </span>
                   )}
                 </div>
@@ -112,7 +121,7 @@ export default function TitleSearch() {
               <div className="flex shrink-0 gap-1.5" dir="ltr">
                 <button
                   type="button"
-                  aria-label="لم يعجبني"
+                  aria-label="Not for me"
                   onClick={() => swipe(t, "disliked")}
                   className="grid h-10 w-10 place-items-center rounded-full bg-surface-2 text-ink-dim active:scale-95"
                 >
@@ -120,17 +129,17 @@ export default function TitleSearch() {
                 </button>
                 <button
                   type="button"
-                  aria-label="شاهدته"
+                  aria-label="Watched it"
                   onClick={() => swipe(t, "seen")}
-                  className="rounded-full bg-surface-2 px-3 text-xs font-semibold text-ink-dim active:scale-95"
+                  className="grid h-10 w-10 place-items-center rounded-full bg-surface-2 text-ink-dim active:scale-95"
                 >
-                  شاهدته
+                  <EyeIcon size={17} />
                 </button>
                 <button
                   type="button"
-                  aria-label="أعجبني"
+                  aria-label="Loved it"
                   onClick={() => swipe(t, "liked")}
-                  className="grid h-10 w-10 place-items-center rounded-full bg-accent text-white active:scale-95"
+                  className="grid h-10 w-10 place-items-center rounded-full bg-accent text-[color:var(--color-on-accent)] active:scale-95"
                 >
                   <HeartIcon size={17} filled />
                 </button>
@@ -139,8 +148,8 @@ export default function TitleSearch() {
           );
         })}
         {q.trim().length >= 2 && results.length === 0 && (
-          <p className="py-8 text-center text-sm text-ink-dim">
-            لا شيء بهذا الاسم في الكتالوج.
+          <p className="py-10 text-center text-sm text-ink-faint">
+            Nothing by that name in the catalog.
           </p>
         )}
       </div>

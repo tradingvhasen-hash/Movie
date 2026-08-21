@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getLocalCatalog, getLocalItem, loadCatalog, vectorOf } from "@/lib/catalog";
-import { recommend } from "@/lib/engine/recommend";
+import { rank, warmRanker } from "@/lib/engine/rank-client";
 import { COLD_START_TARGET, isCalibrating } from "@/lib/engine/taste";
 import { useDhawq } from "@/lib/store";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
@@ -152,34 +152,49 @@ function answeredIds(): Set<string> {
   return out;
 }
 
-function computeLocalBatch(excludeExtra: string[] = []): Title[] {
-  const pool = getLocalCatalog();
+/**
+ * The next batch, ranked off the main thread.
+ *
+ * This used to run `recommend()` inline, and the comment below the `REFILL_AT`
+ * constant records what that cost: 428ms of a completely frozen page on a
+ * mid-range phone, and the honest admission that "the real answer is to get
+ * this work off the main thread entirely, and that is a bigger change than a
+ * broken app should wait for."
+ *
+ * The app was broken, and this is that change. The rebuild now happens on a
+ * worker thread, so the freeze is not shortened — it is *gone*. Cards remain
+ * swipeable, taps land and animations keep running for the whole time the
+ * ranking takes, because none of it happens where the interface lives.
+ *
+ * That also retires the reason the reserve was made so deep. It is left deep
+ * anyway: a request that costs nothing visible is still a request, and sixteen
+ * cards of reserve means the worker is idle when the viewer is fast.
+ */
+async function computeLocalBatch(excludeExtra: string[] = []): Promise<Title[]> {
   const state = useDhawq.getState();
   const exclude = new Set<string>([...Object.keys(state.swipes), ...excludeExtra]);
 
-  const likedTitles = Object.values(state.swipes)
+  const likedIds = Object.values(state.swipes)
     .filter((s) => s.action === "liked")
-    .map((s) => getLocalItem(s.titleId)?.title ?? s.title)
-    .filter((t): t is Title => Boolean(t));
-
-  const dislikedTitles = Object.values(state.swipes)
+    .map((s) => s.titleId);
+  const dislikedIds = Object.values(state.swipes)
     .filter((s) => s.action === "disliked")
-    .map((s) => getLocalItem(s.titleId)?.title ?? s.title)
-    .filter((t): t is Title => Boolean(t));
+    .map((s) => s.titleId);
 
   const pending = pendingVerdicts(new Set(excludeExtra)).slice(0, BATCH);
   if (pending.length >= BATCH) return pending;
 
-  const rest = recommend(pool, state.profile, {
+  const { titles } = await rank({
+    mode: "swipe",
+    profile: state.profile,
     excludeIds: exclude,
     count: BATCH - pending.length,
     seed: state.seed,
-    vectorFor: vectorOf,
-    likedTitles,
-    dislikedTitles,
+    likedIds,
+    dislikedIds,
     homeLanguages: homeLanguages(),
-  }).map((r) => r.title);
-  return [...pending, ...rest];
+  });
+  return [...pending, ...titles];
 }
 
 /**
@@ -277,13 +292,27 @@ export function useDeck() {
       queueRef.current = next;
     };
 
+    /**
+     * THE LOCAL ANSWER FIRST, ALWAYS. The cloud one is an upgrade, not a gate.
+     *
+     * This used to `await` the round trip to `/api/recommend` before installing
+     * anything, so on the deployed site — where Supabase *is* configured — the
+     * very first deck waited on a network request to a server that answers
+     * `200 {items: []}` because its catalog was never seeded. On a cold
+     * instance that is seconds of skeleton before the first card, every visit,
+     * to learn nothing. It is a large part of what the user described as the
+     * whole site being slow.
+     *
+     * Ranking locally costs nothing visible now that it happens on a worker,
+     * so it simply runs, and a cloud batch installs over the top of it if one
+     * ever actually arrives.
+     */
+    void computeLocalBatch().then(install);
     if (isSupabaseConfigured()) {
       void fetchRemoteBatch(BATCH).then((remote) => {
-        install(remote && remote.length > 0 ? remote : computeLocalBatch());
+        if (remote && remote.length > 0) install(remote);
       });
-      return;
     }
-    install(computeLocalBatch());
   }, []);
 
   /** coalescing wrapper: many swipes in a row cost one rebuild */
@@ -298,8 +327,12 @@ export function useDeck() {
   // wait for the catalog fetch and the persisted store before the first fill
   useEffect(() => {
     let cancelled = false;
+    warmRanker();
     void loadCatalog().then(() => {
       if (cancelled) return;
+      // a library saved by an older build carries a copy of every title it
+      // already has in catalog.json; drop those now that we can check
+      useDhawq.getState().compactSwipes();
       setHydrated(true);
       rebuild();
     });

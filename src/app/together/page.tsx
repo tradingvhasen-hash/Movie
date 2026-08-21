@@ -4,10 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import PosterArt from "@/components/PosterArt";
 import { PlusIcon, SearchIcon, ShuffleIcon, SparklesIcon, XIcon } from "@/components/ui/Icons";
-import { getLocalCatalog, loadCatalog, vectorOf } from "@/lib/catalog";
-import { matches } from "@/lib/search";
-import { recommend } from "@/lib/engine/recommend";
+import { loadCatalog } from "@/lib/catalog";
+import { searchCatalog } from "@/lib/search";
+import { rank } from "@/lib/engine/rank-client";
 import { applySwipe, emptyProfile } from "@/lib/engine/taste";
+import { vectorOf } from "@/lib/catalog";
 import { genreLabel } from "@/lib/genres";
 import { EASE_OUT, FADE_UP, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
 import { haptic } from "@/lib/haptics";
@@ -77,18 +78,29 @@ export default function TogetherPage() {
    * failure of the model, it is a group of people having opinions — and
    * "another" has to be instant or nobody presses it twice.
    */
-  const answers = useMemo(() => {
-    if (chosen.length < 2) return [];
+  const [answers, setAnswers] = useState<Title[]>([]);
+  useEffect(() => {
+    if (chosen.length < 2) {
+      setAnswers([]);
+      return;
+    }
+    let stale = false;
     let profile = emptyProfile();
     for (const t of chosen) profile = applySwipe(profile, t, vectorOf(t), "liked");
-    return recommend(getLocalCatalog(), profile, {
-      excludeIds: new Set(chosen.map((t) => t.id)),
-      count: 8,
-      likedTitles: chosen,
-      seed: 11,
-      vectorFor: vectorOf,
+    void rank({
       mode: "discover",
+      profile,
+      excludeIds: chosen.map((t) => t.id),
+      count: 8,
+      seed: 11,
+      likedIds: chosen.map((t) => t.id),
+      dislikedIds: [],
+    }).then((r) => {
+      if (!stale) setAnswers(r.titles);
     });
+    return () => {
+      stale = true;
+    };
   }, [chosen]);
 
   const answer = answers.length > 0 ? answers[round % answers.length] : null;
@@ -234,7 +246,7 @@ export default function TogetherPage() {
               onClick={() => setShowing(false)}
             />
             <motion.div
-              key={answer.title.id}
+              key={answer.id}
               initial={{ opacity: 0, y: 28, scale: 0.92 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 16, scale: 0.96 }}
@@ -242,15 +254,15 @@ export default function TogetherPage() {
               className="soft-card relative z-10 w-full max-w-[320px] overflow-hidden"
             >
               <div className="relative">
-                <PosterArt title={answer.title} sizes="360px" className="aspect-[2/3] w-full" />
+                <PosterArt title={answer} sizes="360px" className="aspect-[2/3] w-full" />
                 <div className="card-sheen absolute inset-0" />
                 <div className="absolute inset-x-0 bottom-0 p-4">
                   <h2 className="text-xl font-bold leading-tight text-white drop-shadow">
-                    {answer.title.title[locale]}
+                    {answer.title[locale]}
                   </h2>
                   <p className="mt-1 text-[11px] font-medium text-white/70">
-                    {answer.title.year}
-                    {answer.title.genres.slice(0, 2).map((g) => (
+                    {answer.year}
+                    {answer.genres.slice(0, 2).map((g) => (
                       <span key={g}> · {genreLabel(g, locale)}</span>
                     ))}
                   </p>
@@ -379,11 +391,7 @@ function PickSheet({
 
   const results = useMemo(() => {
     if (!ready || q.trim().length < 2) return [];
-    return getLocalCatalog()
-      .filter((c) => !taken.has(c.title.id) && matches(c.title, q))
-      .sort((a, b) => b.title.voteCount - a.title.voteCount)
-      .slice(0, 30)
-      .map((c) => c.title);
+    return searchCatalog(q, { limit: 30, skip: (id) => taken.has(id) });
   }, [ready, q, taken]);
 
   return (

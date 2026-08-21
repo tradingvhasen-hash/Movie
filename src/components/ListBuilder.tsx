@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import PosterArt from "./PosterArt";
-import { getLocalCatalog, getLocalTitle, loadCatalog } from "@/lib/catalog";
-import { matches } from "@/lib/search";
+import { getLocalTitle, loadCatalog } from "@/lib/catalog";
+import { matches, searchCatalog } from "@/lib/search";
 import { useDhawq } from "@/lib/store";
 import { FADE_UP, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
 import { CheckIcon, SearchIcon, XIcon } from "./ui/Icons";
@@ -111,11 +111,7 @@ export default function ListBuilder({
   const typed = useMemo(() => {
     if (query.trim().length < 2) return [];
     void catalogReady;
-    return getLocalCatalog()
-      .filter((c) => matches(c.title, query))
-      .sort((a, b) => b.title.voteCount - a.title.voteCount)
-      .slice(0, 24)
-      .map((c) => c.title);
+    return searchCatalog(query, { limit: 24 });
   }, [query, catalogReady]);
 
   const pickable = useMemo(() => {
@@ -162,7 +158,6 @@ export default function ListBuilder({
               {contents.map((t) => (
                 <motion.button
                   key={t.id}
-                  layout
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.86 }}
@@ -287,7 +282,6 @@ export default function ListBuilder({
             return (
               <motion.button
                 key={t.id}
-                layout
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: already ? 0.4 : 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.9 }}

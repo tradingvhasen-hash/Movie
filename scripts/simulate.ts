@@ -192,20 +192,28 @@ console.log(`catalog: ${catalog.length} titles\n`);
   const p50 = sorted[Math.floor(sorted.length * 0.5)];
   const worst = sorted[sorted.length - 1];
   /**
-   * The threshold is deliberately loose because the absolute number is
-   * hardware-dependent — the same commit measures ~12ms on one build machine
-   * and ~21ms on another. It is a regression guard, not a spec.
+   * A REGRESSION GUARD, AND NO LONGER A FRAME BUDGET.
    *
-   * The guarantee that actually matters is structural and is verified in the
-   * browser instead: the rebuild runs inside requestIdleCallback and
-   * consecutive swipes collapse into one, so this cost never sits between a
-   * user's gesture and the next card.
+   * This was `< 40ms` because 40ms was roughly the point at which a rebuild
+   * became a visible stutter — the work ran on the main thread, between the
+   * gesture and the next card. It does not any more: `rank-client.ts` posts it
+   * to a worker, so the interface keeps painting for the whole time it takes,
+   * and 40ms stopped being a boundary between smooth and janky. Sitting right
+   * on it, this check had begun failing and passing on the same commit
+   * depending on what else the build machine was doing — a ruler that reports
+   * noise teaches nothing.
+   *
+   * The number still matters, because the worker is not free and a phone is
+   * several times slower than this machine; a rebuild that grew to half a
+   * second would be a real regression even off-thread. So the guard is set
+   * where a genuine one shows up — roughly triple today's worst — and the
+   * median is printed so the trend stays visible even while it passes.
    */
   check(
     "re-rank cost",
-    worst < 40,
+    worst < 120,
     `median ${p50.toFixed(1)}ms, worst ${worst.toFixed(1)}ms over ${timings.length} rebuilds ` +
-      `(guard <40ms; hardware-dependent, and off the swipe critical path)`
+      `(guard <120ms; hardware-dependent, and now off the main thread entirely)`
   );
 }
 

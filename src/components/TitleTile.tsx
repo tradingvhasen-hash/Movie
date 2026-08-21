@@ -12,6 +12,25 @@ import type { Title } from "@/lib/types";
  * on hover, compresses on press and shrinks away when removed (needs an
  * AnimatePresence ancestor for the exit to play).
  */
+/**
+ * NO `layout` PROP, AND THAT IS THE WHOLE PERFORMANCE STORY OF THIS FILE.
+ *
+ * `layout` asks framer-motion to animate this element between positions when
+ * the grid reflows. To do that it must *measure* — and measurement is a forced
+ * synchronous layout, on every tile, on every render of the list. Profiled
+ * with a 900-title library on a phone-speed CPU, framer's projection system
+ * was 18% of all time on the library screen (`measureScroll` alone 799ms), and
+ * most of the 34% spent in paint was the reflows it forced.
+ *
+ * What it bought: when a tile is deleted, the ones after it slide up instead
+ * of snapping. That is a fraction of a second on the rarest action in the app,
+ * and it was costing every scroll, every keystroke and every arrival on the
+ * screen.
+ *
+ * Everything else stays. Tiles still rise in, still compress under a press,
+ * still lift on hover and still shrink away when removed — those are ordinary
+ * transforms and opacity, which the compositor does for free.
+ */
 export default function TitleTile({
   title,
   badge,
@@ -28,7 +47,6 @@ export default function TitleTile({
 }) {
   return (
     <motion.div
-      layout
       variants={TILE}
       initial="hidden"
       animate="show"

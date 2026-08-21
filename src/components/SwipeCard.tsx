@@ -58,6 +58,23 @@ export default function SwipeCard({
   y: sharedY,
 }: SwipeCardProps) {
   const [flipped, setFlipped] = useState(false);
+  /**
+   * THE BACK OF THE CARD DOES NOT EXIST UNTIL SOMEBODY ASKS FOR IT.
+   *
+   * This is the single most expensive line in the redesign, and it was costing
+   * on every card whether or not anyone ever turned one over. Three cards are
+   * mounted at all times; each back face carried a full-bleed poster, a second
+   * poster thumbnail and a `backdrop-filter` over both. So the deck was paying
+   * for six posters and three backdrop filters — and a backdrop filter inside
+   * an element that is being transformed every frame has to re-sample
+   * everything behind it *every frame*, which is what turned a 60fps drag into
+   * the slideshow the user filmed.
+   *
+   * Nothing about the design changes. The back is built the first time a card
+   * is turned over and kept from then on, so the flip is instant on every
+   * subsequent tap; the two cards behind the top one simply never build one.
+   */
+  const [everFlipped, setEverFlipped] = useState(false);
   const [exiting, setExiting] = useState<SwipeAction | null>(null);
 
   const ownX = useMotionValue(0);
@@ -109,7 +126,10 @@ export default function SwipeCard({
     press.current = null;
     if (!p || !isTop || activeExit) return;
     const moved = Math.hypot(e.clientX - p.px, e.clientY - p.py);
-    if (moved <= TAP_SLOP && Date.now() - p.at < 600) setFlipped((v) => !v);
+    if (moved <= TAP_SLOP && Date.now() - p.at < 600) {
+      setEverFlipped(true);
+      setFlipped((v) => !v);
+    }
   }
 
   /**
@@ -148,13 +168,27 @@ export default function SwipeCard({
           ? { x: 0, y: -780, rotate: 0, opacity: 0, scale: 0.9 }
           : null;
 
-  /* resting pose in the stack — springs whenever the index changes */
+  /**
+   * Resting pose in the stack — springs whenever the index changes.
+   *
+   * NO `filter` HERE, and that absence is worth a paragraph. The cards behind
+   * the top one used to be dimmed with `filter: brightness(0.93)`, animated as
+   * a card was promoted to the front. A filter is not a compositor property:
+   * animating one re-rasterises the whole element — a full-size poster — on
+   * every frame, twice over, for the half second after every single swipe.
+   * Profiled on a phone-speed CPU it was a large share of the 44% of the time
+   * this screen spent in paint rather than in script.
+   *
+   * The dimming is now a black overlay whose *opacity* animates, which the
+   * compositor does on the GPU for free. Identical on screen, and it is the
+   * difference between a swipe costing a repaint of the deck and costing
+   * nothing at all.
+   */
   const restingPose = {
     x: 0,
     y: index * 12,
     scale: 1 - index * 0.05,
     opacity: index > 2 ? 0 : 1,
-    filter: index === 0 ? "brightness(1)" : "brightness(0.93)",
   };
 
   return (
@@ -173,13 +207,12 @@ export default function SwipeCard({
         y: index * 12 + 26,
         scale: 1 - index * 0.05 - 0.06,
         opacity: 0,
-        filter: "brightness(0.93)",
       }}
       animate={exitTarget ?? restingPose}
       transition={
         exitTarget
           ? { duration: 0.52, ease: EASE_SWEEP }
-          : { ...SPRING_SETTLE, opacity: { duration: 0.35 }, filter: { duration: 0.35 } }
+          : { ...SPRING_SETTLE, opacity: { duration: 0.35 } }
       }
       /**
        * Leaves instantly, because it is not the thing you watch leave. The
@@ -196,6 +229,14 @@ export default function SwipeCard({
       onPointerUp={handlePointerUp}
       whileDrag={{ cursor: "grabbing" }}
     >
+      {/* what `filter: brightness()` used to do, on the compositor instead */}
+      <motion.div
+        className="pointer-events-none absolute inset-0 z-10 rounded-[var(--radius-card)] bg-black"
+        initial={{ opacity: index === 0 ? 0 : 0.07 }}
+        animate={{ opacity: index === 0 ? 0 : 0.07 }}
+        transition={{ duration: 0.35 }}
+        aria-hidden
+      />
       <motion.div
         className="relative h-full w-full"
         style={{ transformStyle: "preserve-3d" }}
@@ -265,19 +306,45 @@ export default function SwipeCard({
             space a short synopsis leaves empty, and is the same trick a phone
             uses behind an album on a now-playing screen. */}
         <div
-          className="soft-card absolute inset-0 flex flex-col overflow-hidden"
+          className="soft-card absolute inset-0 flex flex-col overflow-hidden bg-surface"
           style={{
             backfaceVisibility: "hidden",
             WebkitBackfaceVisibility: "hidden",
             transform: "rotateY(180deg)",
           }}
         >
-          <div className="absolute inset-0 scale-125" aria-hidden>
-            <PosterArt title={title} sizes="380px" />
-          </div>
+          {everFlipped && (
+          <>
+          {/*
+            THE SAME LOOK, WITHOUT A BACKDROP FILTER.
+
+            `backdrop-filter` blurs whatever is painted behind an element, which
+            means the browser re-samples the backdrop on every frame the element
+            moves — and this element moves with the card. Blurring the *image
+            itself* is a filter on a static subtree: the browser rasterises it
+            once and reuses the texture. Visually identical, and it is the
+            difference between a frame budget and no frame budget.
+
+            A background-image rather than <PosterArt> because this layer is
+            decoration: it needs no fallback artwork, no cross-fade and no React
+            subtree, and the URL is already in the browser's cache from the
+            front of the same card.
+          */}
           <div
-            className="absolute inset-0 backdrop-blur-2xl"
-            style={{ background: "rgb(var(--rgb-scrim) / 0.72)" }}
+            className="absolute inset-0 scale-125"
+            style={{
+              backgroundImage: title.posterPath
+                ? `url(https://image.tmdb.org/t/p/w500${title.posterPath})`
+                : undefined,
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+              filter: "blur(22px)",
+            }}
+            aria-hidden
+          />
+          <div
+            className="absolute inset-0"
+            style={{ background: "rgb(var(--rgb-scrim) / 0.74)" }}
             aria-hidden
           />
 
@@ -337,6 +404,8 @@ export default function SwipeCard({
               )}
             </div>
           </div>
+          </>
+          )}
         </div>
       </motion.div>
     </motion.div>

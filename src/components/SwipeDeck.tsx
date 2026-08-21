@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useMotionValue, useMotionValueEvent } from "framer-motion";
 import SwipeCard, { SWIPE_UP_THRESHOLD, SWIPE_X_THRESHOLD } from "./SwipeCard";
-import SwipeBurst from "./SwipeBurst";
+import SwipeBurst, { type BurstHandle } from "./SwipeBurst";
+import LeavingCards, { type LeavingHandle } from "./LeavingCards";
 import ScreenFeedback from "./ScreenFeedback";
 import TastePicker from "./TastePicker";
 import WelcomeDemo, { demoAlreadyShown } from "./WelcomeDemo";
@@ -17,10 +18,10 @@ import {
   ThumbsDownIcon,
   UndoIcon,
 } from "./ui/Icons";
-import { EASE_SWEEP, FADE_UP, SECTION, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
+import { FADE_UP, SECTION, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
 import { haptic } from "@/lib/haptics";
 import { t } from "@/lib/i18n";
-import type { SwipeAction, Title } from "@/lib/types";
+import type { SwipeAction } from "@/lib/types";
 
 export default function SwipeDeck() {
   const { queue, hydrated, swipeTop, undo, canUndo, refill } = useDeck();
@@ -31,7 +32,17 @@ export default function SwipeDeck() {
    * who have told us nothing, which is a fact about the profile rather than a
    * flag about which screen they happened to open first.
    */
-  const answered = useDhawq((s) => s.profile.totalSwipes);
+  /**
+   * Read only until it stops mattering.
+   *
+   * `profile.totalSwipes` changes on every single swipe, and subscribing to it
+   * re-rendered this component — and therefore all three cards, and therefore
+   * framer's whole projection tree — on every gesture, to answer a question
+   * that was settled before the first card: "has this person told us
+   * anything yet". Once onboarding is done the selector returns a constant, so
+   * the subscription stops firing entirely.
+   */
+  const answered = useDhawq((s) => (s.onboardingSeen ? 0 : s.profile.totalSwipes));
   const onboardingSeen = useDhawq((s) => s.onboardingSeen) || answered > 0;
   const setOnboardingSeen = useDhawq((s) => s.setOnboardingSeen);
   const resetAll = useDhawq((s) => s.resetAll);
@@ -48,18 +59,7 @@ export default function SwipeDeck() {
   const x = useMotionValue(0);
   const y = useMotionValue(0);
 
-  /**
-   * The card that has already been answered and is still flying off.
-   *
-   * The swipe commits the instant the finger lifts; this keeps a copy on
-   * screen for the half-second the animation takes, with pointer events off,
-   * so the deck underneath is live immediately. Previously the *real* card
-   * stayed and owned the pointer for that whole window, which made every
-   * second fast swipe do nothing.
-   */
-  const [leaving, setLeaving] = useState<
-    { title: Title; action: SwipeAction; at: number }[]
-  >([]);
+  const leavingRef = useRef<LeavingHandle>(null);
   const [forcedExit, setForcedExit] = useState<SwipeAction | null>(null);
   /** welcome → pick a few you love → deck */
   const [picking, setPicking] = useState(false);
@@ -69,7 +69,7 @@ export default function SwipeDeck() {
    * change under the component mid-render.
    */
   const [showDemo, setShowDemo] = useState<boolean | null>(null);
-  const [burst, setBurst] = useState<{ id: number; action: SwipeAction } | null>(null);
+  const burstRef = useRef<BurstHandle>(null);
 
   /**
    * A tick at the moment the gesture would commit.
@@ -80,12 +80,39 @@ export default function SwipeDeck() {
    * does not turn into a rattle.
    */
   const wasPast = useRef(false);
+  /**
+   * Is the card off centre at all?
+   *
+   * The screen feedback is a dozen full-screen layers — washes, a vignette, an
+   * additive rim, a flood, three marks — and every one of them was mounted for
+   * the entire life of the deck, sitting at opacity 0. A layer at opacity 0
+   * still costs: it is styled on every render, it holds compositor memory at
+   * three times device scale, and the `plus-lighter` group forces everything
+   * beneath it to be composited together.
+   *
+   * They exist only while the card is somewhere other than the middle, which
+   * is the only time they can be seen. Nothing about the effect changes — this
+   * is the same code, mounted for the half second it is actually doing
+   * something instead of for the whole session.
+   *
+   * The check is `!== 0` rather than a threshold, so the wash still fades out
+   * with the card as it springs back rather than being cut off.
+   */
+  const [live, setLive] = useState(false);
+  const liveRef = useRef(false);
   const checkThreshold = useCallback(() => {
+    const dx = x.get();
+    const dy = y.get();
     const past =
-      Math.abs(x.get()) > SWIPE_X_THRESHOLD || -y.get() > SWIPE_UP_THRESHOLD;
+      Math.abs(dx) > SWIPE_X_THRESHOLD || -dy > SWIPE_UP_THRESHOLD;
     if (past !== wasPast.current) {
       wasPast.current = past;
       if (past) haptic("tick", settings.haptics);
+    }
+    const moving = Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5;
+    if (moving !== liveRef.current) {
+      liveRef.current = moving;
+      setLive(moving);
     }
   }, [x, y, settings.haptics]);
   useMotionValueEvent(x, "change", checkThreshold);
@@ -107,13 +134,10 @@ export default function SwipeDeck() {
       setForcedExit(null);
       const top = swipeTop(action);
       if (!top) return;
-      const at = Date.now();
       wasPast.current = false;
       haptic("commit", settings.haptics);
-      setLeaving((l) => [...l, { title: top, action, at }]);
-      setTimeout(() => setLeaving((l) => l.filter((c) => c.at !== at)), 560);
-      setBurst({ id: at, action });
-      setTimeout(() => setBurst((b) => (b && b.id === at ? null : b)), 420);
+      leavingRef.current?.fire(top, action);
+      burstRef.current?.fire(action);
     },
     [swipeTop, settings.haptics]
   );
@@ -246,21 +270,13 @@ export default function SwipeDeck() {
       className="swipe-stage relative mx-auto flex w-full max-w-md flex-col items-center overflow-hidden px-4 pt-4"
       style={{ height: "calc(100dvh - 74px - env(safe-area-inset-bottom))" }}
     >
-      <ScreenFeedback
-        layer="back"
-        x={x}
-        y={y}
-        upAction={settings.swipeUp}
-        enabled={settings.screenFeedback}
-      />
-      <ScreenFeedback
-        layer="front"
-        x={x}
-        y={y}
-        upAction={settings.swipeUp}
-        enabled={settings.screenFeedback}
-      />
-      <SwipeBurst burst={burst} />
+      {live && settings.screenFeedback && (
+        <>
+          <ScreenFeedback layer="back" x={x} y={y} upAction={settings.swipeUp} />
+          <ScreenFeedback layer="front" x={x} y={y} upAction={settings.swipeUp} />
+        </>
+      )}
+      <SwipeBurst ref={burstRef} />
 
       {/*
         THE NAME, WHERE A HEADING WAS GOING TO BE ANYWAY.
@@ -333,54 +349,8 @@ export default function SwipeDeck() {
               )}
             </AnimatePresence>
 
-            {/* already answered, still flying — inert, so the live card under
-                it takes the next gesture immediately */}
-            {leaving.map(({ title, action, at }) => (
-              <motion.div
-                key={`leaving-${at}`}
-                className="pointer-events-none absolute inset-0 z-40"
-                /* starts roughly where the thumb let go, so the hand-off from
-                   the real card to this copy is not visible */
-                initial={
-                  action === "liked"
-                    ? { x: 130, y: -10, rotate: 8, opacity: 1, scale: 1 }
-                    : action === "disliked"
-                      ? { x: -130, y: -10, rotate: -8, opacity: 1, scale: 1 }
-                      : { x: 0, y: -120, rotate: 0, opacity: 1, scale: 1 }
-                }
-                animate={
-                  action === "liked"
-                    ? { x: 640, y: -90, rotate: 24, opacity: 0, scale: 0.92 }
-                    : action === "disliked"
-                      ? { x: -640, y: -90, rotate: -24, opacity: 0, scale: 0.92 }
-                      : { x: 0, y: -780, rotate: 0, opacity: 0, scale: 0.9 }
-                }
-                transition={{ duration: 0.52, ease: EASE_SWEEP }}
-              >
-                {/**
-                  * A picture of the card, not another card.
-                  *
-                  * This used to mount a whole `PosterArt` — a React subtree and
-                  * a fresh `<img>` — at the exact instant the finger lifts,
-                  * which is the one moment in the interaction that cannot
-                  * afford any work. Measured by removing it entirely: it cost
-                  * 9 of the 24 frames lost in the half-second after a swipe.
-                  */}
-                <div
-                  className="soft-card relative h-full w-full overflow-hidden bg-surface-2 bg-cover bg-center"
-                  style={
-                    title.posterPath
-                      ? {
-                          backgroundImage: `url(https://image.tmdb.org/t/p/w500${title.posterPath})`,
-                        }
-                      : undefined
-                  }
-                  aria-hidden
-                >
-                  <div className="card-sheen absolute inset-0" />
-                </div>
-              </motion.div>
-            ))}
+            <LeavingCards ref={leavingRef} />
+
             <AnimatePresence initial={false}>
               {queue.slice(0, 3).map((title, i) => (
                 <SwipeCard

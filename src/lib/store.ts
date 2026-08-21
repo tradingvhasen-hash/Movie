@@ -10,7 +10,7 @@ import {
   revertSwipe,
   type TasteProfile,
 } from "@/lib/engine/taste";
-import { getLocalTitle, vectorOf } from "@/lib/catalog";
+import { getLocalItem, getLocalTitle, vectorOf } from "@/lib/catalog";
 
 /**
  * A stable per-user number mixed into every ranking tie-break and every
@@ -177,6 +177,15 @@ interface DhawqState {
 
   setPublicProfile: (p: { name: string; bio: string; avatarUrl: string }) => void;
   setSettings: (patch: Partial<Settings>) => void;
+  /**
+   * Drop title snapshots the catalog can supply.
+   *
+   * Called once the catalog is in memory, for libraries saved by a build that
+   * stored one with every swipe. It cannot run at load time because the
+   * migration hook runs before the catalog exists — there is nothing to check
+   * against yet — so it happens the moment there is.
+   */
+  compactSwipes: () => void;
   createList: (name: string) => string;
   deleteList: (id: string) => void;
   renameList: (id: string, name: string) => void;
@@ -247,6 +256,22 @@ export const useDhawq = create<DhawqState>()(
       setSettings: (patch) =>
         set((s) => ({ settings: { ...s.settings, ...patch } })),
 
+      compactSwipes: () =>
+        set((s) => {
+          let changed = 0;
+          const slim: Record<string, Swipe> = {};
+          for (const [id, sw] of Object.entries(s.swipes)) {
+            if (sw.title && getLocalItem(id)) {
+              const { title: _drop, ...rest } = sw;
+              slim[id] = rest;
+              changed++;
+            } else {
+              slim[id] = sw;
+            }
+          }
+          return changed > 0 ? { swipes: slim } : {};
+        }),
+
       learnPasses: (titles) =>
         set((s) => {
           const already = new Set(s.passed);
@@ -271,7 +296,33 @@ export const useDhawq = create<DhawqState>()(
           return {
             swipes: {
               ...s.swipes,
-              [title.id]: { titleId: title.id, action, at: Date.now(), title: snapshot(title) },
+              /**
+               * The snapshot is only kept for a title the catalog does not
+               * have.
+               *
+               * Every swipe used to carry a ~490-byte copy of its own title,
+               * and the whole store is re-serialised to localStorage on every
+               * write. At 900 titles that is half a megabyte of `JSON.stringify`
+               * plus a synchronous `setItem` — profiled at 472ms of frozen main
+               * thread across ten swipes on a phone-speed CPU, and it gets
+               * worse with every film added. The stated goal for this product
+               * is a library of *thousands*, so a per-swipe cost that grows
+               * with the library is the one cost that cannot be allowed to
+               * stand.
+               *
+               * The copy was insurance against the catalog changing under a
+               * stored library, and every reader already spells it
+               * `getLocalTitle(id) ?? sw.title`. So it is kept exactly where it
+               * is still insurance — a title the bundled catalog cannot name —
+               * and dropped for the 99% of swipes where it is a duplicate of
+               * data already on disk in catalog.json.
+               */
+              [title.id]: {
+                titleId: title.id,
+                action,
+                at: Date.now(),
+                title: getLocalItem(title.id) ? undefined : snapshot(title),
+              },
             },
             swipeOrder: [...s.swipeOrder.filter((id) => id !== title.id), title.id],
             profile,

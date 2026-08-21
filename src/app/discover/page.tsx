@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import PosterArt from "@/components/PosterArt";
@@ -11,8 +11,8 @@ import {
   ThumbsDownIcon,
   XIcon,
 } from "@/components/ui/Icons";
-import { getLocalCatalog, getLocalTitle, loadCatalog, vectorOf } from "@/lib/catalog";
-import { recommend } from "@/lib/engine/recommend";
+import { getLocalTitle, loadCatalog } from "@/lib/catalog";
+import { rank } from "@/lib/engine/rank-client";
 import { genreLabel } from "@/lib/genres";
 import { EASE_OUT, FADE_UP, SECTION, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
 import { haptic } from "@/lib/haptics";
@@ -68,27 +68,58 @@ export default function DiscoverPage() {
     };
   }, []);
 
-  const recs: Recommendation[] = useMemo(() => {
-    if (!hydrated) return [];
-    const pool = getLocalCatalog();
+  /**
+   * The answers, ranked on a worker thread.
+   *
+   * This was a `useMemo` running the full ranker inline, and it was the single
+   * worst moment in the whole app: measured on a phone-speed CPU, **1,261ms of
+   * completely frozen page** every time this tab was opened. The page could
+   * not paint, the tab bar could not respond, and the nav animation the viewer
+   * had just triggered stopped mid-way — which is exactly the "one frame per
+   * second" the user described.
+   *
+   * It is the same function on the same data; it simply runs somewhere the
+   * interface is not. The screen paints immediately and the grid arrives when
+   * it is ready, which on the same phone is about a second later — a second
+   * during which everything still moves.
+   */
+  const [recs, setRecs] = useState<Recommendation[]>([]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    let stale = false;
     // discover shows unwatched titles: rated ones are excluded, "not seen" stays
-    const exclude = new Set(
-      Object.values(swipes)
-        .filter((s) => s.action !== "not_seen")
-        .map((s) => s.titleId)
-    );
-    const likedTitles = Object.values(swipes)
+    const exclude = Object.values(swipes)
+      .filter((s) => s.action !== "not_seen")
+      .map((s) => s.titleId);
+    const likedIds = Object.values(swipes)
       .filter((s) => s.action === "liked")
-      .map((s) => getLocalTitle(s.titleId) ?? s.title)
-      .filter((x): x is NonNullable<typeof x> => Boolean(x));
-    return recommend(pool, profile, {
+      .map((s) => s.titleId);
+
+    void rank({
+      mode: "discover",
+      profile,
       excludeIds: exclude,
       count: 25,
-      likedTitles,
       seed,
-      vectorFor: vectorOf,
-      mode: "discover",
+      likedIds,
+      dislikedIds: [],
+      withReasons: true,
+    }).then((r) => {
+      if (stale) return;
+      setRecs(
+        r.titles.map((title, i) => ({
+          title,
+          score: 0,
+          match: r.match[i],
+          reasons: r.reasons[i].map((label) => ({ kind: "", label })),
+          becauseOf: r.becauseOf[i] ?? undefined,
+        }))
+      );
     });
+    return () => {
+      stale = true;
+    };
   }, [hydrated, swipes, profile, seed]);
 
   const ratedCount = profile.ratedSwipes;
@@ -178,11 +209,10 @@ export default function DiscoverPage() {
               animate="show"
               className="mt-4 grid grid-cols-3 gap-2.5 sm:grid-cols-4 md:grid-cols-6"
             >
-              <AnimatePresence mode="popLayout">
+              <AnimatePresence>
                 {rest.map((rec) => (
                   <motion.button
                     key={rec.title.id}
-                    layout
                     variants={FADE_UP}
                     exit={{ opacity: 0, scale: 0.9 }}
                     whileTap={{ scale: 0.94 }}

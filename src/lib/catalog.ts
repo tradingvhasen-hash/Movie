@@ -20,6 +20,20 @@ import type { Title } from "@/lib/types";
  * The small bundled sample set is the fallback before the fetch resolves (and
  * if it ever fails), so the app is never empty.
  */
+/**
+ * Lean mode: everything a *ranker* needs and nothing a screen needs.
+ *
+ * The worker copy of the catalog is used only for scoring, so it skips the
+ * 1.28 MB of plot summaries and the search index — neither is ever read on
+ * that thread, and fetching them would double a download for nothing. The
+ * summaries still come over the wire once, on the main thread, for the card
+ * back that displays them.
+ */
+let lean = false;
+export function setLeanMode() {
+  lean = true;
+}
+
 let items: CandidateItem[] | null = null;
 let byId = new Map<string, CandidateItem>();
 let loadPromise: Promise<CandidateItem[]> | null = null;
@@ -104,8 +118,18 @@ export function loadCatalog(): Promise<CandidateItem[]> {
        */
       await attachReach(titles);
       const ready = build(titles);
-      // deliberately not awaited: the deck does not need prose to deal a card
-      void attachOverviews(titles);
+      if (!lean) {
+        // deliberately not awaited: the deck does not need prose to deal a card
+        void attachOverviews(titles);
+        /**
+         * Prepare the search text while nothing else is happening.
+         *
+         * Dynamic so this module keeps no import cycle with `search.ts`, which
+         * reads the catalog. See `warmSearchIndex` for why it exists at all: it
+         * is the difference between a keystroke costing 2ms and 457ms.
+         */
+        void import("./search").then((m) => m.warmSearchIndex());
+      }
       return ready;
     } catch {
       return fallback();

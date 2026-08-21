@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, LayoutGroup, motion } from "framer-motion";
 import TitleTile from "@/components/TitleTile";
@@ -14,8 +14,8 @@ import {
   ThumbsDownIcon,
   TrashIcon,
 } from "@/components/ui/Icons";
-import { matches } from "@/lib/search";
-import { getLocalCatalog, getLocalTitle, loadCatalog } from "@/lib/catalog";
+import { matches, searchCatalog } from "@/lib/search";
+import { getLocalTitle, loadCatalog } from "@/lib/catalog";
 import { EASE_OUT, FADE_UP, QUICK, SECTION, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
 import { haptic } from "@/lib/haptics";
 import { useDhawq } from "@/lib/store";
@@ -69,7 +69,23 @@ export default function LibraryPage() {
 
   const [tab, setTab] = useState<Tab>("watched");
   const [filter, setFilter] = useState<Filter>("all");
-  const [query, setQuery] = useState("");
+  /**
+   * THE FIELD KEEPS ITS OWN TEXT. THE PAGE ONLY HEARS THE PAUSES.
+   *
+   * This was one `query` state on the page, and it is the clearest measurement
+   * in the whole performance pass. With a 900-title library, typing six
+   * characters cost 19 blocked frames totalling 2.6 seconds — **and it cost
+   * exactly the same when the query matched nothing at all**, with posters
+   * disabled. So it was neither the search nor the results nor the images: it
+   * was that every keystroke re-rendered this component, and this component
+   * renders forty-eight tiles, each of which is three motion components.
+   * A hundred and fifty animated elements reconciled per letter typed.
+   *
+   * The text now lives inside the field, where the only thing that re-renders
+   * when you type is the field. The page is told 140ms after you stop, which
+   * is when it has something new to show anyway.
+   */
+  const [settled, setSettled] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [catalogReady, setCatalogReady] = useState(false);
 
@@ -88,27 +104,56 @@ export default function LibraryPage() {
   const filtered = useMemo(() => {
     let rows = watched;
     if (filter !== "all") rows = rows.filter((sw) => sw.action === filter);
-    if (query.trim()) {
+    if (settled.trim()) {
       rows = rows.filter((sw) => {
         const title = getLocalTitle(sw.titleId) ?? sw.title;
-        return Boolean(title && matches(title, query));
+        return Boolean(title && matches(title, settled));
       });
     }
     return rows;
-  }, [watched, filter, query]);
+  }, [watched, filter, settled]);
 
-  /** the rest of the catalog, for a title that is not in the library yet */
+  /**
+   * The rest of the catalog, for a title that is not in the library yet.
+   *
+   * Through the prepared index rather than a filter over 15,027 titles calling
+   * `matches()` — which normalised three strings per title per keystroke and
+   * cost 457ms of frozen main thread for every character. See lib/search.ts.
+   */
   const elsewhere = useMemo(() => {
     void catalogReady;
-    if (query.trim().length < 2) return [] as Title[];
-    return getLocalCatalog()
-      .filter((c) => !swipes[c.title.id] && matches(c.title, query))
-      .sort((a, b) => b.title.voteCount - a.title.voteCount)
-      .slice(0, 24)
-      .map((c) => c.title);
-  }, [query, swipes, catalogReady]);
+    if (settled.trim().length < 2) return [] as Title[];
+    return searchCatalog(settled, { limit: 24, skip: (id) => Boolean(swipes[id]) });
+  }, [settled, swipes, catalogReady]);
 
-  const searching = query.trim().length >= 2;
+  const searching = settled.trim().length >= 2;
+
+  /**
+   * A page at a time, because the stated goal for this product is every film a
+   * person has ever watched.
+   *
+   * A library of two thousand titles is the *success* case, and rendering two
+   * thousand animated tiles is several seconds of frozen page followed by a
+   * grid that scrolls at a few frames a second. Two dozen at a time — about
+   * two screens — with more added as the bottom comes into view, costs the
+   * same whether the library holds fifty or five thousand.
+   */
+  const PAGE = 24;
+  const [shown, setShown] = useState(PAGE);
+  useEffect(() => setShown(PAGE), [filter, settled, tab]);
+  const sentinel = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const node = sentinel.current;
+    if (!node || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) setShown((n) => n + PAGE);
+      },
+      { rootMargin: "600px" }
+    );
+    io.observe(node);
+    return () => io.disconnect();
+  }, [filtered.length, tab]);
 
   return (
     <motion.div
@@ -167,35 +212,7 @@ export default function LibraryPage() {
         ) : (
           <motion.div key="watched" variants={SECTION} initial="hidden" animate="show" exit="exit">
             {/* one field, two corpora */}
-            <motion.label
-              variants={FADE_UP}
-              className="mt-4 flex items-center gap-2.5 rounded-2xl border border-line bg-surface px-4 py-3 transition-colors focus-within:border-accent"
-            >
-              <SearchIcon size={18} className="shrink-0 text-ink-faint" />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder={t("library.search")}
-                className="w-full bg-transparent text-base outline-none placeholder:text-ink-faint"
-              />
-              <AnimatePresence>
-                {query && (
-                  <motion.button
-                    type="button"
-                    initial={{ opacity: 0, scale: 0.7 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.7 }}
-                    onClick={() => setQuery("")}
-                    className="shrink-0 text-ink-faint"
-                    aria-label={t("common.close")}
-                  >
-                    <span className="grid h-5 w-5 place-items-center rounded-full bg-surface-2 text-xs">
-                      ×
-                    </span>
-                  </motion.button>
-                )}
-              </AnimatePresence>
-            </motion.label>
+            <SearchField onSettled={setSettled} />
 
             {/* filters — the active pill slides between options */}
             <LayoutGroup id="library-filters">
@@ -263,9 +280,20 @@ export default function LibraryPage() {
                   exit="exit"
                   className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4"
                 >
-                  {/* popLayout lets removed tiles shrink away while the rest reflow */}
-                  <AnimatePresence mode="popLayout">
-                    {filtered.map((sw) => (
+                  {/*
+                    Plain AnimatePresence, not `mode="popLayout"`.
+
+                    popLayout wraps every child in a component that reads
+                    `offsetParent`, `offsetWidth` and `offsetHeight` in
+                    `getSnapshotBeforeUpdate` — three forced synchronous
+                    layouts per tile per render. Profiled at 990ms across ten
+                    swipes with a large library. It exists so that a removed
+                    tile can be taken out of flow while it animates out; the
+                    tiles here shrink and fade in place, which needs none of
+                    that.
+                  */}
+                  <AnimatePresence>
+                    {filtered.slice(0, shown).map((sw) => (
                       <LibraryTile
                         key={sw.titleId}
                         swipe={sw}
@@ -283,6 +311,9 @@ export default function LibraryPage() {
                 </motion.div>
               )}
             </AnimatePresence>
+
+            {/* more tiles arrive as this comes into view */}
+            {filtered.length > shown && <div ref={sentinel} className="h-4" />}
 
             {/* ── the rest of the catalog, once there is a query ── */}
             <AnimatePresence initial={false}>
@@ -332,6 +363,48 @@ export default function LibraryPage() {
 }
 
 /**
+ * The search box, isolated so that typing costs one component's render.
+ *
+ * It is a `motion.label` for the same entrance as its neighbours and nothing
+ * more; the value never leaves it until the typing stops.
+ */
+function SearchField({ onSettled }: { onSettled: (v: string) => void }) {
+  const [value, setValue] = useState("");
+
+  useEffect(() => {
+    const id = setTimeout(() => onSettled(value), 140);
+    return () => clearTimeout(id);
+  }, [value, onSettled]);
+
+  return (
+    <motion.label
+      variants={FADE_UP}
+      className="mt-4 flex items-center gap-2.5 rounded-2xl border border-line bg-surface px-4 py-3 transition-colors focus-within:border-accent"
+    >
+      <SearchIcon size={18} className="shrink-0 text-ink-faint" />
+      <input
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder={t("library.search")}
+        className="w-full bg-transparent text-base outline-none placeholder:text-ink-faint"
+      />
+      {value && (
+        <button
+          type="button"
+          onClick={() => setValue("")}
+          className="shrink-0 text-ink-faint transition-transform active:scale-90"
+          aria-label={t("common.close")}
+        >
+          <span className="grid h-5 w-5 place-items-center rounded-full bg-surface-2 text-xs">
+            ×
+          </span>
+        </button>
+      )}
+    </motion.label>
+  );
+}
+
+/**
  * A title you have not logged, with the three answers attached.
  *
  * The verdicts are the same three the deck offers and they are drawn in the
@@ -349,7 +422,6 @@ function LogRow({
 }) {
   return (
     <motion.div
-      layout
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.97 }}

@@ -25,6 +25,7 @@
  * It ends before the next card finishes settling, on purpose: overlap is what
  * makes an interface feel busy instead of fast.
  */
+import { forwardRef, useImperativeHandle, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowUpIcon, EyeIcon, HeartIcon, ThumbsDownIcon } from "./ui/Icons";
 import { EASE_OUT } from "@/lib/motion";
@@ -54,11 +55,41 @@ const GLYPH = {
 
 const DUR = 0.3;
 
-export default function SwipeBurst({
-  burst,
-}: {
-  burst: { id: number; action: SwipeAction } | null;
-}) {
+export interface BurstHandle {
+  fire: (action: SwipeAction) => void;
+}
+
+/**
+ * IT OWNS ITS OWN LIFE, AND THAT IS A PERFORMANCE DECISION.
+ *
+ * The burst used to be a piece of the deck's state: the deck set it on a
+ * swipe and cleared it on a timer. Two extra renders of the deck per swipe —
+ * and a render of the deck is a render of three cards, which framer-motion
+ * follows with a projection pass that measures the tree. Profiled on a
+ * phone-speed CPU, that measuring was the largest single named cost of a
+ * swipe.
+ *
+ * Nothing above it needs to know this effect exists, so nothing above it is
+ * told. The deck calls `fire()` on a ref; the burst starts, plays and clears
+ * itself, and the deck renders exactly once per swipe — the once it genuinely
+ * has to, to advance the queue.
+ */
+const SwipeBurst = forwardRef<BurstHandle>(function SwipeBurst(_props, ref) {
+  const [burst, setBurst] = useState<{ id: number; action: SwipeAction } | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useImperativeHandle(ref, () => ({
+    fire(action: SwipeAction) {
+      const id = Date.now();
+      setBurst({ id, action });
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = setTimeout(
+        () => setBurst((b) => (b && b.id === id ? null : b)),
+        (DUR + 0.16) * 1000
+      );
+    },
+  }));
+
   const action = burst?.action;
   const Icon = action ? GLYPH[action] : null;
   const tint = action ? TINT[action] : "";
@@ -117,4 +148,6 @@ export default function SwipeBurst({
       )}
     </AnimatePresence>
   );
-}
+});
+
+export default SwipeBurst;

@@ -194,8 +194,23 @@ export default function SwipeCard({
           : px < -SWIPE_X_THRESHOLD
             ? "disliked"
             : null;
-    onDragActive?.(false);
-    if (!action) return;
+    /**
+     * A gesture that commits does NOT switch the screen feedback off here.
+     *
+     * It used to, and on a flick that meant the wash existed for about forty
+     * milliseconds — the whole gesture — and was gone before the eye
+     * registered it. The user: "it is thrown so fast that the glow and the
+     * rest have no time to appear." A verdict is exactly the moment the colour
+     * should be at its loudest, not the moment it is switched off.
+     *
+     * The deck now owns that: it holds the wash while the card flies and eases
+     * it out behind it. A gesture that commits nothing still turns it off
+     * immediately, because there is nothing to celebrate.
+     */
+    if (!action) {
+      onDragActive?.(false);
+      return;
+    }
     setExiting(action);
     onSwipe(action);
   }
@@ -224,12 +239,15 @@ export default function SwipeCard({
    * continues from exactly where the finger left it instead of jumping back to
    * a hardcoded start position.
    */
-  useEffect(() => {
-    if (!activeExit) return;
-    sharedX?.set(0);
-    sharedY?.set(0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeExit]);
+  /**
+   * The shared position is deliberately NOT reset here any more.
+   *
+   * Zeroing it the instant a card began leaving snapped the whole-screen wash
+   * off in one frame. The mirror above already stops writing once `activeExit`
+   * is set, so the value simply holds where the finger left it — and the deck
+   * eases it back to zero behind the departing card, which is what makes the
+   * colour follow the throw out instead of vanishing with the thumb.
+   */
 
   /**
    * Where a thrown card goes, and how long you get to watch it.
@@ -238,6 +256,9 @@ export default function SwipeCard({
    * most of the distance in the first fifth of the time, so even at a full
    * sixty frames the card was effectively gone in under 200ms. A throw should
    * *travel*.
+   *
+   * That was the right diagnosis and an insufficient fix — see the transition
+   * below, where the actual measurements are.
    */
   const exitPose =
     activeExit === "liked"
@@ -288,13 +309,62 @@ export default function SwipeCard({
       }}
       animate={restingPose}
       transition={{ ...SPRING_SETTLE, opacity: { duration: 0.35 } }}
+      /**
+       * THE CARD IS NOT ALLOWED TO LEAVE FASTER THAN YOU CAN WATCH IT.
+       *
+       * The user: "if you drag it and throw it, it is thrown so fast that the
+       * glow and the rest have no time to appear." And, crucially, that
+       * dragging slowly while keeping your finger down looks fine. Two
+       * different speeds for the same journey means the *gesture* was feeding
+       * the animation, and it was, in two ways I had to measure to see:
+       *
+       *   off-screen at   slow drag 483ms   flick 284ms
+       *   fully faded at  slow drag 567ms   flick 417ms
+       *
+       * 1. THE EASE WAS FRONT-LOADED. cubic-bezier(0.25, 0.6, 0.35, 1) puts
+       *    60% of the distance in the first quarter of the time. The card then
+       *    spent 230ms creeping through its last 12%, off-screen, where nobody
+       *    can see it — which is why my earlier "700ms flight" number looked
+       *    fine and the screen did not. It is near-linear now, with only a
+       *    soft landing, so the card crosses the screen at a speed the eye can
+       *    follow.
+       *
+       * 2. OPACITY RODE THE SAME CURVE. The card was 85% transparent 417ms in
+       *    — it did not fly away so much as evaporate. It now holds full
+       *    opacity until it is already off the screen, and fades over the last
+       *    200ms, when the fade is doing cleanup rather than the exit itself.
+       *
+       * And `dragMomentum={false}` is the third: framer adds inertia after the
+       * finger leaves, so a flick started the exit already travelling and
+       * already displaced. That made a throw a completely different animation
+       * from a drag — the exact difference the user described. A verdict is a
+       * verdict; it should look the same however hard you threw it.
+       */
       exit={{
         ...exitPose,
-        transition: { duration: 0.56, ease: [0.25, 0.6, 0.35, 1] },
+        transition: {
+          duration: 0.56,
+          ease: [0.32, 0.3, 0.55, 0.98],
+          opacity: { duration: 0.2, delay: 0.36, ease: "linear" },
+        },
       }}
       drag={isTop && !activeExit}
       dragElastic={0.55}
-      dragTransition={{ bounceStiffness: 260, bounceDamping: 26 }}
+      dragMomentum={false}
+      /**
+       * There is no downward verdict, so downward should not be a gesture.
+       *
+       * It was: the card could be dragged 454px down and then took 1,750ms to
+       * drift back, during which the deck looked stuck. The user called it a
+       * freeze, and from the outside it is one — nearly two seconds where the
+       * card is somewhere it should never have been and nothing responds.
+       *
+       * `bottom: 0` pins the card to its resting line; `dragElastic` still
+       * lets it give a little under the thumb, so it feels like a card that
+       * will not go that way rather than a card that is broken. Up, left and
+       * right are untouched.
+       */
+      dragConstraints={{ bottom: 0 }}
       onDragStart={() => onDragActive?.(true)}
       onDragEnd={handleDragEnd}
       onPointerDown={handlePointerDown}

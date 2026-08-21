@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion, useMotionValue, useMotionValueEvent } from "framer-motion";
+import { AnimatePresence, animate, motion, useMotionValue, useMotionValueEvent } from "framer-motion";
 import SwipeCard, { SWIPE_UP_THRESHOLD, SWIPE_X_THRESHOLD } from "./SwipeCard";
 import SwipeBurst, { type BurstHandle } from "./SwipeBurst";
 import ScreenFeedback from "./ScreenFeedback";
@@ -128,6 +128,41 @@ export default function SwipeDeck() {
    * into another film mid-flight, which is exactly what the user described
    * and I could not find until his recording was slowed to sixty frames.
    */
+  /**
+   * THE COLOUR FOLLOWS THE CARD OUT.
+   *
+   * The wash used to die the instant the finger lifted. On a slow drag that is
+   * invisible, because the wash has already been on screen for a second. On a
+   * flick the whole gesture is forty milliseconds, so the wash appeared and
+   * was cut off inside a single blink — which is what the user meant by "the
+   * glow has no time to appear".
+   *
+   * So when a *finger* commits a verdict, the shared position holds where he
+   * let go and is then eased back to zero across the card's flight, with a
+   * curve that stays high and drops late. The wash is at full strength while
+   * the card is crossing the screen and gone by the time it lands. No new
+   * layer is involved: this rides the transforms ScreenFeedback already reads,
+   * which is why it is done here rather than by fading a wrapper.
+   *
+   * A button press never lit it in the first place, so `liveRef` is false and
+   * none of this runs — tapping a verdict still costs nothing, which was its
+   * own bug once.
+   */
+  const settleRef = useRef<ReturnType<typeof animate> | null>(null);
+  const liveRef = useRef(false);
+
+  const dragActive = useCallback(
+    (on: boolean) => {
+      if (on) {
+        settleRef.current?.stop();
+        settleRef.current = null;
+      }
+      liveRef.current = on;
+      setLive(on);
+    },
+    []
+  );
+
   const handleSwipe = useCallback(
     (action: SwipeAction) => {
       const top = swipeTop(action);
@@ -137,8 +172,21 @@ export default function SwipeDeck() {
       // the departing card reads this to know which way to go
       setExitOf({ id: top.id, action });
       burstRef.current?.fire(action);
+
+      if (liveRef.current) {
+        /* holds for the first half, then recedes — see above */
+        const ease: [number, number, number, number] = [0.7, 0, 0.85, 1];
+        settleRef.current?.stop();
+        void animate(y, 0, { duration: 0.46, ease });
+        settleRef.current = animate(x, 0, { duration: 0.46, ease });
+        void settleRef.current.then(() => {
+          settleRef.current = null;
+          liveRef.current = false;
+          setLive(false);
+        });
+      }
     },
-    [swipeTop, settings.haptics]
+    [swipeTop, settings.haptics, x, y]
   );
 
   // a button press is the same commit, just without a finger to lift
@@ -380,7 +428,7 @@ export default function SwipeDeck() {
                   onSwipe={handleSwipe}
                   forcedExit={exitOf?.id === title.id ? exitOf.action : null}
                   upAction={settings.swipeUp}
-                  onDragActive={i === 0 ? setLive : undefined}
+                  onDragActive={i === 0 ? dragActive : undefined}
                   x={i === 0 ? x : undefined}
                   y={i === 0 ? y : undefined}
                 />

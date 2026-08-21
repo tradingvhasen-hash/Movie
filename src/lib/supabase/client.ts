@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { isSupabaseConfigured } from "./configured";
 
 /**
  * Optional cloud layer. The app is fully functional without it (local mode);
@@ -6,11 +7,10 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
  * cloud features light up: auth, cross-device sync, public share links and
  * the full seeded TMDB catalog.
  */
-export function isSupabaseConfigured(): boolean {
-  return Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  );
-}
+/* re-exported so existing callers of this module are unchanged; the
+   definition lives in `configured.ts` so that asking the question does not
+   drag the SDK in — see that file */
+export { isSupabaseConfigured };
 
 let browserClient: SupabaseClient | null = null;
 

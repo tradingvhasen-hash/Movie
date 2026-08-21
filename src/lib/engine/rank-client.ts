@@ -17,7 +17,6 @@
  * the product when it fails is not an optimisation.
  */
 import { getLocalCatalog, getLocalItem, vectorOf } from "@/lib/catalog";
-import { recommend } from "./recommend";
 import type { RankReply, RankRequest } from "./rank-worker";
 import type { TasteProfile } from "./taste";
 import type { Title } from "@/lib/types";
@@ -84,7 +83,23 @@ export function warmRanker() {
   getWorker();
 }
 
-function runHere(q: RankQuery): RankResult {
+/**
+ * THE SAFETY NET IS NOT LOADED UNTIL IT IS NEEDED.
+ *
+ * `recommend.ts` is 2,154 lines and this file used to import it at the top —
+ * so the entire ranking engine was registered and evaluated on the main
+ * thread, on the first screen, as part of the 434ms the module runtime spends
+ * starting the app. For a code path that runs only if the browser has no
+ * `Worker`, or the worker throws, or a profile will not structured-clone.
+ *
+ * A dynamic import moves it off the opening entirely and changes nothing about
+ * the guarantee: `rank()` already returns a promise, so awaiting the module is
+ * invisible to every caller, and the fallback still produces the identical
+ * answer from the identical code. The worker, which is where this actually
+ * runs, imports it directly on its own thread as it always did.
+ */
+async function runHere(q: RankQuery): Promise<RankResult> {
+  const { recommend } = await import("./recommend");
   const titlesFor = (ids: string[]) => {
     const out: Title[] = [];
     for (const id of ids) {
@@ -113,7 +128,7 @@ function runHere(q: RankQuery): RankResult {
 
 export function rank(q: RankQuery): Promise<RankResult> {
   const w = getWorker();
-  if (!w) return Promise.resolve(runHere(q));
+  if (!w) return runHere(q);
 
   const id = nextId++;
   const req: RankRequest = {

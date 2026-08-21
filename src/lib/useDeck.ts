@@ -5,7 +5,7 @@ import { getLocalCatalog, getLocalItem, loadCatalog, vectorOf } from "@/lib/cata
 import { rank, warmRanker } from "@/lib/engine/rank-client";
 import { COLD_START_TARGET, isCalibrating } from "@/lib/engine/taste";
 import { useDhawq } from "@/lib/store";
-import { isSupabaseConfigured } from "@/lib/supabase/client";
+import { isSupabaseConfigured } from "@/lib/supabase/configured";
 import type { SwipeAction, Title } from "@/lib/types";
 
 /** cards rendered as a stack; more than three are never visible */

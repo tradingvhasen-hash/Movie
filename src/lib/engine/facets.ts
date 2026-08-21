@@ -261,6 +261,128 @@ export function buildRarityIndex(titles: Title[]): void {
   rarityReady = true;
 }
 
+/* ── the same index, without owning the first second of the app ────────── */
+
+/**
+ * THE 1.2-SECOND FRAME.
+ *
+ * `buildRarityIndex` walks all 15,083 titles and every keyword, actor,
+ * director and genre in them. Measured: 206ms on this machine, which is about
+ * **1,234ms on the phone the user is holding** — and it ran on the main
+ * thread, synchronously, the moment the catalog finished downloading, which is
+ * the moment the welcome animation is playing.
+ *
+ * That is the stall he described as "one frame per second", and I had spent
+ * two days looking for it in the compositor. It was never a paint. His
+ * recording showed the opening animation jumping between poses because the
+ * main thread was gone for a second and a quarter, counting words.
+ *
+ * NOTHING NEEDS IT THAT EARLY. Ranking runs in the worker, which builds its
+ * own copy on its own thread. The only main-thread reader is `taste.ts`, when
+ * a swipe is applied — and the first swipe cannot happen until the demo has
+ * finished and a human has tapped through the taste picker. So this builds it
+ * in slices during idle time, and `ensureRarityIndex()` finishes the job
+ * synchronously if anything asks first.
+ *
+ * Being unfinished is safe by construction: `rarityOf` returns 1 — "averagely
+ * informative" — for as long as `rarityReady` is false, which is the same
+ * behaviour as the bundled sample set and every test that never calls this.
+ */
+type Pending = {
+  titles: Title[];
+  i: number;
+  n: number;
+  df: Record<FacetKind, Map<string, number>>;
+};
+let pending: Pending | null = null;
+
+/**
+ * How many titles per slice.
+ *
+ * First tried at 1200, which measured 70-110ms per slice on a phone-speed CPU
+ * — better than one 1,234ms block, but every slice was still a dropped frame.
+ * 400 puts a slice at roughly 25-35ms, which fits inside the idle budget of a
+ * frame that is already animating.
+ */
+const SLICE = 400;
+
+function emptyDf(): Record<FacetKind, Map<string, number>> {
+  return {
+    story: new Map(),
+    genre: new Map(),
+    cast: new Map(),
+    director: new Map(),
+    era: new Map(),
+    language: new Map(),
+    fame: new Map(),
+  };
+}
+
+function step(p: Pending, upTo: number): void {
+  const end = Math.min(p.n, upTo);
+  for (; p.i < end; p.i++) {
+    const tokens = titleTokens(p.titles[p.i]);
+    for (const kind of FACET_KINDS) {
+      for (const token of new Set(tokens[kind])) {
+        p.df[kind].set(token, (p.df[kind].get(token) ?? 0) + 1);
+      }
+    }
+  }
+}
+
+function finalise(p: Pending): void {
+  for (const kind of FACET_KINDS) {
+    const table: Record<string, number> = {};
+    for (const [token, count] of p.df[kind]) {
+      table[token] = Math.max(RARITY_MIN, 1 - count / p.n);
+    }
+    rarity[kind] = table;
+  }
+  rarityReady = true;
+  pending = null;
+}
+
+/**
+ * Build the index across idle callbacks instead of in one block.
+ *
+ * Idle time is exactly the right currency here: while the welcome animation is
+ * running there is none, so nothing is stolen from it; the moment the screen
+ * settles into the taste picker waiting for a human to tap, there is plenty.
+ */
+export function buildRarityIndexIdle(titles: Title[]): void {
+  const n = titles.length;
+  if (n === 0) return;
+  const p: Pending = { titles, i: 0, n, df: emptyDf() };
+  pending = p;
+
+  const idle: (cb: () => void) => void =
+    typeof requestIdleCallback === "function"
+      ? (cb) => requestIdleCallback(() => cb(), { timeout: 2000 })
+      : (cb) => setTimeout(cb, 24);
+
+  const pump = () => {
+    if (pending !== p) return; // someone forced it to finish already
+    step(p, p.i + SLICE);
+    if (p.i >= p.n) finalise(p);
+    else idle(pump);
+  };
+  idle(pump);
+}
+
+/**
+ * Finish a deferred build right now, if one is outstanding.
+ *
+ * Called before anything reads the tables for a decision that has to be
+ * right — so the deferral can never change an answer, only when it is
+ * computed. A no-op when the index is already built, which is the normal case.
+ */
+export function ensureRarityIndex(): void {
+  if (!pending) return;
+  const p = pending;
+  step(p, p.n);
+  finalise(p);
+}
+
 /** unknown values are treated as averagely informative */
 function rarityOf(kind: FacetKind, token: string): number {
   if (!rarityReady) return 1;

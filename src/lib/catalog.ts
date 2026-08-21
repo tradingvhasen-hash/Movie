@@ -1,6 +1,6 @@
 import { SAMPLE_TITLES } from "@/lib/data/sample-titles";
-import { decodeCatalog, type EncodedCatalog } from "@/lib/data/catalog-codec";
-import { buildRarityIndex } from "@/lib/engine/facets";
+import { decodeCatalog, decodeRange, type EncodedCatalog } from "@/lib/data/catalog-codec";
+import { buildRarityIndex, buildRarityIndexIdle } from "@/lib/engine/facets";
 import { featurize } from "@/lib/engine/features";
 import type { CandidateItem } from "@/lib/engine/recommend";
 import type { Title } from "@/lib/types";
@@ -42,10 +42,22 @@ function build(titles: Title[]): CandidateItem[] {
   const built: CandidateItem[] = titles.map((title) => ({ title }));
   items = built;
   byId = new Map(built.map((c) => [c.title.id, c]));
-  // how rare each keyword, genre, actor and language is can only be known
-  // from the whole catalog, and scoring needs it to tell an informative
-  // value from a near-universal one
-  buildRarityIndex(titles);
+
+  /**
+   * How rare each keyword, genre, actor and language is can only be known from
+   * the whole catalog, and scoring needs it to tell an informative value from
+   * a near-universal one.
+   *
+   * WHERE it is built matters as much as that it is. On the worker — lean
+   * mode — it is built in one block, because that thread exists to rank and
+   * has nothing else to do. On the main thread it is built in idle slices:
+   * measured at 206ms here, it is ~1,234ms on the user's phone, and it used to
+   * run synchronously the instant the catalog arrived, which is the instant
+   * the welcome animation is playing. That single call was the stall he filmed
+   * and described as one frame per second. See `buildRarityIndexIdle`.
+   */
+  if (lean || typeof window === "undefined") buildRarityIndex(titles);
+  else buildRarityIndexIdle(titles);
   return built;
 }
 
@@ -53,6 +65,36 @@ function build(titles: Title[]): CandidateItem[] {
 function fallback(): CandidateItem[] {
   if (!items) build(SAMPLE_TITLES);
   return items!;
+}
+
+/**
+ * Run something once the main thread has nothing better to do.
+ *
+ * The generous timeout is the point: this is for work that must happen, just
+ * not during the opening seconds. If the browser never goes idle — a slow
+ * phone under load, which is exactly the case being defended against — the
+ * timeout fires it anyway, four seconds in, by which time the demo is over.
+ */
+function whenIdle(fn: () => void): void {
+  if (typeof requestIdleCallback === "function") requestIdleCallback(() => fn(), { timeout: 4000 });
+  else setTimeout(fn, 1200);
+}
+
+/**
+ * Decode the catalog across several turns of the event loop.
+ *
+ * On the worker this is pointless — nothing else is running there — so only
+ * the main thread pays for the bookkeeping. 2,000 rows is roughly 80ms on a
+ * phone-speed CPU, small enough that an animation frame lands between slices.
+ */
+async function decodeSpread(data: EncodedCatalog): Promise<Title[]> {
+  const n = data.t.length;
+  const out: Title[] = [];
+  for (let i = 0; i < n; i += 2000) {
+    out.push(...decodeRange(data, i, Math.min(n, i + 2000)));
+    if (i + 2000 < n) await new Promise<void>((r) => whenIdle(r));
+  }
+  return out;
 }
 
 function assetUrl(path: string): string {
@@ -108,7 +150,9 @@ export function loadCatalog(): Promise<CandidateItem[]> {
       if (!res.ok) throw new Error(`catalog ${res.status}`);
       const data = (await res.json()) as EncodedCatalog;
       if (!data?.t?.length) throw new Error("empty catalog");
-      const titles = decodeCatalog(data);
+      const titles = lean || typeof window === "undefined"
+        ? decodeCatalog(data)
+        : await decodeSpread(data);
 
       /**
        * Reach rides alongside rather than inside the catalog: 55 KB gzipped
@@ -119,16 +163,29 @@ export function loadCatalog(): Promise<CandidateItem[]> {
       await attachReach(titles);
       const ready = build(titles);
       if (!lean) {
-        // deliberately not awaited: the deck does not need prose to deal a card
-        void attachOverviews(titles);
         /**
-         * Prepare the search text while nothing else is happening.
+         * Everything below is wanted eventually and needed by nobody now, so
+         * it waits for a moment when the main thread is free.
          *
-         * Dynamic so this module keeps no import cycle with `search.ts`, which
-         * reads the catalog. See `warmSearchIndex` for why it exists at all: it
-         * is the difference between a keystroke costing 2ms and 457ms.
+         * "Not awaited" was not enough. `attachOverviews` fetches 3.3 MB and
+         * calls `res.json()` on it — a single un-interruptible parse on the
+         * main thread — and it used to start the instant the catalog landed,
+         * which is while the welcome animation is playing and the ranking
+         * worker is coming up. Prose for a panel nobody has opened does not
+         * get to compete with the first thing the user ever sees.
          */
-        void import("./search").then((m) => m.warmSearchIndex());
+        whenIdle(() => {
+          void attachOverviews(titles);
+          /**
+           * Prepare the search text while nothing else is happening.
+           *
+           * Dynamic so this module keeps no import cycle with `search.ts`,
+           * which reads the catalog. See `warmSearchIndex` for why it exists
+           * at all: it is the difference between a keystroke costing 2ms and
+           * 457ms.
+           */
+          void import("./search").then((m) => m.warmSearchIndex());
+        });
       }
       return ready;
     } catch {

@@ -4,6 +4,7 @@ import {
   emptyFacets,
   emptyFacetWeights,
   emptyStreaks,
+  ensureRarityIndex,
   facetScore,
   pruneFacets,
   revertFacets,
@@ -194,6 +195,17 @@ export function applySwipe(
   vector: Float32Array | number[],
   action: SwipeAction
 ): TasteProfile {
+  /**
+   * The rarity tables are built in idle slices on the main thread so they do
+   * not own the first second of the app (see `buildRarityIndexIdle`). A swipe
+   * is the one main-thread thing that reads them for a decision that has to be
+   * right, so it finishes the build first if it is still outstanding. By the
+   * time anyone can swipe — after the welcome demo and the taste picker —
+   * there has been far more idle time than it needs, so this is a no-op in
+   * practice and a correctness guarantee in principle.
+   */
+  ensureRarityIndex();
+
   const tokens = titleTokens(title);
   const signals = facetSignals(action);
 

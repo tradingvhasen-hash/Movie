@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useMotionValue, useMotionValueEvent } from "framer-motion";
 import SwipeCard, { SWIPE_UP_THRESHOLD, SWIPE_X_THRESHOLD } from "./SwipeCard";
 import SwipeBurst, { type BurstHandle } from "./SwipeBurst";
-import LeavingCards, { type LeavingHandle } from "./LeavingCards";
 import ScreenFeedback from "./ScreenFeedback";
 import TastePicker from "./TastePicker";
 import WelcomeDemo, { demoAlreadyShown } from "./WelcomeDemo";
@@ -59,8 +58,15 @@ export default function SwipeDeck() {
   const x = useMotionValue(0);
   const y = useMotionValue(0);
 
-  const leavingRef = useRef<LeavingHandle>(null);
-  const [forcedExit, setForcedExit] = useState<SwipeAction | null>(null);
+  /**
+   * Which title is on its way out, and in which direction.
+   *
+   * Keyed by id rather than held as a bare action, because the card that is
+   * leaving and the card that has just become top are both rendered in the
+   * same frame — a bare "the exit is a like" would tell the newcomer it was
+   * leaving too.
+   */
+  const [exitOf, setExitOf] = useState<{ id: string; action: SwipeAction } | null>(null);
   /** welcome → pick a few you love → deck */
   const [picking, setPicking] = useState(false);
   /**
@@ -124,12 +130,12 @@ export default function SwipeDeck() {
    */
   const handleSwipe = useCallback(
     (action: SwipeAction) => {
-      setForcedExit(null);
       const top = swipeTop(action);
       if (!top) return;
       wasPast.current = false;
       haptic("commit", settings.haptics);
-      leavingRef.current?.fire(top, action);
+      // the departing card reads this to know which way to go
+      setExitOf({ id: top.id, action });
       burstRef.current?.fire(action);
     },
     [swipeTop, settings.haptics]
@@ -365,8 +371,6 @@ export default function SwipeDeck() {
               )}
             </AnimatePresence>
 
-            <LeavingCards ref={leavingRef} />
-
             <AnimatePresence initial={false}>
               {queue.slice(0, 3).map((title, i) => (
                 <SwipeCard
@@ -374,7 +378,7 @@ export default function SwipeDeck() {
                   title={title}
                   index={i}
                   onSwipe={handleSwipe}
-                  forcedExit={i === 0 ? forcedExit : null}
+                  forcedExit={exitOf?.id === title.id ? exitOf.action : null}
                   upAction={settings.swipeUp}
                   onDragActive={i === 0 ? setLive : undefined}
                   x={i === 0 ? x : undefined}

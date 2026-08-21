@@ -4,10 +4,10 @@
  * THE WHOLE SCREEN ANSWERS THE GESTURE — WITHOUT ASKING THE GPU FOR A FAVOUR.
  *
  * The look here is unchanged and deliberately so: the user asked for the screen
- * to turn red, to glow, to feel like something. It does. What changed is what
- * it is *made of*.
+ * to turn red, to glow, to feel like something. It does. What changed, twice
+ * now, is what it is *made of*.
  *
- * ── WHAT THE FIRST VERSION DID, AND WHAT IT COST ────────────────────────
+ * ── V1: THE VERSION THAT FROZE HIS PHONE ────────────────────────────────
  *
  * It was built out of the three most expensive things a phone browser can be
  * asked to composite:
@@ -27,23 +27,31 @@
  * On the machine I measured with, none of that showed up: headless Chromium
  * composites in software and I was watching JavaScript long-tasks, which were
  * clean. On the user's iPhone the result was a screen frozen for four to five
- * seconds after a swipe, with the wash and a half-blurred mark stuck exactly
- * where the compositor gave up. He filmed it. I had told him it was fixed.
+ * seconds after a swipe. He filmed it. I had told him it was fixed.
  *
- * ── WHAT THIS VERSION IS MADE OF ────────────────────────────────────────
+ * ── V2: CHEAP PROPERTIES, BUT TEN OF THEM ───────────────────────────────
  *
- * Only two properties are ever animated: `opacity` and `transform`. Both are
- * handled by the compositor without repainting anything, on every browser and
- * every phone. There is no blend mode, no filter, and nothing whose *geometry*
- * changes.
+ * V2 removed every blend and every filter and animated nothing but `opacity`
+ * and `transform`. That was correct and it was not enough. It still built the
+ * effect out of *ten* full-screen composited layers — three floods, three
+ * washes, a vignette and three marks — all of them mounted the instant a
+ * finger moved and all of them destroyed the instant it lifted.
  *
- * The glow that the blurred rim used to draw is now painted into the gradient
- * itself — a gradient is a blur that costs nothing, because it is rasterised
- * once when the layer is created and never again. The halo around the mark is
- * the same trick: a radial gradient behind it rather than a drop-shadow on it.
+ * The user filmed the consequence: the card he threw did not fly, it
+ * teleported. A 560ms exit was being drawn about twice, because the frame that
+ * should have started it was spent tearing down ten layers and standing up the
+ * landing burst's four.
  *
- * Seven static layers, each fading. Where there were fifteen, blended, blurred
- * and re-rasterising.
+ * ── V3: THE SAME PICTURE, PAINTED IN THREE LAYERS ───────────────────────
+ *
+ * Nothing is removed. The flood, the bloom and the vignette are all still
+ * there — they are simply three stops of one `background` stack instead of
+ * three separate elements, because a browser rasterises a multi-stop gradient
+ * exactly once when the layer is created and then only fades it.
+ *
+ * Three full-screen layers, one per direction, plus three 150px marks. Where
+ * there were ten full-screen layers, seven of them permanently at opacity 0
+ * waiting for a direction that would never come.
  *
  * ── AND IT ONLY EXISTS WHILE A FINGER IS ON THE GLASS ───────────────────
  *
@@ -94,37 +102,11 @@ export default function ScreenFeedback({
     return dy * (1 - sideways);
   });
 
-  /** the vignette is one layer for all three directions, not three */
-  const focus = useTransform(() => Math.min(1, Math.max(right.get(), left.get(), up.get())));
-  const vignette = useTransform(focus, [0, 1], [0, 0.5], { clamp: true });
-
   return (
     <div className="pointer-events-none fixed inset-0 z-[45] overflow-hidden" aria-hidden>
-      {/*
-        The flood is what makes it read as "the screen turned red" rather than
-        "there is a glow at the edge". It used to be additive — `plus-lighter`,
-        which brightens whatever is beneath it — and additive is prettier over a
-        poster. It is also the single most expensive compositing mode a phone
-        can be asked for. A flat colour at ordinary opacity tints instead of
-        brightening, which at these levels is a difference the eye has to be
-        told about, and it costs one composited layer with nothing to blend.
-      */}
-      <Flood progress={right} tint={LIKE_TINT} />
-      <Flood progress={left} tint={NOPE_TINT} />
-      <Flood progress={up} tint={UP_TINT} />
-
       <Wash progress={right} tint={LIKE_TINT} at="102% 46%" />
       <Wash progress={left} tint={NOPE_TINT} at="-2% 46%" />
       <Wash progress={up} tint={UP_TINT} at="50% -2%" />
-
-      <motion.div
-        className="absolute inset-0 will-change-[opacity]"
-        style={{
-          opacity: vignette,
-          background:
-            "radial-gradient(115% 88% at 50% 50%, transparent 32%, rgb(var(--rgb-scrim) / 0.9) 100%)",
-        }}
-      />
 
       <Mark progress={right} tint={LIKE_TINT} side="right" action="liked" />
       <Mark progress={left} tint={NOPE_TINT} side="left" action="disliked" />
@@ -134,11 +116,28 @@ export default function ScreenFeedback({
 }
 
 /**
- * The light: a bloom from the edge the card is heading for.
+ * ONE LAYER THAT DOES WHAT THREE USED TO.
  *
- * The bright stop at the very edge is what the blurred rim layer used to draw
- * separately — a gradient can be its own glow, and unlike a filter it is
- * painted once into the layer and then only faded.
+ * Read the `background` stack top-down, because that is the order the browser
+ * paints it in — first listed is nearest the viewer:
+ *
+ *   1. THE VIGNETTE. Transparent through the middle, scrim at the corners. It
+ *      sits above the bloom exactly as its own element used to, so the glow
+ *      still darkens as it reaches the edge of the screen.
+ *   2. THE BLOOM. A gradient from the edge the card is heading for. The bright
+ *      stop at the very edge is the glow that v1 drew with `filter: blur()` —
+ *      a gradient is a blur that costs nothing, because it is rasterised once
+ *      when the layer is created and never again.
+ *   3. THE FLOOD. A flat wall of the verdict's colour: the literal "the screen
+ *      turns red", over everything, card included.
+ *
+ * The one thing genuinely lost in the merge is that the flood used to hold
+ * back until 45% of the way to the commit point, on the argument that the
+ * whole screen changing colour is a statement and a statement made at the
+ * first millimetre is noise. Sharing one opacity means it now fades in with
+ * everything else — at a fifth of a drag it is 5% alpha behind a poster, which
+ * is below the threshold of noticing. That is the price of the merge and it is
+ * the whole price.
  */
 function Wash({
   progress,
@@ -158,28 +157,16 @@ function Wash({
       style={{
         opacity,
         scale,
-        background:
+        background: [
+          "radial-gradient(115% 88% at 50% 50%, transparent 32%, rgb(var(--rgb-scrim) / 0.49) 100%)",
           `radial-gradient(96% 82% at ${at}, ${tint} 0%, ` +
-          `color-mix(in srgb, ${tint} 74%, transparent) 26%, ` +
-          `color-mix(in srgb, ${tint} 42%, transparent) 54%, ` +
-          `color-mix(in srgb, ${tint} 14%, transparent) 74%, transparent 88%)`,
+            `color-mix(in srgb, ${tint} 74%, transparent) 26%, ` +
+            `color-mix(in srgb, ${tint} 42%, transparent) 54%, ` +
+            `color-mix(in srgb, ${tint} 14%, transparent) 74%, transparent 88%)`,
+          `linear-gradient(color-mix(in srgb, ${tint} 28%, transparent), ` +
+            `color-mix(in srgb, ${tint} 28%, transparent))`,
+        ].join(", "),
       }}
-    />
-  );
-}
-
-/**
- * The verdict's colour over everything, card included — the literal "the
- * screen turns red". It starts at 45% of the way to the commit point, because
- * the whole screen changing colour is a statement and a statement made at the
- * first millimetre of a drag is noise.
- */
-function Flood({ progress, tint }: { progress: MotionValue<number>; tint: string }) {
-  const opacity = useTransform(progress, [0.45, 1, 1.4], [0, 0.26, 0.34], { clamp: true });
-  return (
-    <motion.div
-      className="absolute inset-0 will-change-[opacity]"
-      style={{ opacity, background: tint }}
     />
   );
 }
@@ -190,7 +177,9 @@ function Flood({ progress, tint }: { progress: MotionValue<number>; tint: string
  *
  * The halo behind it is a static radial gradient rather than a drop-shadow,
  * for the same reason the rim is gone: a filter on a moving element is a
- * repaint, and a gradient on a fading element is not.
+ * repaint, and a gradient on a fading element is not. It stays its own element
+ * rather than being folded into the wash because it is 150px wide — the layers
+ * worth merging are the ones that cover the screen.
  */
 function Mark({
   progress,

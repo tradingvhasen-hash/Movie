@@ -120,10 +120,10 @@ export default function SwipeCard({
   const activeExit = isTop ? (exiting ?? forcedExit) : null;
 
   useMotionValueEvent(x, "change", (v) => {
-    if (isTop) sharedX?.set(v);
+    if (isTop && !activeExit) sharedX?.set(v);
   });
   useMotionValueEvent(y, "change", (v) => {
-    if (isTop) sharedY?.set(v);
+    if (isTop && !activeExit) sharedY?.set(v);
   });
 
   /* a card arriving at the front starts face-up and un-dragged */
@@ -201,30 +201,50 @@ export default function SwipeCard({
   }
 
   /**
-   * A CARD THAT HAS BEEN ANSWERED NEVER TOUCHES THE SHARED POSITION AGAIN.
+   * THE CARD ITSELF FLIES AWAY. THERE IS NO COPY ANY MORE.
    *
-   * There used to be an `exitTarget` here that animated this card's `x` out to
-   * 640 as it left. That `x` is the deck's shared motion value — the one the
-   * whole-screen drag feedback reads — so the moment anybody *tapped* a verdict
-   * button, the exit animation drove the drag apparatus: the screen washed with
-   * colour and a giant mark appeared for a gesture that had never happened.
-   * The user filmed it, along with the four-second freeze that followed as the
-   * phone tried to composite it all.
+   * Three versions of this have now existed and it is worth recording why the
+   * middle one was wrong.
    *
-   * The animation was pointless as well as harmful: this card is removed from
-   * the tree in the same frame (`exit` below has a zero duration) and the
-   * fly-off the viewer actually watches is `LeavingCards`, an inert copy. So
-   * an answered card now simply stops, and the position resets to centre for
-   * whichever card is next.
+   * v1: the real card animated out, and because it was still mounted it still
+   * owned the pointer — so every second fast swipe hit a card that was already
+   * leaving and did nothing.
+   *
+   * v2 (the mistake): the real card was deleted in the same frame and an inert
+   * *copy* was mounted to do the flying. That fixed the input problem and
+   * created a worse one. At the instant of release the phone had to build a
+   * new full-size composited layer for the copy, build the burst's layers, and
+   * tear down the drag feedback's layers — all in one frame. The 520ms flight
+   * was then drawn about twice. The user: "the cards vanish, there is no
+   * smoothness at all."
+   *
+   * v3: the real card flies, and simply stops accepting touches while it does.
+   * `pointer-events: none` solves what the copy was invented to solve, and
+   * costs nothing: no new layer, no second image decode, and the card
+   * continues from exactly where the finger left it instead of jumping back to
+   * a hardcoded start position.
    */
   useEffect(() => {
     if (!activeExit) return;
-    x.set(0);
-    y.set(0);
     sharedX?.set(0);
     sharedY?.set(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeExit]);
+
+  /**
+   * Where a thrown card goes, and how long you get to watch it.
+   *
+   * 560ms on a gentle glide rather than 520 on a deep sweep: the old curve put
+   * most of the distance in the first fifth of the time, so even at a full
+   * sixty frames the card was effectively gone in under 200ms. A throw should
+   * *travel*.
+   */
+  const exitPose =
+    activeExit === "liked"
+      ? { x: 620, y: -70, rotate: 22, opacity: 0, scale: 0.94 }
+      : activeExit === "disliked"
+        ? { x: -620, y: -70, rotate: -22, opacity: 0, scale: 0.94 }
+        : { x: 0, y: -820, rotate: 0, opacity: 0, scale: 0.92 };
 
   /**
    * Resting pose in the stack — springs whenever the index changes.
@@ -256,8 +276,8 @@ export default function SwipeCard({
         x,
         y,
         rotate,
-        zIndex: 30 - index,
-        pointerEvents: isTop ? "auto" : "none",
+        zIndex: activeExit ? 40 : 30 - index,
+        pointerEvents: isTop && !activeExit ? "auto" : "none",
         perspective: 1400,
       }}
       /* a card joining the back of the stack grows in instead of popping */
@@ -268,13 +288,10 @@ export default function SwipeCard({
       }}
       animate={restingPose}
       transition={{ ...SPRING_SETTLE, opacity: { duration: 0.35 } }}
-      /**
-       * Leaves instantly, because it is not the thing you watch leave. The
-       * deck keeps an inert copy on screen for the fly-off; this one is gone
-       * the moment the answer is recorded, which is what frees the deck to
-       * take the next gesture.
-       */
-      exit={{ opacity: 0, transition: { duration: 0 } }}
+      exit={{
+        ...exitPose,
+        transition: { duration: 0.56, ease: [0.25, 0.6, 0.35, 1] },
+      }}
       drag={isTop && !activeExit}
       dragElastic={0.55}
       dragTransition={{ bounceStiffness: 260, bounceDamping: 26 }}

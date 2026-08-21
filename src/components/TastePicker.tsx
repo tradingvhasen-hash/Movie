@@ -243,9 +243,21 @@ function PickTile({
       aria-pressed={selected}
       aria-label={title.title.en}
       whileTap={{ scale: 0.93 }}
+      /**
+       * The tiles that are not chosen step back.
+       *
+       * This used to fade AND desaturate: `filter: saturate(0.55)`, animated.
+       * `dimmed` is `anyPicked && !picked.has(id)`, so the very first tap on
+       * the very first screen of the app started a filter animation on every
+       * other poster in the grid simultaneously — twenty-odd images
+       * re-rasterised per frame for 200ms, as the opening impression.
+       *
+       * It is the same construct that froze the deck on the user's phone. The
+       * fade does nearly all of the visual work on its own; the rest is a
+       * surface-coloured sheet, which composites.
+       */
       animate={{
-        opacity: dimmed ? 0.55 : 1,
-        filter: dimmed ? "saturate(0.55)" : "saturate(1)",
+        opacity: dimmed ? 0.62 : 1,
         scale: selected ? 1 : 0.985,
       }}
       transition={{ ...SPRING_SNAPPY, opacity: { duration: QUICK, ease: EASE_OUT } }}
@@ -257,6 +269,12 @@ function PickTile({
       }}
     >
       <PosterArt title={title} sizes="140px" className="aspect-[2/3] w-full" />
+      <motion.span
+        className="pointer-events-none absolute inset-0 bg-surface"
+        animate={{ opacity: dimmed ? 0.34 : 0 }}
+        transition={{ duration: QUICK, ease: EASE_OUT }}
+        aria-hidden
+      />
     </motion.button>
   );
 }

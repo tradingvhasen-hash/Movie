@@ -99,12 +99,29 @@ export function encodeCatalog(titles: Title[]): EncodedCatalog {
 }
 
 export function decodeCatalog(data: EncodedCatalog): Title[] {
+  return decodeRange(data, 0, data.t.length);
+}
+
+/**
+ * The same decode, a slice at a time.
+ *
+ * Turning 15,083 encoded rows into `Title` objects measures 100ms on a
+ * development machine and about **600ms on the phone the user is holding** —
+ * one un-interruptible block, landing while the welcome animation is playing.
+ * It was the second-largest thing standing between him and a smooth opening,
+ * after the rarity index.
+ *
+ * Nothing is lost by spreading it: until the array is complete the app runs on
+ * the bundled sample set, which is what it already did for the whole duration
+ * of the fetch.
+ */
+export function decodeRange(data: EncodedCatalog, from: number, to: number): Title[] {
   const idAt = (i: number): string | undefined => {
     const row = data.t[i];
     return row ? `${row[1] === 1 ? "tv" : "movie"}-${row[0]}` : undefined;
   };
 
-  return data.t.map((row) => {
+  return data.t.slice(from, to).map((row) => {
     const type: TitleType = row[1] === 1 ? "tv" : "movie";
     const en = row[2];
     return {

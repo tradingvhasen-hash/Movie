@@ -14,8 +14,8 @@
  * light as the drag feedback rather than a second vocabulary:
  *
  *   FLASH      the whole screen takes the verdict's colour and lets it go
- *   SHOCKWAVE  one ring leaves from where the card was thrown
  *   MARK       one glyph, revealed rather than thrown — no overshoot
+ *   SHOCKWAVE  one ring leaves from where the card was thrown
  *
  * The ring is the piece doing the real work. A flash alone reads as a screen
  * event; a ring reads as *something having happened at a place*, and the place
@@ -24,9 +24,27 @@
  *
  * It ends before the next card finishes settling, on purpose: overlap is what
  * makes an interface feel busy instead of fast.
+ *
+ * ── WHY THE FLASH AND THE MARK ARE ONE ELEMENT ──────────────────────────
+ *
+ * They were two, inside an `AnimatePresence` wrapper that faded on exit, next
+ * to the ring: four full-screen composited layers, all created in the single
+ * frame a finger lifts — the same frame in which the drag feedback's layers
+ * are torn down and the card's 560ms flight is supposed to begin. The user
+ * filmed the result and described it exactly: the cards do not fly, they
+ * vanish.
+ *
+ * The flash and the mark fade on the same curve over the same duration, so
+ * they can share one opacity and therefore one layer; the glyph keeps its own
+ * scale as a transform-only child, which costs nothing. The wrapper animates
+ * nothing at all now — the burst clears itself on a timer well after the
+ * animation has already reached zero, so there was never anything for an exit
+ * transition to hide.
+ *
+ * Two layers where there were four. Nothing about the effect is different.
  */
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import { ArrowUpIcon, EyeIcon, HeartIcon, ThumbsDownIcon } from "./ui/Icons";
 import { EASE_OUT } from "@/lib/motion";
 import type { SwipeAction } from "@/lib/types";
@@ -90,81 +108,80 @@ const SwipeBurst = forwardRef<BurstHandle>(function SwipeBurst(_props, ref) {
     },
   }));
 
-  const action = burst?.action;
-  const Icon = action ? GLYPH[action] : null;
-  const tint = action ? TINT[action] : "";
-  const origin = action ? ORIGIN[action] : ORIGIN.seen;
+  if (!burst) return null;
+
+  const Icon = GLYPH[burst.action];
+  const tint = TINT[burst.action];
+  const origin = ORIGIN[burst.action];
 
   return (
-    <AnimatePresence>
-      {burst && Icon && (
-        <motion.div
-          key={burst.id}
-          className="pointer-events-none fixed inset-0 z-50 overflow-hidden"
-          initial={{ opacity: 1 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0, transition: { duration: 0.12, ease: EASE_OUT } }}
-          aria-hidden
+    <div key={burst.id} className="pointer-events-none fixed inset-0 z-50 overflow-hidden" aria-hidden>
+      {/*
+        The flash, with the mark inside it.
+
+        The gradient carries the flash's own strength in its colour stops
+        rather than in the layer's opacity, which is what frees the opacity to
+        be shared with the glyph.
+      */}
+      <motion.div
+        className="absolute inset-0 grid place-items-center will-change-[opacity,transform]"
+        style={{
+          color: tint,
+          background:
+            `radial-gradient(95% 80% at ${origin.x} ${origin.y}, ` +
+            `color-mix(in srgb, ${tint} 42%, transparent) 0%, transparent 68%)`,
+        }}
+        initial={{ opacity: 1, scale: 0.94 }}
+        animate={{ opacity: 0, scale: 1.04 }}
+        transition={{ duration: DUR, ease: EASE_OUT }}
+      >
+        {/*
+          The glyph, with its glow painted rather than filtered.
+
+          It used to carry `filter: drop-shadow(0 0 30px …)` while its scale
+          and opacity animated. A filter on a moving element is a
+          re-rasterisation on every frame, and on a phone's compositor that is
+          the difference between an effect and a stall. A radial gradient
+          behind the glyph looks the same and is painted once.
+
+          It animates `scale` and nothing else, so it composites as a child of
+          the flash rather than as a layer of its own.
+        */}
+        <motion.span
+          className="relative grid h-[190px] w-[190px] place-items-center will-change-transform"
+          initial={{ scale: 0.84 }}
+          animate={{ scale: 1.08 }}
+          transition={{ duration: DUR, ease: EASE_OUT }}
         >
-          {/* the flash */}
-          <motion.div
-            className="absolute inset-0 will-change-[opacity]"
+          <span
+            className="absolute inset-0 rounded-full"
             style={{
-              background: `radial-gradient(95% 80% at ${origin.x} ${origin.y}, ${tint} 0%, transparent 68%)`,
+              background: `radial-gradient(circle, color-mix(in srgb, ${tint} 60%, transparent) 0%, transparent 66%)`,
             }}
-            initial={{ opacity: 0.42 }}
-            animate={{ opacity: 0 }}
-            transition={{ duration: DUR, ease: EASE_OUT }}
           />
+          <span className="relative">
+            <Icon size={104} filled strokeWidth={1.6} />
+          </span>
+        </motion.span>
+      </motion.div>
 
-          {/* the shockwave */}
-          <motion.span
-            className="absolute rounded-full will-change-[opacity,transform]"
-            style={{
-              left: origin.x,
-              top: origin.y,
-              width: 44,
-              height: 44,
-              marginLeft: -22,
-              marginTop: -22,
-              border: `2.5px solid ${tint}`,
-            }}
-            initial={{ scale: 0.3, opacity: 0.9 }}
-            animate={{ scale: 13, opacity: 0 }}
-            transition={{ duration: DUR + 0.08, ease: EASE_OUT }}
-          />
-
-          {/*
-            The mark — with its glow painted rather than filtered.
-
-            It used to carry `filter: drop-shadow(0 0 30px …)` while its scale
-            and opacity animated. A filter on a moving element is a
-            re-rasterisation on every frame, and on a phone's compositor that
-            is the difference between an effect and a stall. A radial gradient
-            behind the glyph looks the same and is painted once.
-          */}
-          <motion.div
-            className="absolute inset-0 grid place-items-center will-change-[opacity,transform]"
-            style={{ color: tint }}
-            initial={{ opacity: 0, scale: 0.78 }}
-            animate={{ opacity: [0.95, 0], scale: [1, 1.1] }}
-            transition={{ duration: DUR, ease: EASE_OUT }}
-          >
-            <span className="relative grid h-[190px] w-[190px] place-items-center">
-              <span
-                className="absolute inset-0 rounded-full"
-                style={{
-                  background: `radial-gradient(circle, color-mix(in srgb, ${tint} 60%, transparent) 0%, transparent 66%)`,
-                }}
-              />
-              <span className="relative">
-                <Icon size={104} filled strokeWidth={1.6} />
-              </span>
-            </span>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+      {/* the shockwave */}
+      <motion.span
+        className="absolute rounded-full will-change-[opacity,transform]"
+        style={{
+          left: origin.x,
+          top: origin.y,
+          width: 44,
+          height: 44,
+          marginLeft: -22,
+          marginTop: -22,
+          border: `2.5px solid ${tint}`,
+        }}
+        initial={{ scale: 0.3, opacity: 0.9 }}
+        animate={{ scale: 13, opacity: 0 }}
+        transition={{ duration: DUR + 0.08, ease: EASE_OUT }}
+      />
+    </div>
   );
 });
 

@@ -168,12 +168,26 @@ export default function WelcomeDemo({ onDone }: { onDone: () => void }) {
                   opacity: stage === "demo" ? 1 : 0,
                   y: (i + 1) * 12,
                   scale: 1 - (i + 1) * 0.05,
-                  filter: "brightness(0.93)",
                 }}
                 transition={{ duration: 0.45, ease: EASE_OUT, delay: 0.08 * i }}
                 style={{ zIndex: 10 - i }}
               >
                 <PosterArt title={tt} sizes="320px" />
+                {/*
+                  The cards behind sit slightly in shadow. This used to be
+                  `filter: brightness(0.93)` in the `animate` block above —
+                  which meant framer interpolated a filter from `none` to
+                  `brightness(0.93)` across 450ms, on two full-size posters, in
+                  the opening seconds of the app.
+
+                  An animated filter is a re-rasterisation of the element on
+                  every frame. I removed exactly this construct from the deck
+                  after the user filmed his phone freezing on it, and then left
+                  it sitting in the demo — which is the screen he came back and
+                  told me still ran "like one frame per second". A black sheet
+                  at 7% opacity is the same picture, composited.
+                */}
+                <div className="pointer-events-none absolute inset-0 bg-black/[0.07]" aria-hidden />
                 <div className="card-sheen absolute inset-0" />
               </motion.div>
             ))}

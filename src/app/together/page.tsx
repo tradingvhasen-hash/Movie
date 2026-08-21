@@ -403,7 +403,13 @@ function PickSheet({
         animate={{ y: 0 }}
         exit={{ y: "100%" }}
         transition={{ type: "spring", stiffness: 340, damping: 34 }}
-        className="relative z-10 flex max-h-[82dvh] flex-col rounded-t-[28px] border-t border-line bg-bg px-5 pb-[env(safe-area-inset-bottom)] pt-3"
+        /* a definite height, not a maximum.
+           With `max-h` and a `flex-1` scroll area, the scroller's flex-basis of
+           0 contributes nothing to an auto-height parent — so the sheet sized
+           itself to the search field alone and the results spilled off the
+           bottom of the screen. A search sheet wants a stable height anyway:
+           it should not resize under the thumb as results arrive. */
+        className="relative z-10 flex h-[78dvh] flex-col rounded-t-[28px] border-t border-line bg-bg px-5 pb-[env(safe-area-inset-bottom)] pt-3"
       >
         <span className="mx-auto mb-3 h-1 w-10 shrink-0 rounded-full bg-line" aria-hidden />
 

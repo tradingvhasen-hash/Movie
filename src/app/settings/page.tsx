@@ -79,7 +79,7 @@ export default function SettingsPage() {
       {/* ── gestures ── */}
       <Group title="Swipe up means">
         <ChoiceRow
-          icon={<ArrowUpIcon size={18} />}
+          icon={<span className="text-[color:var(--color-skip)]"><ArrowUpIcon size={18} /></span>}
           label="Haven't seen it"
           on={settings.swipeUp === "not_seen"}
           onSelect={() => tap("swipeUp", "not_seen")}

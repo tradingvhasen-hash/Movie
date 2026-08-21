@@ -41,8 +41,8 @@ const ORIGIN: Record<SwipeAction, { x: string; y: string }> = {
 const TINT: Record<SwipeAction, string> = {
   liked: "var(--color-accent)",
   disliked: "var(--color-danger)",
-  not_seen: "var(--color-ink-strong)",
-  seen: "var(--color-accent-soft)",
+  not_seen: "var(--color-skip)",
+  seen: "var(--color-ink-strong)",
 };
 
 const GLYPH = {

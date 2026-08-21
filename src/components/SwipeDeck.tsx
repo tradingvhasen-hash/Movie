@@ -454,7 +454,7 @@ export default function SwipeDeck() {
         {settings.showSeenButton && (
           <DeckAction
             label={settings.swipeUp === "seen" ? t("swipe.notSeen") : t("swipe.seen")}
-            tint="var(--color-accent-soft)"
+            tint={settings.swipeUp === "seen" ? "var(--color-skip)" : "var(--color-ink-strong)"}
             size={46}
             onPress={() => trigger(settings.swipeUp === "seen" ? "not_seen" : "seen")}
           >
@@ -470,7 +470,7 @@ export default function SwipeDeck() {
             never disagree about which answer it is */}
         <DeckAction
           label={settings.swipeUp === "seen" ? t("swipe.seen") : t("swipe.notSeen")}
-          tint="var(--color-ink-strong)"
+          tint={settings.swipeUp === "seen" ? "var(--color-ink-strong)" : "var(--color-skip)"}
           size={46}
           onPress={() => trigger(settings.swipeUp)}
         >

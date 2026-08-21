@@ -1,9 +1,10 @@
 @import "tailwindcss";
 
 /* ─────────────────────────────────────────────────────────────
-   Dhawq design system v3 — bright, vivid sky blue on light.
-   Apple-style single soft shadows (no dual-tone glow behind
-   elements). Interactive elements keep their Uiverse animations.
+   Seenit design system — bright sky blue on light, the same palette
+   inverted for dark, and a single soft shadow everywhere (no dual-tone
+   glow behind elements). Three verdict colours and nothing else:
+   accent for loved, danger for not-for-me, skip for haven't-seen.
    ───────────────────────────────────────────────────────────── */
 
 @theme {
@@ -17,6 +18,15 @@
   --color-accent: #0ea5e9;
   --color-accent-soft: #38bdf8;
   --color-danger: #ff4545;
+  /* THE THIRD VERDICT NEEDS A THIRD COLOUR.
+     "Haven't seen it" borrowed the accent's lighter tone, which meant an
+     upward swipe and a rightward one lit the screen in nearly the same blue —
+     and the whole point of colouring the drag is that the colour tells you
+     which answer you are about to give. Violet is the one hue that is
+     unmistakable against both the sky blue and the red while still belonging
+     to the same cool family, so the app does not suddenly acquire a warm
+     accent it uses nowhere else. */
+  --color-skip: #7c6cf5;
   /* a solid dark used for a couple of controls, and the colour text takes when
      it sits on the accent — both need to flip with the theme */
   --color-ink-strong: #3a4150;
@@ -86,6 +96,7 @@
     --color-accent: #38bdf8;
     --color-accent-soft: #7dd3fc;
     --color-ink-strong: #e6e9ee;
+    --color-skip: #a394ff;
     --color-on-accent: #06212e;
     /* shadows go black rather than blue-grey, and lift instead of press */
     --rgb-shadow: 0 0 0;

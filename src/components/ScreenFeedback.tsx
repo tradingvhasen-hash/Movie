@@ -62,7 +62,7 @@ const GLYPH = {
   seen: EyeIcon,
 } as const;
 
-const UP_TINT = "var(--color-accent-soft)";
+const UP_TINT = "var(--color-skip)";
 
 export default function ScreenFeedback({
   x,

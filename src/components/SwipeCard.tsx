@@ -18,8 +18,16 @@ import type { SwipeAction, Title } from "@/lib/types";
 export const SWIPE_X_THRESHOLD = 100;
 export const SWIPE_UP_THRESHOLD = 120;
 
-/** a tap is a press that went nowhere — anything further is the start of a drag */
-const TAP_SLOP = 9;
+/**
+ * A tap is a press that went nowhere.
+ *
+ * 14px rather than the 4–5px a mouse needs: a thumb on glass rolls while it
+ * presses, and a threshold tuned on a trackpad turns half of a real person's
+ * taps into one-pixel drags that do nothing. It is still an order of magnitude
+ * under the 100px a swipe has to travel to commit, so nothing that was meant
+ * as a gesture can be mistaken for a tap.
+ */
+const TAP_SLOP = 14;
 
 export interface SwipeCardProps {
   title: Title;

@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import PosterArt from "./PosterArt";
-import Wordmark from "./ui/Wordmark";
 import { getLocalTitle, loadCatalog } from "@/lib/catalog";
 import { useDhawq } from "@/lib/store";
 import { useAccount } from "@/lib/supabase/useAccount";
@@ -15,9 +15,9 @@ import type { Title } from "@/lib/types";
  * THE PAGE SOMEBODY ELSE SEES.
  *
  * For most people who ever open this link, it is the entire product — the
- * first and possibly only screen of dhawq they will look at. So it carries the
- * wordmark, which nothing else in the app does: identity belongs where it costs
- * nothing and explains something, not in a bar stealing 56px from the one
+ * first and possibly only screen of Seenit they will look at. So it says the
+ * name, which almost nothing else in the app does: identity belongs where it
+ * costs nothing and explains something, not in a bar stealing 56px from the one
  * screen the whole product is built around.
  *
  * TWO DOORS, AND ONLY ONE OF THEM HAS A LOCK. Browsing needs no account, ever —
@@ -98,8 +98,15 @@ export default function SharedList({
       animate="show"
       className="px-5 pb-32 pt-8"
     >
+      {/* the name, plainly — this page is the first and possibly only screen
+          of Seenit a stranger will ever look at */}
       <motion.div variants={FADE_UP} className="flex justify-center">
-        <Wordmark size={26} />
+        <Link
+          href="/"
+          className="text-lg font-bold tracking-[-0.03em] text-ink transition-opacity hover:opacity-70"
+        >
+          Seenit
+        </Link>
       </motion.div>
 
       <motion.p variants={FADE_UP} className="mt-8 text-center text-sm text-ink-dim">

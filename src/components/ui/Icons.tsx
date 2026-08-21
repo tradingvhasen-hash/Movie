@@ -243,3 +243,62 @@ export const LinkIcon = (p: IconProps) => (
     <path d="M13.5 10.5a4 4 0 0 0-5.7 0l-3 3a4 4 0 1 0 5.7 5.7l1.4-1.4" />
   </svg>
 );
+
+/** two people — the shared-decision screen */
+export const UsersIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <circle cx="9" cy="8" r="3.2" />
+    <path d="M3 20a6 6 0 0 1 12 0" />
+    <path d="M16.2 5.3a3.2 3.2 0 0 1 0 5.6" />
+    <path d="M17.6 14.4A6 6 0 0 1 21 20" />
+  </svg>
+);
+
+/** sliders — settings, drawn as controls rather than a cog */
+export const SlidersIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M5 4v6M5 14v6M12 4v3M12 11v9M19 4v10M19 18v2" />
+    <circle cx="5" cy="12" r="2" />
+    <circle cx="12" cy="9" r="2" />
+    <circle cx="19" cy="16" r="2" />
+  </svg>
+);
+
+/** back */
+export const ChevronLeftIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M14.5 5.5 8 12l6.5 6.5" />
+  </svg>
+);
+
+export const ChevronRightIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M9.5 5.5 16 12l-6.5 6.5" />
+  </svg>
+);
+
+/** a stack of saved collections */
+export const StackIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M12 3 3 7.5l9 4.5 9-4.5L12 3Z" />
+    <path d="M3 12.4 12 17l9-4.6" />
+    <path d="M3 16.9 12 21.5l9-4.6" />
+  </svg>
+);
+
+/** shuffle — "give me another one" */
+export const ShuffleIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M3 7h3.6a4 4 0 0 1 3.3 1.8l4.2 6.4A4 4 0 0 0 17.4 17H21" />
+    <path d="M3 17h3.6a4 4 0 0 0 3.3-1.8l.7-1.1" />
+    <path d="M13.9 9 14.6 8A4 4 0 0 1 17.9 6H21" />
+    <path d="m18.2 3.4 3 2.6-3 2.6M18.2 14.4l3 2.6-3 2.6" />
+  </svg>
+);
+
+/** a shield — the legal page, which is about what is kept and who sees it */
+export const ShieldIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M12 3.2 5 6v5.6c0 4.2 2.9 7.6 7 9.2 4.1-1.6 7-5 7-9.2V6l-7-2.8Z" />
+  </svg>
+);

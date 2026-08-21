@@ -114,7 +114,7 @@ export default function LabPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `dhawq-swipes-${rows.length}.json`;
+    a.download = `seenit-swipes-${rows.length}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };

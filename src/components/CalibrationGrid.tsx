@@ -131,7 +131,7 @@ export default function CalibrationGrid() {
     });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `dhawq-calibration-${rows.length}.json`;
+    a.download = `seenit-calibration-${rows.length}.json`;
     a.click();
     URL.revokeObjectURL(a.href);
   };

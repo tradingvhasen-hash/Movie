@@ -1,28 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
-  AnimatePresence,
   motion,
   useMotionValue,
   useTransform,
+  type MotionValue,
   type PanInfo,
 } from "framer-motion";
 import PosterArt from "./PosterArt";
-import {
-  ArrowUpIcon,
-  ChevronDownIcon,
-  HeartIcon,
-  StarIcon,
-  ThumbsDownIcon,
-} from "./ui/Icons";
+import { StarIcon } from "./ui/Icons";
 import { genreLabel } from "@/lib/genres";
-import { EASE_OUT, EASE_SWEEP, SLOW, SPRING_SETTLE, SPRING_SNAPPY } from "@/lib/motion";
+import { EASE_SWEEP, SPRING_SETTLE } from "@/lib/motion";
 import { locale, t } from "@/lib/i18n";
 import type { SwipeAction, Title } from "@/lib/types";
 
 export const SWIPE_X_THRESHOLD = 100;
 export const SWIPE_UP_THRESHOLD = 120;
+
+/** a tap is a press that went nowhere — anything further is the start of a drag */
+const TAP_SLOP = 9;
 
 export interface SwipeCardProps {
   title: Title;
@@ -31,31 +28,86 @@ export interface SwipeCardProps {
   onSwipe: (action: SwipeAction) => void;
   /** externally-triggered exit (buttons/keyboard): action or null */
   forcedExit: SwipeAction | null;
+  /** what an upward swipe records — a user setting */
+  upAction: SwipeAction;
+  /**
+   * The top card's position, owned by the deck.
+   *
+   * It lives up there rather than here because the *screen* reacts to this
+   * drag, not just the card. See ScreenFeedback.
+   */
+  x?: MotionValue<number>;
+  y?: MotionValue<number>;
 }
 
-export default function SwipeCard({ title, index, onSwipe, forcedExit }: SwipeCardProps) {
-  const [showDetails, setShowDetails] = useState(false);
+export default function SwipeCard({
+  title,
+  index,
+  onSwipe,
+  forcedExit,
+  upAction,
+  x: sharedX,
+  y: sharedY,
+}: SwipeCardProps) {
+  const [flipped, setFlipped] = useState(false);
   const [exiting, setExiting] = useState<SwipeAction | null>(null);
 
-  const x = useMotionValue(0);
-  const y = useMotionValue(0);
+  const ownX = useMotionValue(0);
+  const ownY = useMotionValue(0);
+  const x = sharedX ?? ownX;
+  const y = sharedY ?? ownY;
 
-  /* live drag feedback: tilt, stamp opacity, and a subtle scale/lift */
   const rotate = useTransform(x, [-260, 0, 260], [-16, 0, 16]);
-  const likeOpacity = useTransform(x, [24, SWIPE_X_THRESHOLD], [0, 1]);
-  const likeScale = useTransform(x, [24, SWIPE_X_THRESHOLD], [0.7, 1]);
-  const nopeOpacity = useTransform(x, [-SWIPE_X_THRESHOLD, -24], [1, 0]);
-  const nopeScale = useTransform(x, [-SWIPE_X_THRESHOLD, -24], [1, 0.7]);
-  const skipOpacity = useTransform(y, [-SWIPE_UP_THRESHOLD, -36], [1, 0]);
-  const skipScale = useTransform(y, [-SWIPE_UP_THRESHOLD, -36], [1, 0.7]);
 
   const isTop = index === 0;
   const activeExit = isTop ? (exiting ?? forcedExit) : null;
 
+  /* a card arriving at the front starts face-up and un-dragged */
+  useEffect(() => {
+    if (isTop) {
+      setFlipped(false);
+      x.set(0);
+      y.set(0);
+    }
+    // the motion values are stable for the life of the deck
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isTop, title.id]);
+
+  /**
+   * TAP TO TURN THE CARD OVER.
+   *
+   * There used to be a chevron in the corner that slid a translucent panel up
+   * over the bottom of the poster. The user's verdict, twice: "still bad… all
+   * you are doing is changing an icon."
+   *
+   * He was right, and the reason is that a panel over a poster is the *same*
+   * object trying to be two things at once — you can see the film and the text
+   * simultaneously, and neither wins. The thing this product is built out of
+   * is a card. Cards have backs. So the whole card turns over: poster on the
+   * front, everything the poster cannot say on the back, on a real surface
+   * with room to breathe. Nothing overlaps anything.
+   *
+   * And it costs no control at all. The affordance is the card itself — tap
+   * it — which is why the corner button is gone rather than redrawn.
+   */
+  const press = useRef<{ px: number; py: number; at: number } | null>(null);
+
+  function handlePointerDown(e: React.PointerEvent) {
+    press.current = { px: e.clientX, py: e.clientY, at: Date.now() };
+  }
+
+  function handlePointerUp(e: React.PointerEvent) {
+    const p = press.current;
+    press.current = null;
+    if (!p || !isTop || activeExit) return;
+    const moved = Math.hypot(e.clientX - p.px, e.clientY - p.py);
+    if (moved <= TAP_SLOP && Date.now() - p.at < 600) setFlipped((v) => !v);
+  }
+
   /**
    * A gesture commits the moment the finger lifts, not when the animation
-   * ends. The card is removed from the queue immediately and `AnimatePresence`
-   * plays the fly-off over the top of a card React has already dropped.
+   * ends. The card is removed from the queue immediately and the deck plays
+   * the fly-off over the top of a card React has already dropped.
    *
    * It used to commit from `onAnimationComplete`, 520ms later, and the deck
    * ignored every swipe in between — reproduced as one stuck card in two at a
@@ -67,7 +119,7 @@ export default function SwipeCard({ title, index, onSwipe, forcedExit }: SwipeCa
     const py = info.offset.y + info.velocity.y / 7;
     const action: SwipeAction | null =
       py < -SWIPE_UP_THRESHOLD && Math.abs(py) > Math.abs(px)
-        ? "not_seen"
+        ? upAction
         : px > SWIPE_X_THRESHOLD
           ? "liked"
           : px < -SWIPE_X_THRESHOLD
@@ -84,7 +136,7 @@ export default function SwipeCard({ title, index, onSwipe, forcedExit }: SwipeCa
       ? { x: 640, y: -90, rotate: 24, opacity: 0, scale: 0.92 }
       : activeExit === "disliked"
         ? { x: -640, y: -90, rotate: -24, opacity: 0, scale: 0.92 }
-        : activeExit === "not_seen"
+        : activeExit
           ? { x: 0, y: -780, rotate: 0, opacity: 0, scale: 0.9 }
           : null;
 
@@ -100,7 +152,14 @@ export default function SwipeCard({ title, index, onSwipe, forcedExit }: SwipeCa
   return (
     <motion.div
       className="absolute inset-0 touch-none select-none will-change-transform"
-      style={{ x, y, rotate, zIndex: 30 - index, pointerEvents: isTop ? "auto" : "none" }}
+      style={{
+        x,
+        y,
+        rotate,
+        zIndex: 30 - index,
+        pointerEvents: isTop ? "auto" : "none",
+        perspective: 1400,
+      }}
       /* a card joining the back of the stack grows in instead of popping */
       initial={{
         y: index * 12 + 26,
@@ -125,155 +184,153 @@ export default function SwipeCard({ title, index, onSwipe, forcedExit }: SwipeCa
       dragElastic={0.55}
       dragTransition={{ bounceStiffness: 260, bounceDamping: 26 }}
       onDragEnd={handleDragEnd}
-      whileDrag={{ scale: 1.03, cursor: "grabbing" }}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      whileDrag={{ cursor: "grabbing" }}
     >
-      <div className="soft-card relative h-full w-full overflow-hidden">
-        <PosterArt title={title} />
-
-        {/* bottom info gradient */}
-        <div className="card-sheen absolute inset-0" />
-
-        {/* direction stamps — scale up as the gesture commits */}
-        <motion.div
-          style={{ opacity: likeOpacity, scale: likeScale }}
-          className="absolute start-4 top-5 rotate-[-8deg] rounded-2xl border-[3px] border-accent bg-white/85 p-2.5 text-accent backdrop-blur"
-          aria-label={t("swipe.liked")}
+      <motion.div
+        className="relative h-full w-full"
+        style={{ transformStyle: "preserve-3d" }}
+        animate={{ rotateY: flipped ? 180 : 0 }}
+        transition={{ type: "spring", stiffness: 260, damping: 30, mass: 0.9 }}
+      >
+        {/* ── front: the poster, and only what a poster cannot say ── */}
+        <div
+          className="soft-card absolute inset-0 overflow-hidden"
+          style={{ backfaceVisibility: "hidden", WebkitBackfaceVisibility: "hidden" }}
         >
-          <HeartIcon size={34} filled />
-        </motion.div>
-        <motion.div
-          style={{ opacity: nopeOpacity, scale: nopeScale }}
-          className="absolute end-4 top-5 rotate-[8deg] rounded-2xl border-[3px] border-white/90 bg-black/30 p-2.5 text-white backdrop-blur"
-          aria-label={t("swipe.disliked")}
-        >
-          <ThumbsDownIcon size={34} filled />
-        </motion.div>
-        <motion.div
-          style={{ opacity: skipOpacity, scale: skipScale }}
-          className="absolute inset-x-0 bottom-20 mx-auto w-fit rounded-2xl border-[3px] border-white/90 bg-black/30 p-2.5 text-white backdrop-blur"
-          aria-label={t("swipe.notSeen")}
-        >
-          <ArrowUpIcon size={34} strokeWidth={2.6} />
-        </motion.div>
+          <PosterArt title={title} />
+          <div className="card-sheen absolute inset-0" />
 
-        {/* info block */}
-        <div className="absolute inset-x-0 bottom-0 p-4">
-          <div className="flex items-end justify-between gap-3">
-            <div className="min-w-0">
-              <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-                <span className="rounded-md bg-white/15 px-2 py-0.5 text-[10px] font-bold text-white/95 backdrop-blur">
-                  {title.type === "movie" ? t("card.movie") : t("card.tv")}
-                </span>
-                <span className="rounded-md bg-white/15 px-2 py-0.5 text-[10px] font-semibold text-white/95 backdrop-blur">
-                  {title.year}
-                </span>
-                <span className="flex items-center gap-1 rounded-md bg-white/15 px-2 py-0.5 text-[10px] font-semibold text-white/95 backdrop-blur">
-                  <StarIcon size={10} filled className="text-accent" />
-                  {title.rating.toFixed(1)}
-                </span>
-              </div>
-              <h2 className="truncate text-xl font-bold text-white drop-shadow">
-                {title.title[locale]}
-              </h2>
-              <div className="mt-0.5 flex flex-wrap gap-x-2.5">
-                {title.genres.slice(0, 3).map((g) => (
-                  <span key={g} className="text-[11px] font-medium text-white/60">
-                    {genreLabel(g, locale)}
-                  </span>
-                ))}
-              </div>
+          <div className="absolute inset-x-0 bottom-0 p-4">
+            <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+              <span className="rounded-md bg-white/15 px-2 py-0.5 text-[10px] font-bold text-white/95 backdrop-blur">
+                {title.type === "movie" ? t("card.movie") : t("card.tv")}
+              </span>
+              <span className="rounded-md bg-white/15 px-2 py-0.5 text-[10px] font-semibold text-white/95 backdrop-blur">
+                {title.year}
+              </span>
+              <span className="flex items-center gap-1 rounded-md bg-white/15 px-2 py-0.5 text-[10px] font-semibold text-white/95 backdrop-blur">
+                <StarIcon size={10} filled className="text-accent" />
+                {title.rating.toFixed(1)}
+              </span>
             </div>
-            <motion.button
-              onClick={() => setShowDetails((v) => !v)}
-              /**
-               * The card is a drag surface, and Framer starts a drag after a
-               * few pixels of movement — which a thumb tap always produces. The
-               * drag then swallows the click and the card does not flip. The
-               * user noticed it before any instrument here did: "if you see a
-               * card that doesn't flip, that is also part of the problem."
-               *
-               * Stopping the pointer here means the drag never begins for a
-               * touch that started on this button, so the tap is a tap.
-               */
-              onPointerDownCapture={(e) => e.stopPropagation()}
-              aria-label={t("swipe.details")}
-              aria-expanded={showDetails}
-              whileTap={{ scale: 0.94 }}
-              transition={SPRING_SNAPPY}
-              /**
-               * A CHEVRON ON A REAL SURFACE, NOT AN ⓘ ON A GREY DISC.
-               *
-               * The old button was a translucent white circle holding an info
-               * glyph, spun 180 degrees when opened. Three things were wrong.
-               * An ⓘ promises a definition; this opens a panel, and a chevron
-               * is the only glyph everyone already reads as "there is more,
-               * downward". Spinning it 180 degrees is motion that describes
-               * nothing — a chevron that *flips* says open and closed, a
-               * chevron that rotates a full half-turn says neither. And
-               * `bg-white/15` over an arbitrary poster is not a material: on a
-               * pale poster it disappears, on a dark one it glares. A blurred
-               * dark surface with a hairline reads identically over every
-               * poster in the catalog, which is the whole job.
-               */
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-white/15 bg-black/35 text-white backdrop-blur-md transition-colors hover:bg-black/50"
-            >
-              <motion.span
-                animate={{ rotate: showDetails ? 180 : 0 }}
-                transition={SPRING_SNAPPY}
-                className="grid place-items-center"
-              >
-                <ChevronDownIcon size={18} strokeWidth={2.2} />
-              </motion.span>
-            </motion.button>
+            <h2 className="text-xl font-bold leading-tight text-white drop-shadow">
+              {title.title[locale]}
+            </h2>
+            <div className="mt-1 flex flex-wrap gap-x-2.5">
+              {title.genres.slice(0, 3).map((g) => (
+                <span key={g} className="text-[11px] font-medium text-white/60">
+                  {genreLabel(g, locale)}
+                </span>
+              ))}
+            </div>
           </div>
 
-          <AnimatePresence initial={false}>
-            {showDetails && (
-              <motion.div
-                key="details"
-                initial={{ opacity: 0, height: 0, y: 10 }}
-                animate={{ opacity: 1, height: "auto", y: 0 }}
-                exit={{ opacity: 0, height: 0, y: 6 }}
-                transition={{ duration: SLOW, ease: EASE_OUT }}
-                className="overflow-hidden"
-              >
-                {/*
-                  `bg-black/60` is a box drawn on top of a photograph — you can
-                  see both, and neither wins. What a modern platform does here
-                  is a *material*: heavy blur, low opacity, a hairline of light
-                  along the top edge where it catches the poster behind it, and
-                  a shadow so it reads as lifted rather than painted on. The
-                  poster stays legible through it, which is the point of
-                  putting it over the poster at all.
-                */}
-                <div className="mt-3 rounded-2xl border border-white/12 bg-black/45 p-4 shadow-[0_8px_28px_rgba(0,0,0,0.45)] backdrop-blur-2xl">
-                  {/* summaries load behind the deck, so a card opened in the
-                      first second may not have one yet */}
-                  <p className="text-[13px] leading-relaxed text-white/85">
-                    {title.overview[locale] || (
-                      <span className="text-white/50">…</span>
-                    )}
-                  </p>
-                  {title.people.director && (
-                    <p className="mt-2 text-[11px] text-white/60">
-                      <span className="font-semibold text-white/80">
-                        {title.type === "movie" ? t("card.director") : t("card.creator")}:
-                      </span>{" "}
-                      {title.people.director}
-                    </p>
-                  )}
-                  {title.people.cast.length > 0 && (
-                    <p className="mt-1 text-[11px] text-white/60">
-                      <span className="font-semibold text-white/80">{t("card.cast")}:</span>{" "}
-                      {title.people.cast.slice(0, 3).join(", ")}
-                    </p>
-                  )}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {/*
+            The only hint that there is a back, and it is a hint rather than a
+            control: two stacked lines in the corner, the universal "there is
+            more written here". It never needs to be pressed — the whole card
+            is the target — so it is 22px of ink instead of a 36px button.
+          */}
+          {isTop && (
+            <motion.span
+              className="absolute end-3.5 top-3.5 flex h-7 w-7 items-center justify-center rounded-full bg-black/30 backdrop-blur-md"
+              animate={{ opacity: [0.45, 0.9, 0.45] }}
+              transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}
+              aria-hidden
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.4" strokeLinecap="round">
+                <path d="M5 8.5h14M5 13h10M5 17.5h6" />
+              </svg>
+            </motion.span>
+          )}
         </div>
-      </div>
+
+        {/* ── back: everything the poster cannot say ──
+            The poster does not disappear when the card turns; it goes out of
+            focus behind the text. A back face made of flat surface colour was
+            the first version and it was disorienting — you could no longer
+            tell *which* film you had turned over without reading the title,
+            and the card lost every bit of the colour that made it recognisable
+            a second earlier. The blurred artwork keeps the identity, fills the
+            space a short synopsis leaves empty, and is the same trick a phone
+            uses behind an album on a now-playing screen. */}
+        <div
+          className="soft-card absolute inset-0 flex flex-col overflow-hidden"
+          style={{
+            backfaceVisibility: "hidden",
+            WebkitBackfaceVisibility: "hidden",
+            transform: "rotateY(180deg)",
+          }}
+        >
+          <div className="absolute inset-0 scale-125" aria-hidden>
+            <PosterArt title={title} sizes="380px" />
+          </div>
+          <div
+            className="absolute inset-0 backdrop-blur-2xl"
+            style={{ background: "rgb(var(--rgb-scrim) / 0.72)" }}
+            aria-hidden
+          />
+
+          <div className="relative flex h-full flex-col p-5 text-white">
+            <div className="flex shrink-0 gap-3.5">
+              <div className="h-[92px] w-[62px] shrink-0 overflow-hidden rounded-xl shadow-[0_6px_18px_rgb(0_0_0/0.4)]">
+                <PosterArt title={title} sizes="120px" className="h-full w-full" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h2 className="text-[19px] font-bold leading-tight tracking-tight">
+                  {title.title[locale]}
+                </h2>
+                <div className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[11px] font-semibold text-white/60">
+                  <span>{title.year}</span>
+                  <span>·</span>
+                  <span>{title.type === "movie" ? t("card.movie") : t("card.tv")}</span>
+                  <span>·</span>
+                  <span className="flex items-center gap-1">
+                    <StarIcon size={11} filled className="text-accent-soft" />
+                    {title.rating.toFixed(1)}
+                  </span>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {title.genres.slice(0, 3).map((g) => (
+                    <span
+                      key={g}
+                      className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-semibold capitalize backdrop-blur-sm"
+                    >
+                      {genreLabel(g, locale)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* the one scrolling surface inside the stage — see globals.css */}
+            <div className="card-back-scroll mt-5 min-h-0 flex-1 overflow-y-auto">
+              <p className="text-[14px] leading-relaxed text-white/85">
+                {title.overview[locale] || "…"}
+              </p>
+            </div>
+
+            <div className="mt-4 shrink-0 space-y-1 border-t border-white/15 pt-3 text-[11.5px] text-white/60">
+              {title.people.director && (
+                <p>
+                  <span className="font-semibold text-white/85">
+                    {title.type === "movie" ? t("card.director") : t("card.creator")}
+                  </span>{" "}
+                  {title.people.director}
+                </p>
+              )}
+              {title.people.cast.length > 0 && (
+                <p>
+                  <span className="font-semibold text-white/85">{t("card.cast")}</span>{" "}
+                  {title.people.cast.slice(0, 3).join(", ")}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      </motion.div>
     </motion.div>
   );
 }

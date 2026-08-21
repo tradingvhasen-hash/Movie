@@ -7,34 +7,39 @@ import { getLocalCatalog, getLocalTitle, loadCatalog } from "@/lib/catalog";
 import { matches } from "@/lib/search";
 import { useDhawq } from "@/lib/store";
 import { FADE_UP, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
-import { CheckIcon, PlusIcon, SearchIcon } from "./ui/Icons";
+import { CheckIcon, SearchIcon, XIcon } from "./ui/Icons";
 import type { Title } from "@/lib/types";
 
 /**
- * FOUR WAYS TO FILL A LIST, BECAUSE ONE OF THEM IS ALWAYS THE WRONG ONE.
+ * THREE WAYS TO FILL A LIST, BECAUSE ONE OF THEM IS ALWAYS THE WRONG ONE.
  *
  * The obvious build is a picker: here is your library, tick what belongs. It
  * is also the slowest possible way to say "all my comedies" — a person with
  * three hundred comedies has to tap three hundred times, and will not.
  *
- * The four modes below are not four features. They are the same operation —
- * "add these ids" — reached from the four ways a person actually has the list
- * in their head:
+ * These are not three features. They are the same operation — "add these ids"
+ * — reached from the three ways a person actually has the list in their head:
  *
- *   PICK      you can see them, so point at them
- *   TYPE      you remember the name but it is not in your library yet
+ *   LIBRARY   you can see them, so point at them
+ *   NAME      you remember the title but it is not in your library yet
  *   GENRE     you cannot name them but the rule is obvious: every comedy
- *   COPY      somebody else already made it
+ *
+ * (The fourth way, copying somebody else's, lives on the share page where the
+ * somebody else is.)
  *
  * GENRE is the one that earns the screen. It answers "every comedy" in one
- * tap, and it composes: choosing comedy *and* horror gives both, and the
- * counts update live so the size of the answer is visible before committing.
- * Only genres that exist in this person's own library are offered — a list of
- * every genre in the catalog would be a list of things that add nothing.
+ * tap, it composes — comedy *and* horror gives both — and the counts update
+ * live so the size of the answer is visible before committing. Only genres
+ * present in *this person's* library are offered, sorted by size: putting
+ * "comedy 184" first is the difference between a menu and a suggestion.
  *
- * COPYING IS A COPY, NOT A MOVE, everywhere. Nothing here removes a title from
- * the main library; the user asked for that explicitly and it is also the only
- * sane semantics — a library is what you watched, and a list is a view of it.
+ * WHAT CHANGED AFTER THE USER GOT STUCK HERE. The screen used to open on the
+ * three modes, with the list's actual contents pushed to the bottom below a
+ * grid of candidates — so the first thing you saw on entering a list was
+ * everything that was *not* in it. That is backwards, and it is most of why he
+ * could not tell what this screen was. The list comes first now, with a cross
+ * on every tile because "tap the poster to remove it" is not a thing anybody
+ * guesses; adding is below it, where an action on a subject belongs.
  */
 type Mode = "pick" | "type" | "genre";
 
@@ -83,13 +88,6 @@ export default function ListBuilder({
     return out.reverse();
   }, [swipes, catalogReady]);
 
-  /**
-   * Genres present in *this person's* library, with a live count.
-   *
-   * Sorted by size rather than alphabetically: the rule someone reaches for is
-   * almost always their biggest one, and putting "comedy · 184" first is the
-   * difference between a menu and a suggestion.
-   */
   const genres = useMemo(() => {
     const counts = new Map<string, number>();
     for (const t of library) {
@@ -150,8 +148,43 @@ export default function ListBuilder({
       ? genreMatches.filter((t) => !inList.has(t.id)).length
       : picked.size;
 
+  const contents = list.titleIds
+    .map((id) => getLocalTitle(id))
+    .filter((t): t is Title => Boolean(t));
+
   return (
     <motion.div variants={staggerContainer(0.04)} initial="hidden" animate="show">
+      {/* ── what is in the list, first, because that is what a list is ── */}
+      {contents.length > 0 && (
+        <motion.div variants={FADE_UP} className="mb-8">
+          <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
+            <AnimatePresence initial={false}>
+              {contents.map((t) => (
+                <motion.button
+                  key={t.id}
+                  layout
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.86 }}
+                  whileTap={{ scale: 0.93 }}
+                  transition={SPRING_SNAPPY}
+                  type="button"
+                  onClick={() => removeFromList(listId, [t.id])}
+                  aria-label={`Remove ${t.title.en}`}
+                  className="relative block w-full min-w-0 overflow-hidden rounded-xl"
+                >
+                  <PosterArt title={t} sizes="110px" className="aspect-[2/3] w-full" />
+                  <span className="absolute end-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-[rgb(var(--rgb-scrim)/0.62)] text-white backdrop-blur-sm">
+                    <XIcon size={11} strokeWidth={3} />
+                  </span>
+                </motion.button>
+              ))}
+            </AnimatePresence>
+          </div>
+          <div className="mt-6 h-px bg-line" />
+        </motion.div>
+      )}
+
       {/* the three ways in — a segmented control, not three buttons */}
       <motion.div
         variants={FADE_UP}
@@ -160,7 +193,7 @@ export default function ListBuilder({
       >
         {(
           [
-            ["pick", "From your library"],
+            ["pick", "Your library"],
             ["type", "By name"],
             ["genre", "By genre"],
           ] as const
@@ -174,7 +207,7 @@ export default function ListBuilder({
               setPicked(new Set());
             }}
             className={`relative flex-1 rounded-full px-3 py-2 text-xs font-semibold transition-colors ${
-              mode === m ? "text-on-accent" : "text-ink-dim"
+              mode === m ? "text-[color:var(--color-on-accent)]" : "text-ink-dim"
             }`}
           >
             {mode === m && (
@@ -209,9 +242,11 @@ export default function ListBuilder({
           {genres.map(([g, n]) => {
             const on = chosenGenres.has(g);
             return (
-              <button
+              <motion.button
                 key={g}
                 type="button"
+                whileTap={{ scale: 0.94 }}
+                transition={SPRING_SNAPPY}
                 onClick={() =>
                   setChosenGenres((s) => {
                     const next = new Set(s);
@@ -222,24 +257,22 @@ export default function ListBuilder({
                 }
                 className={`rounded-full border px-3 py-1.5 text-xs font-semibold capitalize transition-colors ${
                   on
-                    ? "border-accent bg-accent text-on-accent"
+                    ? "border-accent bg-accent text-[color:var(--color-on-accent)]"
                     : "border-line bg-surface text-ink-dim"
                 }`}
               >
                 {g} <span className="tabular-nums opacity-70">{n}</span>
-              </button>
+              </motion.button>
             );
           })}
           {genres.length === 0 && (
-            <div className="flex w-full flex-col items-center gap-3 py-10">
-              <div className="flex gap-1.5">
-                {[0, 1, 2].map((i) => (
-                  <span
-                    key={i}
-                    className="h-14 w-10 rounded-lg border border-dashed border-line"
-                  />
-                ))}
-              </div>
+            <div className="flex w-full justify-center gap-1.5 py-10">
+              {[0, 1, 2].map((i) => (
+                <span
+                  key={i}
+                  className="h-14 w-10 rounded-lg border border-dashed border-line"
+                />
+              ))}
             </div>
           )}
         </motion.div>
@@ -256,18 +289,25 @@ export default function ListBuilder({
                 key={t.id}
                 layout
                 initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: already ? 0.45 : 1, scale: 1 }}
+                animate={{ opacity: already ? 0.4 : 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.9 }}
                 transition={SPRING_SNAPPY}
-                whileTap={{ scale: 0.94 }}
+                whileTap={{ scale: 0.93 }}
                 type="button"
-                disabled={mode === "genre"}
+                disabled={mode === "genre" || already}
                 onClick={() => toggle(t.id)}
-                className="relative block w-full min-w-0 overflow-hidden rounded-xl border border-line"
+                aria-label={t.title.en}
+                className="relative block w-full min-w-0 overflow-hidden rounded-xl"
+                style={{
+                  boxShadow:
+                    on && !already && mode !== "genre"
+                      ? "0 0 0 3px var(--color-accent)"
+                      : undefined,
+                }}
               >
                 <PosterArt title={t} sizes="110px" className="aspect-[2/3] w-full" />
                 {(already || (on && mode !== "genre")) && (
-                  <span className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-accent text-on-accent">
+                  <span className="absolute end-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-accent text-[color:var(--color-on-accent)]">
                     <CheckIcon size={12} strokeWidth={3} />
                   </span>
                 )}
@@ -277,58 +317,30 @@ export default function ListBuilder({
         </AnimatePresence>
       </motion.div>
 
-      {/* the commit bar only exists when there is something to commit */}
+      {/* the commit control only exists when there is something to commit */}
       <AnimatePresence>
         {pendingCount > 0 && (
           <motion.div
-            initial={{ y: 60, opacity: 0 }}
+            initial={{ y: 90, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 60, opacity: 0 }}
-            transition={SPRING_SNAPPY}
-            className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-bg/85 px-5 pb-[calc(74px+env(safe-area-inset-bottom))] pt-3 backdrop-blur-xl"
+            exit={{ y: 90, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 380, damping: 32 }}
+            className="fixed inset-x-0 bottom-[calc(88px+env(safe-area-inset-bottom))] z-30 flex justify-center px-5"
           >
-            <button
+            <motion.button
               type="button"
+              whileTap={{ scale: 0.95 }}
+              transition={SPRING_SNAPPY}
               onClick={() =>
-                commit(
-                  mode === "genre"
-                    ? genreMatches.map((t) => t.id)
-                    : [...picked]
-                )
+                commit(mode === "genre" ? genreMatches.map((t) => t.id) : [...picked])
               }
-              className="flex w-full items-center justify-center gap-2 rounded-full bg-accent py-3 text-sm font-semibold text-on-accent"
+              className="rounded-full bg-accent px-7 py-3.5 text-sm font-bold text-[color:var(--color-on-accent)] shadow-[0_10px_34px_rgb(var(--rgb-accent)/0.45)]"
             >
-              <PlusIcon size={16} strokeWidth={2.5} />
-              {pendingCount}
-            </button>
+              Add {pendingCount}
+            </motion.button>
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* what is already in, so removing is possible from the same screen */}
-      {list.titleIds.length > 0 && (
-        <motion.div variants={FADE_UP} className="mt-8">
-          <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
-            {list.titleIds.map((id) => {
-              const t = getLocalTitle(id);
-              if (!t) return null;
-              return (
-                <motion.button
-                  key={id}
-                  layout
-                  whileTap={{ scale: 0.92 }}
-                  transition={SPRING_SNAPPY}
-                  type="button"
-                  onClick={() => removeFromList(listId, [id])}
-                  className="relative block w-full min-w-0 overflow-hidden rounded-xl border border-accent/50"
-                >
-                  <PosterArt title={t} sizes="110px" className="aspect-[2/3] w-full" />
-                </motion.button>
-              );
-            })}
-          </div>
-        </motion.div>
-      )}
     </motion.div>
   );
 }

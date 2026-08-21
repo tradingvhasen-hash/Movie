@@ -1,25 +1,25 @@
 "use client";
 
 /**
- * SHOW THE GESTURE INSTEAD OF DESCRIBING IT.
+ * THE FIRST FIVE SECONDS.
  *
- * What stood here was a wall: a heading, a paragraph, and three checkbox rows
- * spelling out "swipe right: watched and loved it", "swipe left: watched,
- * didn't like it", "swipe up: haven't seen it". Nobody reads three sentences
- * to learn a gesture they already know from every other card interface on
- * their phone — and if they did read them, they would still not know what the
- * gesture *feels* like, which is the only thing worth teaching.
+ * The user's verdict on the previous version was "100 times really bad", and
+ * he was right about it in a way worth writing down, because the mistake is
+ * easy to make twice: it demonstrated the gesture on a **fake** card — a blank
+ * surface with a logo on it — while the screen around it did nothing. So it
+ * taught the shape of a movement and not one thing about what the movement
+ * feels like, which is the only part a person cannot guess.
  *
- * So the first card demonstrates itself. It leans right and a heart appears,
- * returns, leans left and a thumb-down appears, returns, then lifts up with a
- * cross and leaves — handing the stage to the first real film.
+ * This version demonstrates the real thing, on real film posters, by driving
+ * the *same two motion values the deck uses*. `ScreenFeedback` is mounted here
+ * exactly as it is mounted there and reads exactly the same numbers, so the
+ * wash of colour, the mark at the edge and the commit step are not a
+ * reproduction of the interaction — they are the interaction, with the finger
+ * simulated. Anything I improve about how a swipe feels improves this screen
+ * for free, and the two can never drift apart.
  *
- * IT LEANS, IT DOES NOT FLY. The card must never leave the screen sideways
- * during the demo, because a card that vanishes teaches "this is what happens
- * when I swipe" only after the fact. A card that travels a third of the way
- * and springs back teaches the *relationship* between the movement and the
- * verdict while both are still visible. Only the last movement completes, so
- * the demo ends the way a real swipe does.
+ * It also says the name once, at the only moment in the product's life when
+ * somebody does not know it yet, and then never again.
  *
  * WHEN IT APPEARS, exactly as specified:
  *
@@ -29,14 +29,20 @@
  *
  * The third condition is what `shownThisLoad` is for. A module-level flag
  * lives as long as the JavaScript bundle does: it survives navigating between
- * pages, and it dies on refresh — which is precisely the rule asked for, with
- * no storage, no timestamps and nothing to get out of sync.
+ * pages and dies on refresh — precisely the rule asked for, with no storage,
+ * no timestamps and nothing to get out of sync.
+ *
+ * And it can be skipped by touching the screen. A demo nobody can interrupt is
+ * a demo that has stopped being a courtesy.
  */
-import { useEffect, useRef, useState } from "react";
-import { motion, useAnimationControls } from "framer-motion";
-import Wordmark from "./ui/Wordmark";
-import { ArrowUpIcon, HeartIcon, ThumbsDownIcon } from "./ui/Icons";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { animate, motion, useMotionValue } from "framer-motion";
+import ScreenFeedback from "./ScreenFeedback";
+import PosterArt from "./PosterArt";
+import { getLocalCatalog } from "@/lib/catalog";
+import { resolveSeeds } from "@/lib/data/taste-seeds";
 import { EASE_OUT, SPRING_SETTLE } from "@/lib/motion";
+import type { Title } from "@/lib/types";
 
 let shownThisLoad = false;
 
@@ -45,144 +51,164 @@ export function demoAlreadyShown(): boolean {
   return shownThisLoad;
 }
 
-type Beat = { x: number; y: number; rotate: number; badge: Badge | null };
-type Badge = "liked" | "disliked" | "not_seen";
-
-/**
- * The script. Distances are a fraction of the card, not pixels, so the demo
- * reads identically on a small phone and a tablet.
- */
-const BEATS: { beat: Beat; hold: number }[] = [
-  { beat: { x: 0, y: 0, rotate: 0, badge: null }, hold: 520 },
-  { beat: { x: 96, y: -6, rotate: 7, badge: "liked" }, hold: 620 },
-  { beat: { x: 0, y: 0, rotate: 0, badge: null }, hold: 260 },
-  { beat: { x: -96, y: -6, rotate: -7, badge: "disliked" }, hold: 620 },
-  { beat: { x: 0, y: 0, rotate: 0, badge: null }, hold: 260 },
-  { beat: { x: 0, y: -120, rotate: 0, badge: "not_seen" }, hold: 560 },
+/** the script, in the two numbers the deck itself is driven by */
+const BEATS: { x: number; y: number; hold: number }[] = [
+  { x: 0, y: 0, hold: 620 },
+  { x: 142, y: -10, hold: 700 },
+  { x: 0, y: 0, hold: 220 },
+  { x: -142, y: -10, hold: 700 },
+  { x: 0, y: 0, hold: 220 },
+  { x: 0, y: -150, hold: 640 },
 ];
 
-const BADGE = {
-  liked: { Icon: HeartIcon, tint: "var(--color-accent)", filled: true },
-  disliked: { Icon: ThumbsDownIcon, tint: "var(--color-danger)", filled: true },
-  not_seen: { Icon: ArrowUpIcon, tint: "var(--color-ink-dim)", filled: false },
-} as const;
-
 export default function WelcomeDemo({ onDone }: { onDone: () => void }) {
-  const controls = useAnimationControls();
-  const [badge, setBadge] = useState<Badge | null>(null);
-  const [leaving, setLeaving] = useState(false);
-  const cancelled = useRef(false);
+  const x = useMotionValue(0);
+  const y = useMotionValue(0);
+  const [stage, setStage] = useState<"name" | "demo">("name");
+  const done = useRef(false);
+
+  /** three real posters, so the demo is the product rather than a diagram */
+  const cards = useMemo<Title[]>(() => {
+    const pool = getLocalCatalog().map((c) => c.title);
+    if (pool.length === 0) return [];
+    const named = resolveSeeds(pool, 12);
+    const source = named.length >= 3 ? named : [...pool].sort((a, b) => b.voteCount - a.voteCount);
+    return source.slice(0, 3);
+  }, []);
+
+  const finish = useRef(onDone);
+  finish.current = onDone;
 
   useEffect(() => {
     shownThisLoad = true;
-    cancelled.current = false;
+    let cancelled = false;
 
     const wait = (ms: number) =>
       new Promise<void>((resolve) => setTimeout(resolve, ms));
 
     (async () => {
-      // the card arrives before the script starts: the beats below own x, y and
-      // rotate only, so without this it would run the whole demo at opacity 0
-      await controls.start({
-        opacity: 1,
-        y: 0,
-        transition: { duration: 0.32, ease: EASE_OUT },
-      });
-      for (const { beat, hold } of BEATS) {
-        if (cancelled.current) return;
-        setBadge(beat.badge);
-        await controls.start({
-          x: beat.x,
-          y: beat.y,
-          rotate: beat.rotate,
-          transition: SPRING_SETTLE,
-        });
-        await wait(hold);
+      await wait(1150);
+      if (cancelled) return;
+      setStage("demo");
+      await wait(360);
+
+      for (const beat of BEATS) {
+        if (cancelled) return;
+        await Promise.all([
+          animate(x, beat.x, SPRING_SETTLE).finished,
+          animate(y, beat.y, SPRING_SETTLE).finished,
+        ]);
+        await wait(beat.hold);
       }
-      if (cancelled.current) return;
-      // only the last movement completes: the card goes, as a real one would
-      setLeaving(true);
-      await controls.start({
-        y: -820,
-        opacity: 0,
-        transition: { duration: 0.42, ease: EASE_OUT },
-      });
-      if (!cancelled.current) onDone();
+      if (cancelled) return;
+      // only the last movement completes — the card goes, as a real one would
+      await animate(y, -900, { duration: 0.42, ease: EASE_OUT }).finished;
+      if (!cancelled && !done.current) {
+        done.current = true;
+        finish.current();
+      }
     })();
 
     return () => {
-      cancelled.current = true;
+      cancelled = true;
     };
-  }, [controls, onDone]);
+  }, [x, y]);
 
-  const active = badge ? BADGE[badge] : null;
+  const skip = () => {
+    if (done.current) return;
+    done.current = true;
+    finish.current();
+  };
 
   return (
     <div
-      className="swipe-stage mx-auto flex w-full max-w-md flex-col items-center overflow-hidden px-4 pt-4"
+      className="swipe-stage relative mx-auto flex w-full max-w-md flex-col items-center overflow-hidden px-4 pt-4"
       style={{ height: "calc(100dvh - 74px - env(safe-area-inset-bottom))" }}
+      onPointerDown={skip}
     >
-      <div className="relative min-h-0 w-full flex-1">
+      <ScreenFeedback layer="back" x={x} y={y} upAction="not_seen" />
+      <ScreenFeedback layer="front" x={x} y={y} upAction="not_seen" />
+
+      {/* the name, once */}
+      <motion.div
+        className="pointer-events-none absolute inset-0 z-20 grid place-items-center"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: stage === "name" ? 1 : 0 }}
+        transition={{ duration: 0.4, ease: EASE_OUT }}
+      >
+        <div className="text-center">
+          <motion.h1
+            initial={{ opacity: 0, y: 14, letterSpacing: "0.12em" }}
+            animate={{ opacity: 1, y: 0, letterSpacing: "-0.035em" }}
+            transition={{ duration: 0.8, ease: EASE_OUT }}
+            className="text-5xl font-bold text-ink"
+          >
+            Seenit
+          </motion.h1>
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5, delay: 0.42, ease: EASE_OUT }}
+            className="mt-3 text-sm font-medium text-ink-faint"
+          >
+            Everything you have ever watched
+          </motion.p>
+        </div>
+      </motion.div>
+
+      <div className="relative z-10 min-h-0 w-full flex-1">
         <div className="relative mx-auto h-full w-fit">
           <div className="relative h-full max-w-[80vw]" style={{ aspectRatio: "10 / 14.6" }}>
-            <motion.div
-              className="soft-card relative flex h-full w-full flex-col items-center justify-center overflow-hidden"
-              animate={controls}
-              initial={{ x: 0, y: 24, rotate: 0, opacity: 0 }}
-            >
-              <Wordmark size={40} arabic />
-
-              {/* the verdict tint, washing in from the side the card leaned */}
+            {/* two cards behind, so the stack looks like the deck it becomes */}
+            {cards.slice(1, 3).map((tt, i) => (
               <motion.div
-                className="pointer-events-none absolute inset-0"
+                key={tt.id}
+                className="soft-card absolute inset-0 overflow-hidden"
+                initial={{ opacity: 0, y: (i + 1) * 12 + 20, scale: 1 - (i + 1) * 0.05 }}
                 animate={{
-                  opacity: active ? 0.16 : 0,
-                  background: active
-                    ? `radial-gradient(120% 90% at ${
-                        badge === "liked" ? "80%" : badge === "disliked" ? "20%" : "50%"
-                      } ${badge === "not_seen" ? "18%" : "50%"}, ${active.tint} 0%, transparent 64%)`
-                    : "none",
+                  opacity: stage === "demo" ? 1 : 0,
+                  y: (i + 1) * 12,
+                  scale: 1 - (i + 1) * 0.05,
+                  filter: "brightness(0.93)",
                 }}
-                transition={{ duration: 0.22, ease: EASE_OUT }}
-              />
-
-              <motion.div
-                className="absolute grid place-items-center"
-                style={{ color: active?.tint }}
-                animate={{
-                  opacity: active ? 1 : 0,
-                  scale: active ? 1 : 0.72,
-                  filter: active ? "blur(0px)" : "blur(6px)",
-                }}
-                transition={{ duration: 0.22, ease: EASE_OUT }}
+                transition={{ duration: 0.45, ease: EASE_OUT, delay: 0.08 * i }}
+                style={{ zIndex: 10 - i }}
               >
-                {active && <active.Icon size={76} filled={active.filled} strokeWidth={1.7} />}
+                <PosterArt title={tt} sizes="320px" />
+                <div className="card-sheen absolute inset-0" />
               </motion.div>
+            ))}
+
+            <motion.div
+              className="absolute inset-0 z-20"
+              style={{ x, y }}
+              initial={{ opacity: 0, scale: 0.94 }}
+              animate={{ opacity: stage === "demo" ? 1 : 0, scale: 1 }}
+              transition={{ duration: 0.45, ease: EASE_OUT }}
+            >
+              <div className="soft-card relative h-full w-full overflow-hidden">
+                {cards[0] ? (
+                  <PosterArt title={cards[0]} sizes="380px" />
+                ) : (
+                  <div className="h-full w-full bg-gradient-to-br from-surface-2 to-line" />
+                )}
+                <div className="card-sheen absolute inset-0" />
+              </div>
             </motion.div>
           </div>
         </div>
       </div>
 
-      {/* the same button row the deck has, so the demo is teaching the real
-          controls rather than a diagram of them */}
-      <div className="flex shrink-0 items-center justify-center gap-4 py-3" aria-hidden>
-        {[
-          { on: badge === "disliked", size: 56 },
-          { on: false, size: 44 },
-          { on: badge === "not_seen", size: 44 },
-          { on: false, size: 44 },
-          { on: badge === "liked", size: 56 },
-        ].map((b, i) => (
+      {/* the row the demo is teaching, drawn as it will actually be */}
+      <div className="relative z-10 flex shrink-0 items-center justify-center gap-4 py-3" aria-hidden>
+        {[64, 46, 46, 64].map((size, i) => (
           <motion.div
             key={i}
-            className="rounded-full"
-            style={{ width: b.size, height: b.size }}
-            animate={{
-              backgroundColor: b.on ? "var(--color-accent)" : "var(--color-surface-2)",
-              scale: b.on ? 1.08 : 1,
-              opacity: leaving ? 0 : 1,
-            }}
-            transition={{ duration: 0.22, ease: EASE_OUT }}
+            className="rounded-full border border-line bg-surface"
+            style={{ width: size, height: size }}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: stage === "demo" ? 1 : 0, y: 0 }}
+            transition={{ duration: 0.35, ease: EASE_OUT, delay: 0.05 * i }}
           />
         ))}
       </div>

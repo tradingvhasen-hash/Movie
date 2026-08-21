@@ -1,8 +1,7 @@
 import Link from "next/link";
-import Wordmark from "@/components/ui/Wordmark";
 
 export const metadata = {
-  title: "Privacy & Terms · dhawq",
+  title: "Privacy & Terms · Seenit",
 };
 
 /**
@@ -25,11 +24,14 @@ export const metadata = {
 export default function LegalPage() {
   return (
     <div className="mx-auto max-w-2xl px-5 pb-24 pt-10">
-      <div className="flex justify-center">
-        <Wordmark size={22} />
-      </div>
+      <Link
+        href="/profile"
+        className="inline-flex items-center gap-1 text-sm font-semibold text-ink-faint transition-colors hover:text-ink"
+      >
+        <span aria-hidden>&lsaquo;</span> Seenit
+      </Link>
 
-      <h1 className="mt-10 text-3xl font-bold tracking-tight">Privacy &amp; Terms</h1>
+      <h1 className="mt-8 text-3xl font-bold tracking-tight">Privacy &amp; Terms</h1>
       <p className="mt-2 text-sm text-ink-faint">Last updated 20 August 2026</p>
 
       <Section title="What is stored, and where">
@@ -38,7 +40,7 @@ export default function LegalPage() {
           a copy is stored on Supabase so the same library reaches your other
           devices. That copy holds title identifiers, the answer you gave, and
           the time you gave it — not your viewing history from anywhere else,
-          because dhawq has no access to any streaming account.
+          because Seenit has no access to any streaming account.
         </p>
         <p>
           If you never sign in, nothing leaves the device. Clearing your browser
@@ -49,9 +51,9 @@ export default function LegalPage() {
 
       <Section title="Signing in">
         <p>
-          Sign-in is Google only. dhawq receives your name, email address and
+          Sign-in is Google only. Seenit receives your name, email address and
           profile picture from Google and stores them to label your account and
-          your shared lists. dhawq never sees your Google password.
+          your shared lists. Seenit never sees your Google password.
         </p>
         <p>
           Google only is a deliberate choice, not a limitation: email sign-up
@@ -100,7 +102,7 @@ export default function LegalPage() {
 
       <Section title="The rules">
         <p>
-          Use dhawq for your own viewing history. Do not attempt to scrape it,
+          Use Seenit for your own viewing history. Do not attempt to scrape it,
           break it, or use a shared list to distribute anything unlawful. The
           service is offered as it is, without warranty; it may change, and it
           may be unavailable.
@@ -120,12 +122,6 @@ export default function LegalPage() {
         advice.
       </p>
 
-      <Link
-        href="/"
-        className="mt-8 inline-block text-sm font-semibold text-accent"
-      >
-        ‹
-      </Link>
     </div>
   );
 }

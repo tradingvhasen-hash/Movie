@@ -1,7 +1,7 @@
 {
   "app": {
-    "name": "Dhawq",
-    "tagline": "Discover what you truly love",
+    "name": "Seenit",
+    "tagline": "Everything you have ever watched",
     "language": "العربية"
   },
   "nav": {
@@ -77,7 +77,7 @@
     "libraryOf": "{name}'s library",
     "listBy": "A list by {name}",
     "notFound": "This page doesn't exist or isn't public",
-    "poweredBy": "Made with Dhawq"
+    "poweredBy": "Made with Seenit"
   },
   "auth": {
     "email": "Email",

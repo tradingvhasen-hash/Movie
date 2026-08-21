@@ -1,42 +1,53 @@
 "use client";
 
-import Link from "next/link";
-
 /**
- * THE PAGE ABOUT THE PERSON, WHICH DID NOT EXIST.
+ * THE PAGE ABOUT THE PERSON.
  *
- * The sign-in form used to live at the top of the library, where it was both
- * the wrong content — nobody opens their library to look at a login — and the
- * cause of the flicker reported there, since it appeared late and pushed
- * everything below it down the page.
+ * Two verdicts from the user, and both were fair.
  *
- * A profile is also a prerequisite for sharing. A shared list carries a name
- * and a face, or it carries "shared by somebody"; there is no third option,
- * and the person doing the sharing should be the one who decides which.
+ *   ON WHERE IT WAS: "why in the hell does the profile exist inside the
+ *   library? Nobody is going to think about that." Correct — an account is a
+ *   destination, not a detail of another screen. It is a tab now.
+ *
+ *   ON HOW IT LOOKED: "the most ugly shit I have ever seen." Also correct, and
+ *   the cause was that it was not designed at all — it was a wordmark, a bare
+ *   circle, a login form, two unstyled inputs and a link, stacked in the order
+ *   I happened to write them. A column of unrelated blocks is what "ugly"
+ *   usually means in practice.
+ *
+ * WHAT IT IS NOW. One identity card at the top that behaves like a real
+ * profile header — a coloured field, the avatar breaking its lower edge, the
+ * name under it — then the three numbers that are actually true about this
+ * person, then a grouped list of everything else in the shape every phone
+ * platform uses for exactly this content. Editing is behind a control rather
+ * than permanently on screen, because a form is not a profile: the resting
+ * state of this page should show who you are, not ask.
  *
  * WHAT IS EDITABLE AND WHAT IS NOT. The display name and the bio are the
- * person's own; the avatar comes from Google and is not editable here. That is
- * deliberate rather than lazy: an avatar upload needs a storage bucket, a size
- * limit, an image pipeline and a moderation answer for public share pages, and
- * every one of those is a real decision. Google already hands us a picture the
- * person has chosen, so the expensive version can wait until somebody actually
- * wants a different face.
+ * person's own; the avatar comes from Google. That is deliberate rather than
+ * lazy — an avatar upload needs a storage bucket, a size limit, an image
+ * pipeline and a moderation answer for public share pages, and Google already
+ * hands us a picture the person has chosen.
  */
-import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { AnimatePresence, motion } from "framer-motion";
 import AccountPanel from "./AccountPanel";
-import Wordmark from "./ui/Wordmark";
+import { ChevronRightIcon, HeartIcon, ShieldIcon, SlidersIcon, StackIcon } from "./ui/Icons";
 import { useAccount } from "@/lib/supabase/useAccount";
 import { useDhawq } from "@/lib/store";
-import { FADE_UP, staggerContainer } from "@/lib/motion";
+import { EASE_OUT, FADE_UP, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
 
 export default function ProfilePanel() {
   const { session } = useAccount();
   const profile = useDhawq((s) => s.publicProfile);
   const setProfile = useDhawq((s) => s.setPublicProfile);
+  const swipes = useDhawq((s) => s.swipes);
+  const lists = useDhawq((s) => s.lists);
 
   const [name, setName] = useState("");
   const [bio, setBio] = useState("");
+  const [editing, setEditing] = useState(false);
 
   /* seed the fields from the account the first time it arrives, so somebody
      who has just signed in does not face two empty boxes when Google already
@@ -49,6 +60,22 @@ export default function ProfilePanel() {
   const avatar =
     profile.avatarUrl || (session?.user.user_metadata?.avatar_url as string | undefined);
 
+  const stats = useMemo(() => {
+    let watched = 0;
+    let loved = 0;
+    for (const sw of Object.values(swipes)) {
+      if (sw.action === "not_seen") continue;
+      watched += 1;
+      if (sw.action === "liked") loved += 1;
+    }
+    return { watched, loved, lists: lists.length };
+  }, [swipes, lists]);
+
+  const shownName =
+    profile.name ||
+    (session?.user.user_metadata?.full_name as string | undefined) ||
+    "You";
+
   const dirty = name !== profile.name || bio !== profile.bio;
 
   return (
@@ -56,72 +83,166 @@ export default function ProfilePanel() {
       variants={staggerContainer(0.06)}
       initial="hidden"
       animate="show"
-      className="mx-auto max-w-md px-5 pb-28 pt-8"
+      className="mx-auto max-w-md px-5 pb-28 pt-6"
     >
-      <motion.div variants={FADE_UP} className="flex justify-center">
-        <Wordmark size={30} arabic />
-      </motion.div>
+      {/* ── identity ── */}
+      <motion.div variants={FADE_UP} className="soft-card overflow-hidden">
+        <div
+          className="h-[86px] w-full"
+          style={{
+            background:
+              "linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-soft) 100%)",
+          }}
+        />
+        <div className="px-5 pb-5">
+          <div className="-mt-11 grid h-[88px] w-[88px] place-items-center overflow-hidden rounded-full border-4 border-[color:var(--color-surface)] bg-surface-2 text-3xl font-bold text-ink-faint">
+            {avatar ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={avatar} alt="" className="h-full w-full object-cover" />
+            ) : (
+              shownName.trim().charAt(0).toUpperCase()
+            )}
+          </div>
 
-      <motion.div variants={FADE_UP} className="mt-9 flex flex-col items-center">
-        <div className="grid h-24 w-24 place-items-center overflow-hidden rounded-full border border-line bg-surface-2 text-3xl font-semibold text-ink-faint">
-          {avatar ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={avatar} alt="" className="h-full w-full object-cover" />
-          ) : (
-            (name || "?").trim().charAt(0).toUpperCase()
+          <h1 className="mt-3 truncate text-[22px] font-bold tracking-tight">{shownName}</h1>
+          {profile.bio && (
+            <p className="mt-1 text-[13px] leading-relaxed text-ink-dim">{profile.bio}</p>
+          )}
+
+          {session && (
+            <button
+              type="button"
+              onClick={() => setEditing((v) => !v)}
+              className="mt-3 rounded-full border border-line px-4 py-1.5 text-xs font-semibold text-ink-dim transition-colors hover:text-ink active:scale-95"
+            >
+              {editing ? "Close" : "Edit"}
+            </button>
           )}
         </div>
       </motion.div>
 
-      <motion.div variants={FADE_UP} className="mt-8">
+      {/* ── the three numbers that are true ── */}
+      <motion.div variants={FADE_UP} className="mt-3 grid grid-cols-3 gap-3">
+        <Stat value={stats.watched} label="Watched" />
+        <Stat value={stats.loved} label="Loved" icon={<HeartIcon size={12} filled />} />
+        <Stat value={stats.lists} label="Lists" icon={<StackIcon size={12} />} />
+      </motion.div>
+
+      {/* ── editing, only when asked for ── */}
+      <AnimatePresence initial={false}>
+        {session && editing && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.26, ease: EASE_OUT }}
+            className="overflow-hidden"
+          >
+            <div className="mt-3 flex flex-col gap-3 rounded-3xl border border-line bg-surface p-4">
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
+                  Display name
+                </span>
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  maxLength={40}
+                  className="rounded-2xl border border-line bg-bg px-4 py-3 outline-none transition-colors focus:border-accent"
+                />
+              </label>
+
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
+                  Bio
+                </span>
+                <textarea
+                  value={bio}
+                  onChange={(e) => setBio(e.target.value)}
+                  rows={3}
+                  maxLength={160}
+                  className="resize-none rounded-2xl border border-line bg-bg px-4 py-3 outline-none transition-colors focus:border-accent"
+                />
+              </label>
+
+              <motion.button
+                type="button"
+                disabled={!dirty}
+                onClick={() => {
+                  setProfile({ name: name.trim(), bio: bio.trim(), avatarUrl: avatar ?? "" });
+                  setEditing(false);
+                }}
+                animate={{ opacity: dirty ? 1 : 0.4 }}
+                whileTap={dirty ? { scale: 0.97 } : undefined}
+                transition={SPRING_SNAPPY}
+                className="rounded-2xl bg-accent px-5 py-3 font-semibold text-[color:var(--color-on-accent)]"
+              >
+                Save
+              </motion.button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── account ── */}
+      <motion.div variants={FADE_UP} className="mt-3 rounded-3xl border border-line bg-surface p-4">
         <AccountPanel />
       </motion.div>
 
-      {session && (
-        <motion.div variants={FADE_UP} className="mt-8 flex flex-col gap-4">
-          <label className="flex flex-col gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
-              Display name
-            </span>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              maxLength={40}
-              className="rounded-2xl border border-line bg-surface px-4 py-3 outline-none transition-colors focus:border-accent"
-            />
-          </label>
-
-          <label className="flex flex-col gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
-              Bio
-            </span>
-            <textarea
-              value={bio}
-              onChange={(e) => setBio(e.target.value)}
-              rows={3}
-              maxLength={160}
-              className="resize-none rounded-2xl border border-line bg-surface px-4 py-3 outline-none transition-colors focus:border-accent"
-            />
-          </label>
-
-          <motion.button
-            type="button"
-            disabled={!dirty}
-            onClick={() => setProfile({ name: name.trim(), bio: bio.trim(), avatarUrl: avatar ?? "" })}
-            animate={{ opacity: dirty ? 1 : 0.4 }}
-            whileTap={dirty ? { scale: 0.97 } : undefined}
-            className="rounded-2xl bg-accent px-5 py-3 font-semibold text-[color:var(--color-on-accent)]"
-          >
-            Save
-          </motion.button>
-        </motion.div>
-      )}
-      <motion.div variants={FADE_UP} className="mt-12 flex justify-center">
-        <Link href="/legal" className="text-xs text-ink-faint underline underline-offset-4">
-          Privacy &amp; Terms
-        </Link>
+      {/* ── everything else, in the shape every phone uses for it ── */}
+      <motion.div
+        variants={FADE_UP}
+        className="mt-3 overflow-hidden rounded-3xl border border-line bg-surface"
+      >
+        <Row href="/settings" icon={<SlidersIcon size={18} />} label="Settings" />
+        <Row href="/legal" icon={<ShieldIcon size={18} />} label="Privacy &amp; Terms" last />
       </motion.div>
-
     </motion.div>
+  );
+}
+
+function Stat({
+  value,
+  label,
+  icon,
+}: {
+  value: number;
+  label: string;
+  icon?: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-line bg-surface px-3 py-3.5 text-center">
+      <div className="text-[22px] font-bold tabular-nums leading-none tracking-tight">
+        {value}
+      </div>
+      <div className="mt-1.5 flex items-center justify-center gap-1 text-[10.5px] font-semibold uppercase tracking-wider text-ink-faint">
+        {icon}
+        {label}
+      </div>
+    </div>
+  );
+}
+
+function Row({
+  href,
+  icon,
+  label,
+  last,
+}: {
+  href: string;
+  icon: React.ReactNode;
+  label: string;
+  last?: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      className={`flex items-center gap-3 px-4 py-4 transition-colors active:bg-surface-2 ${
+        last ? "" : "border-b border-line"
+      }`}
+    >
+      <span className="text-ink-faint">{icon}</span>
+      <span className="flex-1 text-sm font-semibold">{label}</span>
+      <ChevronRightIcon size={17} className="text-ink-faint" />
+    </Link>
   );
 }

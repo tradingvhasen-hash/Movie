@@ -101,6 +101,42 @@ const deferredStorage: PersistStorage<DhawqState> = {
   },
 };
 
+/**
+ * WHAT THE DECK LOOKS LIKE, AND WHICH GESTURE MEANS WHAT.
+ *
+ * The deck shipped with five buttons because five answers exist. That is the
+ * wrong reason to put five buttons on a screen: the answer somebody gives a
+ * thousand times a session should be one of three, and the fourth ("watched
+ * it, no strong feeling") is a real answer that maybe one person in ten wants
+ * to give often enough to pay a permanent seat for it.
+ *
+ * So the deck has three verdicts and an undo by default, and the fourth is a
+ * setting. And because a person who *does* turn it on probably wants it under
+ * their thumb rather than in a fifth circle, the upward gesture is remappable:
+ * it means "haven't seen it" out of the box and can be pointed at "seen it, no
+ * opinion" instead.
+ *
+ * Nothing here changes what the engine learns. These are the same four actions
+ * either way — this is which of them the interface makes cheap.
+ */
+export type Settings = {
+  /** show the fourth verdict — "watched it, no strong feeling" — in the row */
+  showSeenButton: boolean;
+  /** what an upward swipe records */
+  swipeUp: "not_seen" | "seen";
+  /** full-screen colour wash while dragging; off for anyone who finds it loud */
+  screenFeedback: boolean;
+  /** a short buzz when a verdict lands, where the device supports one */
+  haptics: boolean;
+};
+
+export const DEFAULT_SETTINGS: Settings = {
+  showSeenButton: false,
+  swipeUp: "not_seen",
+  screenFeedback: true,
+  haptics: true,
+};
+
 interface DhawqState {
   swipes: Record<string, Swipe>;
   swipeOrder: string[]; // titleIds in swipe order (for undo + recency)
@@ -118,6 +154,7 @@ interface DhawqState {
    */
   publicProfile: { name: string; bio: string; avatarUrl: string };
   onboardingSeen: boolean;
+  settings: Settings;
 
   /** ids of onboarding tiles shown and not tapped, so they can be replayed */
   passed: string[];
@@ -139,6 +176,7 @@ interface DhawqState {
   setOnboardingSeen: () => void;
 
   setPublicProfile: (p: { name: string; bio: string; avatarUrl: string }) => void;
+  setSettings: (patch: Partial<Settings>) => void;
   createList: (name: string) => string;
   deleteList: (id: string) => void;
   renameList: (id: string, name: string) => void;
@@ -203,7 +241,11 @@ export const useDhawq = create<DhawqState>()(
       lists: [],
       publicProfile: { name: "", bio: "", avatarUrl: "" },
       onboardingSeen: false,
+      settings: DEFAULT_SETTINGS,
       passed: [],
+
+      setSettings: (patch) =>
+        set((s) => ({ settings: { ...s.settings, ...patch } })),
 
       learnPasses: (titles) =>
         set((s) => {
@@ -404,6 +446,10 @@ export const useDhawq = create<DhawqState>()(
           ...state,
           seed: state.seed ?? current.seed,
           passed: state.passed ?? [],
+          /* a settings object written by an older build is missing whatever
+             was added since; defaults fill the gaps rather than the screen
+             rendering an undefined toggle */
+          settings: { ...DEFAULT_SETTINGS, ...(state.settings ?? {}) },
           profile: normalizeProfile(state.profile),
         };
       },

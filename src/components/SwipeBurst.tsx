@@ -1,108 +1,117 @@
 "use client";
 
 /**
- * WHAT A SWIPE LOOKS LIKE WHEN IT LANDS.
+ * WHAT A SWIPE LOOKS LIKE THE INSTANT IT LANDS.
  *
- * The user called this "cheap", separately from the design, the arrival and
- * the exit — all four. He was right about all four, and the cause is one
- * decision: this threw **nine icons in a fan** for **0.9 seconds**.
+ * Two rewrites ago this threw nine icons in a fan for 0.9 seconds — the
+ * confetti vocabulary of a mobile game reward, on a screen where the person is
+ * giving an answer rather than scoring a point. One rewrite ago it was a
+ * tasteful little bloom *inside the card frame*, and the user's report on that
+ * was the one that matters: he did not see it at all. A 260px-wide effect that
+ * plays where the card just left is an effect nobody is looking at.
  *
- * Nine objects flying outwards is the confetti vocabulary of a mobile game
- * reward. It says "you scored"; the card is not a score, it is an answer. And
- * 0.9s is long enough that the burst is still on screen while the next card is
- * settling, so two things move at once and neither reads as deliberate.
+ * So it is full-screen, it is over in 300ms, and it is built out of the same
+ * light as the drag feedback rather than a second vocabulary:
  *
- * WHAT REPLACED IT, AND WHY.
+ *   FLASH      the whole screen takes the verdict's colour and lets it go
+ *   SHOCKWAVE  one ring leaves from where the card was thrown
+ *   MARK       one glyph, revealed rather than thrown — no overshoot
  *
- * The premium version of this gesture — the Apple Pay checkmark, the iOS
- * message effect, the Android ripple — is always the same three ideas:
+ * The ring is the piece doing the real work. A flash alone reads as a screen
+ * event; a ring reads as *something having happened at a place*, and the place
+ * is where the thumb was. That is the difference between the interface
+ * flickering and the interface answering.
  *
- *   1. ONE mark, not many. Multiplicity reads as decoration; singularity reads
- *      as acknowledgement.
- *   2. LIGHT rather than objects. A wash of colour expanding and fading is
- *      weightless and cannot look like clip-art; nine small icons always can.
- *   3. It LEAVES before the next thing arrives. Overlap is what makes an
- *      interface feel busy rather than fast.
- *
- * So: a soft radial wash of the action's colour blooms from the direction the
- * card went, one glyph rises through it at a size you cannot mistake for an
- * icon in a toolbar, and the whole thing is finished in 380ms — the `SLOW`
- * token, and the longest anything in this app is allowed to take.
- *
- * The glyph scales 0.72 → 1 with no overshoot. A bounce is the single clearest
- * tell of a cheap animation: real objects with real mass do not overshoot when
- * they are being *revealed*, only when they are being *thrown*. The card is
- * thrown, so the card gets a spring; the mark is revealed, so it does not.
+ * It ends before the next card finishes settling, on purpose: overlap is what
+ * makes an interface feel busy instead of fast.
  */
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowUpIcon, EyeIcon, HeartIcon, ThumbsDownIcon } from "./ui/Icons";
-import { EASE_OUT, SLOW } from "@/lib/motion";
+import { EASE_OUT } from "@/lib/motion";
 import type { SwipeAction } from "@/lib/types";
 
-/** where the wash blooms from, matching the direction the card left */
-const ORIGIN: Record<SwipeAction, string> = {
-  liked: "75% 50%",
-  disliked: "25% 50%",
-  not_seen: "50% 22%",
-  seen: "50% 50%",
+/** where the ring leaves from, matching the direction the card went */
+const ORIGIN: Record<SwipeAction, { x: string; y: string }> = {
+  liked: { x: "82%", y: "48%" },
+  disliked: { x: "18%", y: "48%" },
+  not_seen: { x: "50%", y: "22%" },
+  seen: { x: "50%", y: "50%" },
 };
 
 const TINT: Record<SwipeAction, string> = {
   liked: "var(--color-accent)",
   disliked: "var(--color-danger)",
-  not_seen: "var(--color-ink-dim)",
+  not_seen: "var(--color-ink-strong)",
   seen: "var(--color-accent-soft)",
 };
 
-function Glyph({ action }: { action: SwipeAction }) {
-  const size = 68;
-  if (action === "liked") return <HeartIcon size={size} filled />;
-  if (action === "disliked") return <ThumbsDownIcon size={size} filled />;
-  if (action === "seen") return <EyeIcon size={size} strokeWidth={1.6} />;
-  return <ArrowUpIcon size={size} strokeWidth={1.8} />;
-}
+const GLYPH = {
+  liked: HeartIcon,
+  disliked: ThumbsDownIcon,
+  not_seen: ArrowUpIcon,
+  seen: EyeIcon,
+} as const;
+
+const DUR = 0.3;
 
 export default function SwipeBurst({
   burst,
 }: {
   burst: { id: number; action: SwipeAction } | null;
 }) {
+  const action = burst?.action;
+  const Icon = action ? GLYPH[action] : null;
+  const tint = action ? TINT[action] : "";
+  const origin = action ? ORIGIN[action] : ORIGIN.seen;
+
   return (
     <AnimatePresence>
-      {burst && (
+      {burst && Icon && (
         <motion.div
           key={burst.id}
-          className="pointer-events-none absolute inset-0 z-40 overflow-hidden rounded-[var(--radius-card)]"
-          initial={{ opacity: 0 }}
+          className="pointer-events-none fixed inset-0 z-50 overflow-hidden"
+          initial={{ opacity: 1 }}
           animate={{ opacity: 1 }}
-          exit={{ opacity: 0, transition: { duration: 0.16, ease: EASE_OUT } }}
+          exit={{ opacity: 0, transition: { duration: 0.12, ease: EASE_OUT } }}
+          aria-hidden
         >
-          {/* the light: a wash from the edge the card left through */}
+          {/* the flash */}
           <motion.div
             className="absolute inset-0"
             style={{
-              background: `radial-gradient(120% 90% at ${ORIGIN[burst.action]}, ${
-                TINT[burst.action]
-              } 0%, transparent 62%)`,
+              background: `radial-gradient(95% 80% at ${origin.x} ${origin.y}, ${tint} 0%, transparent 68%)`,
             }}
-            initial={{ opacity: 0, scale: 1.18 }}
-            animate={{ opacity: [0, 0.28, 0], scale: 1 }}
-            transition={{ duration: SLOW, ease: EASE_OUT, times: [0, 0.32, 1] }}
+            initial={{ opacity: 0.42 }}
+            animate={{ opacity: 0 }}
+            transition={{ duration: DUR, ease: EASE_OUT }}
           />
 
-          {/* the mark: one, centred, revealed rather than thrown */}
+          {/* the shockwave */}
+          <motion.span
+            className="absolute rounded-full"
+            style={{
+              left: origin.x,
+              top: origin.y,
+              width: 44,
+              height: 44,
+              marginLeft: -22,
+              marginTop: -22,
+              border: `2.5px solid ${tint}`,
+            }}
+            initial={{ scale: 0.3, opacity: 0.9 }}
+            animate={{ scale: 13, opacity: 0 }}
+            transition={{ duration: DUR + 0.08, ease: EASE_OUT }}
+          />
+
+          {/* the mark */}
           <motion.div
             className="absolute inset-0 grid place-items-center"
-            style={{ color: TINT[burst.action] }}
-            initial={{ opacity: 0, scale: 0.72, filter: "blur(6px)" }}
-            animate={{
-              opacity: [0, 1, 0],
-              scale: [0.72, 1, 1.04],
-              filter: ["blur(6px)", "blur(0px)", "blur(2px)"],
-            }}
-            transition={{ duration: SLOW, ease: EASE_OUT, times: [0, 0.34, 1] }}
+            style={{ color: tint, filter: `drop-shadow(0 0 30px ${tint})` }}
+            initial={{ opacity: 0, scale: 0.78 }}
+            animate={{ opacity: [0.95, 0], scale: [1, 1.1] }}
+            transition={{ duration: DUR, ease: EASE_OUT }}
           >
-            <Glyph action={burst.action} />
+            <Icon size={104} filled strokeWidth={1.6} />
           </motion.div>
         </motion.div>
       )}

@@ -1,46 +1,77 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import TitleTile from "./TitleTile";
-import { GlowButton } from "./ui";
-import { HeartIcon } from "./ui/Icons";
-import { getLocalCatalog } from "@/lib/catalog";
+import PosterArt from "./PosterArt";
+import { getLocalCatalog, loadCatalog } from "@/lib/catalog";
 import { resolveSeeds } from "@/lib/data/taste-seeds";
-import { EASE_OUT, FADE_UP, QUICK, staggerContainer } from "@/lib/motion";
+import { EASE_OUT, FADE_UP, QUICK, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
+import { haptic } from "@/lib/haptics";
 import { useDhawq } from "@/lib/store";
+import type { Title } from "@/lib/types";
 
 /** how many titles the grid offers */
-const CHOICES = 50;
+const CHOICES = 48;
 /** how many picks before the button unlocks */
 const MIN_PICKS = 3;
 
 /**
- * Ask before guessing.
+ * ASK BEFORE GUESSING — and the measurement that decided it.
  *
- * Measured against the benchmark's Rush Hour reference list, for a viewer
- * whose taste is buddy-cop comedies:
+ * Against the benchmark's reference list, for a viewer whose taste is buddy-cop
+ * comedies:
  *
  *     40 swipes, never asked          0/12 good recommendations
  *     5 up-front picks, 0 swipes      7/12
  *
- * Forty swipes of inference lost to one question. The reason is that the
- * opening deck is necessarily the most famous titles in the catalog, and
- * famous titles are famous because they appeal to almost everyone — so a new
- * viewer likes nearly all of them and teaches us almost nothing. Naming five
- * films you love is a far sharper signal than rating forty you half-like, and
- * it is the standard remedy for cold start in the literature.
+ * Forty swipes of inference lost to one question. The opening deck is
+ * necessarily the most famous titles in the catalog, and famous titles are
+ * famous because they appeal to almost everyone — so a new viewer likes nearly
+ * all of them and teaches us almost nothing. Naming five films you love is a
+ * far sharper signal than rating forty you half-like.
  *
- * The fifty tiles are a hand-named list — each audience's own canon, classics
- * included — because every attempt to derive them from the catalog's own
- * numbers produced the same wall of modern blockbusters. See taste-seeds.ts.
+ * ── THE REDESIGN, AND WHAT WAS WRONG BEFORE ──────────────────────────────
+ *
+ * The user rejected this screen in its entirety: the tiles, the bar across the
+ * bottom holding "Skip" and "Pick 3 more", the dead strip between that bar and
+ * the tab bar, the way a press felt, the blue line, the heart in the corner.
+ * Four separate faults, one cause — the screen was assembled out of components
+ * built for other screens.
+ *
+ *   THE TILES were `TitleTile`, which is a *library* tile: poster, title, year,
+ *   star rating. None of that is the question being asked. You do not need to
+ *   be told the year of a film to know whether you loved it, and forty-eight
+ *   captions turn a wall of posters into a spreadsheet. Posters only.
+ *
+ *   THE SELECTION MARK was a heart on a disc in the corner, over a flood of
+ *   blue that hid the poster it was confirming. The state is now carried by the
+ *   tile itself — chosen tiles stay bright and take a ring, everything else
+ *   steps back — which is how a person naturally reads a group of things they
+ *   have set aside, and it needs no badge at all.
+ *
+ *   THE BOTTOM BAR was a full-width rectangle whose height was mostly padding,
+ *   sitting on top of the tab bar and leaving a dead strip. It is now a pill
+ *   that is not there until there is something to say, floating clear of the
+ *   tabs. "Skip" moves to the header, where a secondary action belongs and
+ *   where it stops competing with the primary one for the same corner.
+ *
+ *   THE PROGRESS ("Pick 3 more", which also mis-stated the rule — three *or
+ *   more*) is three dots that fill as you choose. A count that draws itself is
+ *   read at a glance and cannot be phrased wrongly.
  */
 export default function TastePicker({ onDone }: { onDone: () => void }) {
   const swipe = useDhawq((s) => s.swipe);
   const learnPasses = useDhawq((s) => s.learnPasses);
+  const haptics = useDhawq((s) => s.settings.haptics);
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    void loadCatalog().then(() => setReady(true));
+  }, []);
 
   const choices = useMemo(() => {
+    void ready;
     const pool = getLocalCatalog().map((c) => c.title);
 
     /**
@@ -63,15 +94,17 @@ export default function TastePicker({ onDone }: { onDone: () => void }) {
       }
     }
     return out;
-  }, []);
+  }, [ready]);
 
-  const toggle = (id: string) =>
+  const toggle = (id: string) => {
+    haptic("tick", haptics);
     setPicked((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
+  };
 
   const confirm = () => {
     for (const t of choices) if (picked.has(t.id)) swipe(t, "liked");
@@ -82,6 +115,7 @@ export default function TastePicker({ onDone }: { onDone: () => void }) {
   };
 
   const enough = picked.size >= MIN_PICKS;
+  const anyPicked = picked.size > 0;
 
   return (
     <motion.div
@@ -89,113 +123,140 @@ export default function TastePicker({ onDone }: { onDone: () => void }) {
       initial="hidden"
       animate="show"
       exit="exit"
-      className="mx-auto flex max-w-md flex-col px-5 pb-32 pt-8"
+      className="mx-auto flex max-w-md flex-col px-5 pb-40 pt-8"
     >
-      <motion.h1 variants={FADE_UP} className="text-3xl font-bold tracking-tight">
-        Pick a few you love
-      </motion.h1>
-      {/*
-        The line that stood here — "Three or more. This tells us more in one tap
-        than forty swipes can." — was deleted on the user's exact objection, and
-        he is right for a reason worth keeping: the heading already says *what*
-        to do and the button already says *how many*. A third sentence
-        explaining why the instruction is a good instruction is the writer
-        arguing with the reader. Anything a control already states does not need
-        a sentence next to it saying the same thing more slowly.
-      */}
+      <motion.div variants={FADE_UP} className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-[30px] font-bold leading-tight tracking-[-0.03em]">
+            What have you
+            <br />
+            loved?
+          </h1>
+          {/* three or more, drawn rather than written */}
+          <div className="mt-3.5 flex items-center gap-1.5" aria-hidden>
+            {[0, 1, 2].map((i) => (
+              <motion.span
+                key={i}
+                className="block h-1.5 rounded-full"
+                animate={{
+                  width: picked.size > i ? 26 : 14,
+                  backgroundColor:
+                    picked.size > i ? "var(--color-accent)" : "var(--color-line)",
+                }}
+                transition={SPRING_SNAPPY}
+              />
+            ))}
+            <AnimatePresence>
+              {picked.size > MIN_PICKS && (
+                <motion.span
+                  initial={{ opacity: 0, x: -4 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="ms-1 text-xs font-bold tabular-nums text-accent"
+                >
+                  {picked.size}
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
 
-      <motion.div
-        variants={staggerContainer(0.02)}
-        className="mt-6 grid grid-cols-3 gap-3"
-      >
-        {choices.map((t) => {
-          const on = picked.has(t.id);
-          return (
-            <TitleTile
-              key={t.id}
-              title={t}
-              onClick={() => toggle(t.id)}
-              overlay={
-                /**
-                 * SELECTED, NOT CELEBRATED.
-                 *
-                 * What was here scaled a white circle from 0.4 to 1 on a snappy
-                 * spring behind a 45% flood of accent blue. Three separate
-                 * things made it read as cheap, and they are the same three
-                 * that made the swipe burst read as cheap:
-                 *
-                 *   · it overshoots. A mark being *revealed* has no momentum to
-                 *     carry it past its size; only a thrown object does.
-                 *   · it starts at 0.4, so most of the animation is the eye
-                 *     tracking growth rather than registering a state.
-                 *   · the flood hides the poster it is confirming, which
-                 *     removes the one thing the person is looking at.
-                 *
-                 * A selection should read instantly and get out of the way. So
-                 * the poster stays visible under a light scrim, the tile takes
-                 * a ring in the accent — the ring is the state, and rings are
-                 * how every native platform says "chosen" — and the mark fades
-                 * up from 0.86 with no bounce at all.
-                 */
-                <AnimatePresence>
-                  {on && (
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: QUICK, ease: EASE_OUT }}
-                      className="pointer-events-none absolute inset-0 rounded-[inherit] bg-accent/18 ring-2 ring-inset ring-accent"
-                    >
-                      <motion.span
-                        initial={{ scale: 0.86, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        exit={{ scale: 0.92, opacity: 0 }}
-                        transition={{ duration: QUICK, ease: EASE_OUT }}
-                        className="absolute end-1.5 top-1.5 grid h-7 w-7 place-items-center rounded-full bg-accent text-[color:var(--color-on-accent)] shadow-sm"
-                      >
-                        <HeartIcon size={15} filled />
-                      </motion.span>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              }
-            />
-          );
-        })}
+        <button
+          type="button"
+          onClick={onDone}
+          className="-me-2 shrink-0 rounded-full px-3 py-2 text-sm font-semibold text-ink-faint transition-colors hover:text-ink-dim active:scale-95"
+        >
+          Skip
+        </button>
+      </motion.div>
+
+      <motion.div variants={staggerContainer(0.015)} className="mt-7 grid grid-cols-3 gap-2.5">
+        {choices.map((t) => (
+          <PickTile
+            key={t.id}
+            title={t}
+            selected={picked.has(t.id)}
+            dimmed={anyPicked && !picked.has(t.id)}
+            onToggle={() => toggle(t.id)}
+          />
+        ))}
       </motion.div>
 
       {/*
-        FLUSH AGAINST THE NAVIGATION, NOT HOVERING A CENTIMETRE ABOVE IT.
- 
-        `bottom-[74px]` put this bar exactly the height of the tab bar off the
-        floor, and the gap between the two — a strip of page showing through —
-        is what the user saw: two bars that clearly belong together, held apart
-        by nothing. Two stacked surfaces read as one object only when they
-        touch.
- 
-        So it sits at `bottom-0` with the tab bar's height as bottom padding,
-        which puts its content immediately above the tabs with no seam, and it
-        carries the same blurred material as the tab bar instead of a gradient
-        fading into the page. A gradient was doing the job of a boundary, and a
-        boundary drawn in fog is the reason the whole area felt unresolved.
+        A PILL THAT IS NOT THERE UNTIL THERE IS SOMETHING TO SAY.
+
+        The bar this replaces was present from the first frame, disabled and
+        greyed, announcing how far the person still had to go. A control that
+        exists only to be unavailable is a control arguing with the user. This
+        arrives — springs up, from below the fold — at the moment it becomes
+        true, which is also the moment it becomes useful.
       */}
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-bg/85 px-5 pb-[calc(74px+env(safe-area-inset-bottom))] pt-3 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-md items-center gap-3">
-          <GlowButton
-            onClick={confirm}
-            disabled={!enough}
-            className={`flex-1 text-lg ${enough ? "" : "pointer-events-none opacity-45"}`}
+      <AnimatePresence>
+        {enough && (
+          <motion.div
+            initial={{ y: 90, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 90, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 380, damping: 32 }}
+            className="fixed inset-x-0 bottom-[calc(88px+env(safe-area-inset-bottom))] z-30 flex justify-center px-5"
           >
-            {enough ? `Start with ${picked.size}` : `Pick ${MIN_PICKS - picked.size} more`}
-          </GlowButton>
-          <button
-            onClick={onDone}
-            className="shrink-0 px-3 py-2 text-sm font-medium text-ink-faint transition-colors hover:text-ink-dim"
-          >
-            Skip
-          </button>
-        </div>
-      </div>
+            <motion.button
+              type="button"
+              onClick={confirm}
+              whileTap={{ scale: 0.95 }}
+              transition={SPRING_SNAPPY}
+              className="rounded-full bg-accent px-8 py-4 text-base font-bold text-[color:var(--color-on-accent)] shadow-[0_10px_34px_rgb(var(--rgb-accent)/0.45)]"
+            >
+              Start with {picked.size}
+            </motion.button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
+  );
+}
+
+/**
+ * A poster and nothing else.
+ *
+ * Chosen: full brightness, an accent ring, and a lift with the accent's own
+ * light under it. Not chosen, once anything has been: a step back in
+ * brightness and saturation. The set you have picked reads as a group from
+ * across the room, which is exactly how somebody checks whether they are done.
+ */
+function PickTile({
+  title,
+  selected,
+  dimmed,
+  onToggle,
+}: {
+  title: Title;
+  selected: boolean;
+  dimmed: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <motion.button
+      type="button"
+      variants={FADE_UP}
+      onClick={onToggle}
+      aria-pressed={selected}
+      aria-label={title.title.en}
+      whileTap={{ scale: 0.93 }}
+      animate={{
+        opacity: dimmed ? 0.55 : 1,
+        filter: dimmed ? "saturate(0.55)" : "saturate(1)",
+        scale: selected ? 1 : 0.985,
+      }}
+      transition={{ ...SPRING_SNAPPY, opacity: { duration: QUICK, ease: EASE_OUT } }}
+      className="relative block w-full min-w-0 overflow-hidden rounded-2xl bg-surface-2"
+      style={{
+        boxShadow: selected
+          ? "0 0 0 3px var(--color-accent), 0 10px 26px rgb(var(--rgb-accent) / 0.35)"
+          : "0 2px 10px rgb(var(--rgb-shadow) / 0.07)",
+      }}
+    >
+      <PosterArt title={title} sizes="140px" className="aspect-[2/3] w-full" />
+    </motion.button>
   );
 }

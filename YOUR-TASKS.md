@@ -1,125 +1,196 @@
 # What needs you
 
-**https://dhawq.onrender.com** — pull down to refresh once so the browser drops
-the old code.
+**https://dhawq.onrender.com** — the app is now called **Seenit**; the address
+has not changed.
+
+**Before anything else: hard-refresh once.** Your browser is holding old code —
+that is what made you report a total freeze that had already been fixed. On
+iPhone Safari: close the tab entirely and reopen it. On desktop: Ctrl/Cmd +
+Shift + R.
 
 ---
 
-## 1 · Swipe a full session
+# 1 · Two things only you can do
 
-Home page → **Swipe**. Then `/lab` → **Export**, and send me the file.
+These are blocked on your account and nothing I can do reaches them. Everything
+in section 2 works without them; **sign-in, cross-device sync and sharing a
+list do not.**
+
+## 1.1 · Run one SQL file
+
+Supabase → your project → **SQL Editor** → **New query** → paste the whole
+contents of:
+
+    supabase/migrations/0007_profiles_and_sharing.sql
+
+→ **Run**.
+
+**There used to be two files numbered 0007 and they contradicted each other.**
+One added a column called `share_anonymous`, the other `hide_owner`; the app
+only ever wrote `hide_owner`, but the security rule that decides whether a
+stranger may read your name checked `share_anonymous`. So "share this list
+without my name" would have set one column while the rule read the other, and
+your name would have been visible anyway. I merged them into the single file
+above and deleted the other. It is safe to run whether or not you ran either
+of the old ones.
+
+**How to know it worked:** the query returns `Success. No rows returned`. If it
+errors, paste me the message.
+
+## 1.2 · Turn on Google sign-in
+
+Supabase → **Authentication** → **Providers** → **Google** → enable → save.
+
+You will need a Google OAuth client ID and secret (Google Cloud Console →
+APIs & Services → Credentials → OAuth client ID → Web application). The
+redirect URL Supabase asks you to authorise is shown on that same Supabase
+page — copy it from there rather than typing it.
+
+**Until this is done the "Sign in" button does nothing.** That is the only
+symptom.
+
+---
+
+# 2 · Then test, in this order
+
+Nothing below needs section 1.
+
+## 2.1 · The first sixty seconds — does it feel right now?
+
+This is what I have spent this whole stretch on and it is the part I most need
+your eyes on, because every measurement I have is indirect.
+
+1. **Open the site cold** (hard refresh). Watch the "Seenit" title card and the
+   three demonstration swipes. Previous version: 10.7 frames per second with
+   one frame frozen for 1.5 seconds. Now measured at 25.2 fps with no freeze.
+   **Does it still jump between poses?**
+2. **Throw a card**, don't drag it — flick right and let go. It used to leave
+   the screen in 284ms with the colour already gone. It now takes 417ms and the
+   wash follows it out. **Is it slow enough to see?**
+3. **Drag a card downward.** It should barely move and snap straight back. It
+   used to travel 454px and take 1.75 seconds to return, which is what you were
+   seeing as a freeze.
+4. **Tap the buttons under the card** rather than swiping. Same verdict, and
+   the heart should not stay lit after you lift your finger.
+
+If any of those is still wrong, **film it**. Your recordings have found things
+no number of mine did.
+
+## 2.2 · Swipe a full session
+
+Home → **Swipe**. Then `/lab` → **Export**, and send me the file.
 
 **Export before you close the tab.** Your browser clears storage on close. If
-something interrupts you, `/lab` → **Import a file** puts an exported file back.
+something interrupts you, `/lab` → **Import a file** restores an export.
 
-### There is a new button, and it matters more than it looks
+### Use the 👁 button
 
-The row under the card is now: 👎 · undo · ↑ · **👁** · ❤️
+The row is: 👎 · undo · ↑ · **👁** · ❤️
 
-**👁 means "I watched it, no strong feeling."** Use it for every Joker — every
-work you have seen and felt nothing much about, in either direction.
+**👁 means "I watched it, no strong feeling."** Use it for every work you have
+seen and felt nothing much about.
 
-Until today that answer did not exist and you had three lies to choose from.
-The one that feels least dishonest, ↑ "haven't seen it", is the most damaging:
-it teaches the site you never saw a film you did see, and the title drops out
-of your library entirely. Your last file had **812 "haven't seen" answers in
-1,100 cards**. Some unknown share of those are really 👁.
+Until it existed you had three lies to choose from, and the one that feels
+least dishonest — ↑ "haven't seen it" — is the most damaging: it teaches the
+site you never saw a film you did see, and drops the title out of your library.
+Your last file had **812 "haven't seen" answers in 1,100 cards**. Some unknown
+share of those are really 👁.
 
-### And swipe left honestly now
+### And swipe left honestly
 
-👎 no longer blames a whole genre for one bad title. Hating The Office will not
-cost you Modern Family — measured — and twenty disliked action films with no
-action ever liked will still teach it properly. Your last two files contained
-**6 dislikes in 1,100 swipes and 1 in 378**. That was rational before. It is not
-any more.
+👎 no longer blames a whole genre for one bad title — measured. Disliking The
+Office will not cost you Modern Family. Your last two files had **6 dislikes in
+1,100 swipes, and 1 in 378**. That was rational before. It is not now.
 
----
+## 2.3 · Walk the other four tabs
 
-## 2 · The two numbers I want
+I opened every screen myself this round and they all render with no errors, but
+"renders" is not "is any good". Ten minutes on each:
 
-**Does the decline keep slowing?** Last session, per 50 cards: 27 · 22 · 28 ·
-22 · 29 · 15 · 16 · 14 · 15 · 11 · 15 · 7 · 10 · 11 · 4 · 9 · 11 · 1 · 1 · 8 ·
-5 · 2.
+- **Discover** — are the recommendations recognisable *and* worth watching?
+- **Together** — add two names, see what it proposes for both of you.
+- **Library** — search inside it; the search field looks at what you have
+  watched first and the whole catalog second.
+- **You** — the counts, the settings.
+- **Lists** — build one from your library. This screen used to open on an icon
+  and a `+` and no words at all; it now explains itself. **Sharing it needs
+  section 1.**
 
-**Do more first-time works appear?** Last session 61 of your 283 likes were
-works never shown to you in four earlier sessions. Every one below film rank
-3,000 was a first appearance.
+## 2.4 · Optional · a third calibration round
 
----
+https://dhawq.onrender.com/calibrate — tap only what you have watched. One tap
+anywhere on a card, a second tap undoes it. Untapped counts as not watched.
 
-## 3 · Optional · another calibration round
-
-https://dhawq.onrender.com/calibrate — tap only what you have watched, one tap
-anywhere on a card, a second tap undoes it. Everything untapped counts as not
-watched.
-
-Two rounds are done (399 titles). A third would tighten every band estimate,
-and those estimates now set where the gate stops. Not urgent.
+Two rounds are done (399 titles). A third tightens every band estimate, and
+those estimates set where the gate stops. Not urgent.
 
 ---
 
-## 4 · `/seen` is gone from the navigation
+# 3 · What I know is still wrong
 
-You were right about it. The arithmetic was in its favour — thirty questions a
-screen against the deck's one a gesture — and the product judgement was wrong.
-A faster chore is still a chore nobody does. The route still exists if you ever
-want it; it is simply no longer offered.
+I would rather you hear this from me than find it.
 
-**`/search` stays**, deliberately secondary. Your point about it is the sharpest
-thing anyone has said about this product: nobody can *name* thirty films, and
-everybody *recognises* a thousand. That is the whole argument for the deck.
+## 3.1 · The deck cannot reach what Discover finds — for comedy and horror
 
----
+`npx tsx scripts/cold-deck.ts` builds a person who has liked 1, 3, 5 and 10
+titles of one genre and asks what the next twenty cards are. Measured today:
 
-## What changed in this update
+| genre | own genre after 3 likes | can reach Discover's top 15 | recognised |
+|---|---|---|---|
+| comedy | 19/20 ✅ | **5/15** ❌ | **11/20** ❌ |
+| horror | **11/20** ❌ | **7/15** ❌ | **16/20** ❌ |
+| science fiction | 15/20 ✅ | 12/15 ✅ | 19/20 ✅ |
 
-| | before | after |
-|---|---|---|
-| `harvest` — the goal ruler | 248.0 | **263.0** |
-| — lost because the ranking did not deal it | 32.0% | **29.0%** |
-| `replay` on your own 1,226 labels | 187.5 | **196.2** |
-| `human`, deck mode | 32.5% | **33.8%** |
-| — long tail only | 12.9% | **14.3%** |
-| `simulate` | 12/13 | **13/13** |
+Science fiction is fine. Comedy and horror are not, in two different ways:
+comedy shows you the right genre but too obscure (median fame rank 1,887), and
+horror does not hold the genre at all after three likes.
 
-**The graph's share of the deck went up four times.** You said you mostly only
-see keyword relationships — measured, you were right: 83% taste against 14%
-graph. The graph is the only mechanism that can reach a title sharing *no*
-keywords with anything you liked, which is the founding idea of this site, and
-it was throttled by a limit set back when the pool held 700 titles.
+**I have not fixed this, deliberately, and you should know why.** The ruler
+above is a synthetic person I invented. Your real session is better evidence
+than my invention, and if I retune the engine tonight and you swipe tomorrow,
+neither of us can tell which change caused what. This is the fifth time in this
+project that my ruler was the thing that was wrong. **Send me the export from
+2.2 and I will tune against your labels instead of my guesses.**
 
-**Your reverse-graph idea was implemented and rejected**, on both rulers at
-once — the code is in, switched off, with the reason written beside it. A film
-you disliked is a film you *watched*, so its neighbours are things you have
-probably also watched. Walking away from them walks away from your own library.
+## 3.2 · Load still costs about 0.4 seconds
 
----
+Down from 1.5 seconds this round, and the remaining 377ms is Turbopack's module
+runtime — React, Next and framer-motion registering themselves. I removed two
+things that had no business being in it (the whole ranking engine, loaded on
+the main thread as a fallback that almost never runs; and the Supabase SDK,
+pulled in to read two environment variables). Cutting further means replacing
+libraries, which I will not do without you asking.
 
-## What I got wrong, and the number that replaces it
+**Symptom:** the first tap after a cold load can be ignored. Reloads are fine —
+the browser caches it.
 
-I told you the improvement had hit its limit. That was wrong twice: I used a
-film vote-count threshold on a catalog that is 20% television, and I measured
-what the gate *could* offer instead of what you were actually shown.
+## 3.3 · MovieLens has no television
 
-    the band worth asking about (top 30% of each kind)   4,526 works
-    asked about across five sessions                     1,585   (35%)
-    never asked, inside what the deck already reaches    2,941
-    your library inside the catalog                       ~754
-    found so far                                           321
-    still in there, unasked                               ~433
+The goal ruler is blind to 3,076 of the 15,083 titles. No fix — the data does
+not exist.
 
-The gate stopped being the bottleneck. That is not the same as nothing being
-left. **433 of your own films are sitting inside territory the deck can already
-reach**, and while that number is large the work is not finished.
+## 3.4 · Do not top up the Anthropic credit
+
+That feature measured worse and ships disabled.
 
 ---
 
-## Known and open
+# 4 · Fixed since your last session
 
-**MovieLens has no television**, so the goal ruler is blind to 3,076 of the
-15,083 titles. No fix — the data does not exist.
-
-**Non-English is settled**: 3 watched of 226 across both calibration rounds.
-
-**Do not top up the Anthropic credit.** That feature measured worse and ships
-disabled.
+- The opening animation freeze — it was never a paint. `buildRarityIndex` was
+  counting every keyword in 15,083 titles on the main thread, ~1.2s on your
+  phone, exactly while the welcome animation played. It builds in idle slices
+  now.
+- Cards vanishing instead of flying — the real card was being deleted at the
+  release instant and an inert copy flown in its place, starting 40px behind
+  where your finger let go.
+- A throw arriving faster than a drag — three separate causes: a front-loaded
+  ease, opacity riding the same curve, and drag momentum.
+- Dragging downward looking like a freeze.
+- The whole-screen colour dying with your finger on a flick.
+- The heart staying blue for twenty seconds after a tap.
+- A poster placeholder flashing before every card.
+- A failed network request on every single page load, waited on, for a data
+  file that is deliberately not shipped.
+- Two contradicting database migrations (see 1.1).
+- Lists opening on a wordless empty screen.

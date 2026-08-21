@@ -126,21 +126,6 @@ async function attachOverviews(titles: Title[]): Promise<void> {
   }
 }
 
-/** Best-effort: the prior improves if it arrives, and nothing breaks if not. */
-async function attachReach(titles: Title[]): Promise<void> {
-  try {
-    const res = await fetch(assetUrl("/reach.json"), { cache: "force-cache" });
-    if (!res.ok) return;
-    const reach = (await res.json()) as Record<string, number>;
-    for (const t of titles) {
-      const r = reach[t.id];
-      if (typeof r === "number") t.reach = r;
-    }
-  } catch {
-    /* the vote count remains the prior */
-  }
-}
-
 /** Fetches and installs the full catalog. Safe to call repeatedly. */
 export function loadCatalog(): Promise<CandidateItem[]> {
   if (loadPromise) return loadPromise;
@@ -155,12 +140,21 @@ export function loadCatalog(): Promise<CandidateItem[]> {
         : await decodeSpread(data);
 
       /**
-       * Reach rides alongside rather than inside the catalog: 55 KB gzipped
-       * against the catalog's 3.3 MB, and a separate file means a failure to
-       * fetch it costs the prior and nothing else — the engine falls back to
-       * the vote count exactly as before. Not worth a schema change.
+       * The reach fetch used to be here, and it was a 404 on every page load.
+       *
+       * `reach` is bought audience-size data. It was measured against the
+       * engine and changed harvest by nothing at all, so `REACH_WEIGHT` in
+       * `features.ts` is 0 and the file is deliberately not shipped to the
+       * browser — 55 KB for a term weighted zero. But the loader stayed, and
+       * `await`ed, so every single visit made a request that could only fail
+       * and *waited for the failure* before installing the catalog. A round
+       * trip on the critical path of the opening, for a number multiplied by
+       * zero.
+       *
+       * The experiments read `.cache/reach.json` from disk and are unaffected;
+       * `REACH=0.35 npm run replay` still re-measures it in one command. If it
+       * ever earns a non-zero weight, it gets shipped and loaded then.
        */
-      await attachReach(titles);
       const ready = build(titles);
       if (!lean) {
         /**

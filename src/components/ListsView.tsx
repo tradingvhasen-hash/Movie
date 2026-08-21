@@ -9,6 +9,7 @@ import { useDhawq } from "@/lib/store";
 import { useAccount } from "@/lib/supabase/useAccount";
 import { publishList } from "@/lib/supabase/lists";
 import { FADE_UP, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
+import { t } from "@/lib/i18n";
 import {
   CheckIcon,
   ChevronLeftIcon,
@@ -184,14 +185,31 @@ export default function ListsView() {
               aria-label="New list"
             >
               <PlusIcon size={18} strokeWidth={2.4} />
+              {/* the icon alone was the only unlabelled primary action left in
+                  the app — a dashed box with a plus in it, on a screen that
+                  otherwise says nothing */}
+              <span className="text-sm font-semibold">{t("lists.create")}</span>
             </motion.button>
           )}
         </AnimatePresence>
       </motion.div>
 
+      {/*
+        An empty screen has to say what it is for.
+
+        This was an icon and a `+` and no words at all — the only screen in the
+        app that opens on nothing and explains nothing. Together, which is
+        equally empty on a first visit, says "Everyone names a film they love.
+        It finds one for all of you" and is immediately understandable. A
+        person arriving here has no way to guess that a list is a thing they
+        build from their library and can hand to someone else.
+      */}
       {lists.length === 0 && !naming && (
-        <motion.div variants={FADE_UP} className="mt-14 flex justify-center">
+        <motion.div variants={FADE_UP} className="mt-14 flex flex-col items-center px-6 text-center">
           <StackIcon size={46} strokeWidth={1.3} className="text-ink-faint" />
+          <p className="mt-4 max-w-[16rem] text-sm leading-relaxed text-ink-faint">
+            {t("lists.emptyTitle")}
+          </p>
         </motion.div>
       )}
 

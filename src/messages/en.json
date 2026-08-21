@@ -71,7 +71,8 @@
     "addItems": "Add titles from your library",
     "public": "Public",
     "private": "Private",
-    "copied": "Link copied!"
+    "copied": "Link copied!",
+    "emptyTitle": "A list is a handful of films you want to put in someone's hands. Build one from your library, then share the link."
   },
   "share": {
     "libraryOf": "{name}'s library",

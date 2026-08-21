@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   motion,
   useMotionValue,
+  useMotionValueEvent,
   useTransform,
   type MotionValue,
   type PanInfo,
@@ -87,15 +88,43 @@ export default function SwipeCard({
   const [everFlipped, setEverFlipped] = useState(false);
   const [exiting, setExiting] = useState<SwipeAction | null>(null);
 
-  const ownX = useMotionValue(0);
-  const ownY = useMotionValue(0);
-  const x = sharedX ?? ownX;
-  const y = sharedY ?? ownY;
+  /**
+   * EVERY CARD OWNS ITS POSITION FOR ITS WHOLE LIFE. THIS IS NOT A DETAIL.
+   *
+   * It used to read `const x = sharedX ?? ownX` — the deck's shared motion
+   * value for the top card, a private one for the two behind it. Which means
+   * that the instant a card was promoted from second to first, the motion
+   * value bound to `style.x` **changed identity underneath a live component**.
+   *
+   * framer-motion sets up its drag gesture against the value it was given at
+   * mount. After the swap, a finger dragged the card and the element moved —
+   * so it looked fine — but the gesture and the element were no longer talking
+   * about the same object: `onDragEnd` never resolved against the rendered
+   * position, nothing committed, and the card stayed where the finger left it.
+   *
+   * That is precisely what the user filmed: the first swipe works, and from
+   * the second card onward the deck accepts the drag and does nothing with it.
+   * He dragged that Reservoir Dogs card for thirteen seconds. Every drag test
+   * I had written dragged exactly one card, so every one of them passed.
+   *
+   * So: the position is created here, once, and never replaced. The deck still
+   * needs to read the top card's position for the whole-screen feedback, and
+   * it gets it by mirroring — a copy, never a substitution.
+   */
+  const x = useMotionValue(0);
+  const y = useMotionValue(0);
 
   const rotate = useTransform(x, [-260, 0, 260], [-16, 0, 16]);
 
   const isTop = index === 0;
   const activeExit = isTop ? (exiting ?? forcedExit) : null;
+
+  useMotionValueEvent(x, "change", (v) => {
+    if (isTop) sharedX?.set(v);
+  });
+  useMotionValueEvent(y, "change", (v) => {
+    if (isTop) sharedY?.set(v);
+  });
 
   /* a card arriving at the front starts face-up and un-dragged */
   useEffect(() => {
@@ -103,8 +132,10 @@ export default function SwipeCard({
       setFlipped(false);
       x.set(0);
       y.set(0);
+      sharedX?.set(0);
+      sharedY?.set(0);
     }
-    // the motion values are stable for the life of the deck
+    // the motion values are stable for the life of this component
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isTop, title.id]);
 
@@ -190,6 +221,8 @@ export default function SwipeCard({
     if (!activeExit) return;
     x.set(0);
     y.set(0);
+    sharedX?.set(0);
+    sharedY?.set(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeExit]);
 

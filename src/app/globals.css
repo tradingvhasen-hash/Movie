@@ -142,6 +142,34 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/**
+ * NO iOS LINK MENU ON ANYTHING YOU ARE MEANT TO PRESS.
+ *
+ * The user filmed a tab press doing nothing for several seconds and called it
+ * the most important problem in the app. Cut to frames, the recording shows
+ * Safari's link preview menu opening over the page instead — twice — with no
+ * navigation. Safari raises that menu on a long press of a link, and its timer
+ * is wall-clock: if the main thread is busy when the finger lands, the tap is
+ * handled late and the long-press wins. So a slow frame did not delay a
+ * navigation, it *replaced* it with a context menu.
+ *
+ * The nav carries this inline as well, because that is where he hit it. Here it
+ * covers every other control in the app — a card, a poster tile, a verdict
+ * button — because the same race exists on all of them and a long press means
+ * nothing anywhere in this product.
+ *
+ * Deliberately not applied to `input`, `textarea` or the card's own back face:
+ * selecting and copying text is a real thing to want, and none of those are
+ * links, so none of them can raise the menu in the first place.
+ */
+a,
+button,
+[role="button"],
+summary {
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+}
+
 /* Baseline: nothing changes appearance instantly. Anything interactive
    eases its colors, shadows and transforms unless it opts out. */
 a,

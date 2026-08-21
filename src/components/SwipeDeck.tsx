@@ -471,8 +471,12 @@ export default function SwipeDeck() {
                   forcedExit={exitOf?.id === title.id ? exitOf.action : null}
                   upAction={settings.swipeUp}
                   onDragActive={i === 0 ? dragActive : undefined}
-                  x={i === 0 ? x : undefined}
-                  y={i === 0 ? y : undefined}
+                  /* every card reads the top card's position now, not just
+                     the top card: the ones behind use it to rise with the drag
+                     instead of popping into place after it. Only the top card
+                     ever writes to it — see the guard in SwipeCard. */
+                  x={x}
+                  y={y}
                 />
               ))}
             </AnimatePresence>

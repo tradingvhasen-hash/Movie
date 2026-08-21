@@ -128,6 +128,42 @@ export default function SwipeCard({
   const isTop = index === 0;
   const activeExit = isTop ? (exiting ?? forcedExit) : null;
 
+  /**
+   * THE CARD UNDERNEATH RISES WITH THE DRAG, NOT AFTER IT.
+   *
+   * The user: "while you drag a card the one below appears but does not push.
+   * The moment you throw it, the card below appears with an effect like a push
+   * upward. No — I don't like it, it's very cheap."
+   *
+   * He has described the mechanism exactly. The stack was static: every card
+   * sat at `index * 12` and waited. When the top card committed, the second
+   * became the first and its whole promotion — twelve pixels up and a scale
+   * step — happened at once, on a slightly underdamped spring, so it did not
+   * merely move, it popped.
+   *
+   * A deck of real cards does not work that way. As you slide the top one off,
+   * the one beneath is progressively uncovered and is *already* where it needs
+   * to be by the time the top card is gone. So the promotion is now driven by
+   * how far the top card has travelled: at rest the stack looks exactly as it
+   * did, and at the commit point the second card has already arrived at the
+   * first card's position. Nothing is left to animate, so there is nothing to
+   * pop.
+   *
+   * A button press has no drag to ride, so for that path the settle transition
+   * below drops the spring for a plain ease — same destination, no overshoot.
+   */
+  const promote = useTransform(() => {
+    if (isTop || !sharedX || !sharedY) return 0;
+    const travelled = Math.hypot(sharedX.get(), sharedY.get());
+    return Math.min(1, travelled / SWIPE_X_THRESHOLD);
+  });
+  const stackY = useTransform(promote, [0, 1], [index * 12, (index - 1) * 12]);
+  const stackScale = useTransform(
+    promote,
+    [0, 1],
+    [1 - index * 0.05, 1 - (index - 1) * 0.05]
+  );
+
   useMotionValueEvent(x, "change", (v) => {
     if (isTop && !activeExit) sharedX?.set(v);
   });
@@ -357,20 +393,21 @@ export default function SwipeCard({
    * difference between a swipe costing a repaint of the deck and costing
    * nothing at all.
    */
-  const restingPose = {
-    x: 0,
-    y: index * 12,
-    scale: 1 - index * 0.05,
-    opacity: index > 2 ? 0 : 1,
-  };
+  /**
+   * The top card is the only one whose rest is animated by React state; the
+   * cards behind it follow the drag through `stackY` / `stackScale` above, so
+   * their pose is a motion value and must not also be an `animate` target —
+   * two owners of one property is a fight, and framer resolves it by jumping.
+   */
+  const restingPose = isTop
+    ? { x: 0, y: 0, scale: 1, opacity: 1 }
+    : { opacity: index > 2 ? 0 : 1 };
 
   return (
     <motion.div
       className="absolute inset-0 touch-none select-none will-change-transform"
       style={{
-        x,
-        y,
-        rotate,
+        ...(isTop ? { x, y, rotate } : { y: stackY, scale: stackScale }),
         zIndex: activeExit ? 40 : 30 - index,
         pointerEvents: isTop && !activeExit ? "auto" : "none",
         perspective: 1400,
@@ -382,7 +419,10 @@ export default function SwipeCard({
         opacity: 0,
       }}
       animate={restingPose}
-      transition={{ ...SPRING_SETTLE, opacity: { duration: 0.35 } }}
+      /* a tween, not the spring: SPRING_SETTLE is damped at 0.93, which
+         overshoots — invisible on a card returning to centre and, on a card
+         being promoted after a button press, exactly the pop he called cheap */
+      transition={{ duration: 0.34, ease: EASE_OUT, opacity: { duration: 0.35 } }}
       /**
        * THE CARD IS NOT ALLOWED TO LEAVE FASTER THAN YOU CAN WATCH IT.
        *

@@ -11,6 +11,7 @@ import {
   FilmIcon,
   HeartIcon,
   SearchIcon,
+  StarIcon,
   ThumbsDownIcon,
   TrashIcon,
   CheckIcon,
@@ -231,49 +232,29 @@ export default function LibraryPage() {
           </motion.div>
         ) : (
           <motion.div key="watched" variants={SECTION} initial="hidden" animate="show" exit="exit">
-            {/* one field, two corpora — and the filters ride the same line */}
-            <motion.div variants={FADE_UP} className="mt-3 flex items-center gap-2">
-              <div className="min-w-0 flex-1">
-                <SearchField onSettled={setSettled} />
-              </div>
-              <LayoutGroup id="library-filters">
-                <div className="flex shrink-0 items-center gap-1 rounded-2xl border border-line bg-surface p-1">
-                  {FILTERS.map((f) => {
-                    const active = filter === f;
-                    return (
-                      <motion.button
-                        key={f}
-                        onClick={() => setFilter(f)}
-                        whileTap={{ scale: 0.9 }}
-                        transition={SPRING_SNAPPY}
-                        aria-label={t(`library.${f}`)}
-                        title={t(`library.${f}`)}
-                        aria-pressed={active}
-                        className={`relative grid h-9 w-9 place-items-center rounded-xl transition-colors ${
-                          active ? "text-[color:var(--color-on-accent)]" : "text-ink-faint"
-                        }`}
-                      >
-                        {active && (
-                          <motion.span
-                            layoutId="filter-pill"
-                            className="absolute inset-0 rounded-xl bg-accent"
-                            transition={{ type: "spring", stiffness: 420, damping: 34 }}
-                          />
-                        )}
-                        <span className="relative">
-                          {f === "all" ? (
-                            <FilmIcon size={17} strokeWidth={2} />
-                          ) : f === "liked" ? (
-                            <HeartIcon size={16} filled />
-                          ) : (
-                            <ThumbsDownIcon size={16} filled />
-                          )}
-                        </span>
-                      </motion.button>
-                    );
-                  })}
-                </div>
-              </LayoutGroup>
+            {/*
+              THE ARRANGEMENT, SECOND ATTEMPT.
+
+              "I liked how you made them smaller and how you arranged them — I
+              liked that you changed the words to icons and tried to shrink the
+              space. The idea is great, only the arrangement I don't like."
+
+              So the icons stay and the two-row shape stays; what changes is
+              what shares a line with what. Cramming the three filters onto the
+              search field's row left the field about 60% of the width and put
+              a segmented control immediately beside a text input — two
+              different kinds of thing fighting for one line, and the field, the
+              most-used control on the screen, lost the fight.
+
+              The filters move up beside the Watched/Lists switch, where they
+              belong: both are "which of these am I looking at", both are
+              segmented, and they read as one group of view controls. The search
+              field then gets the full width of its own row, which is what a
+              field wants. The count and Select keep the third line, which is
+              type rather than controls and costs almost no height.
+            */}
+            <motion.div variants={FADE_UP} className="mt-3">
+              <SearchField onSettled={setSettled} />
             </motion.div>
 
             {/*
@@ -293,8 +274,46 @@ export default function LibraryPage() {
               a single Delete at the bottom with the count on it.
             */}
             {filtered.length > 0 && (
-              <motion.div variants={FADE_UP} className="mt-3 flex items-center justify-between">
-                <span className="text-[11.5px] font-semibold uppercase tracking-wider text-ink-faint">
+              <motion.div variants={FADE_UP} className="mt-3 flex items-center gap-3">
+                <LayoutGroup id="library-filters">
+                  <div className="flex shrink-0 items-center gap-1 rounded-2xl border border-line bg-surface p-1">
+                    {FILTERS.map((f) => {
+                      const active = filter === f;
+                      return (
+                        <motion.button
+                          key={f}
+                          onClick={() => setFilter(f)}
+                          whileTap={{ scale: 0.9 }}
+                          transition={SPRING_SNAPPY}
+                          aria-label={t(`library.${f}`)}
+                          title={t(`library.${f}`)}
+                          aria-pressed={active}
+                          className={`relative grid h-9 w-9 place-items-center rounded-xl transition-colors ${
+                            active ? "text-[color:var(--color-on-accent)]" : "text-ink-faint"
+                          }`}
+                        >
+                          {active && (
+                            <motion.span
+                              layoutId="filter-pill"
+                              className="absolute inset-0 rounded-xl bg-accent"
+                              transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                            />
+                          )}
+                          <span className="relative">
+                            {f === "all" ? (
+                              <FilmIcon size={17} strokeWidth={2} />
+                            ) : f === "liked" ? (
+                              <HeartIcon size={16} filled />
+                            ) : (
+                              <ThumbsDownIcon size={16} filled />
+                            )}
+                          </span>
+                        </motion.button>
+                      );
+                    })}
+                  </div>
+                </LayoutGroup>
+                <span className="min-w-0 flex-1 truncate text-[11.5px] font-semibold uppercase tracking-wider text-ink-faint">
                   {filtered.length} {filtered.length === 1 ? "title" : "titles"}
                 </span>
                 <button
@@ -344,7 +363,13 @@ export default function LibraryPage() {
                   initial="hidden"
                   animate="show"
                   exit="exit"
-                  className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4"
+                  /* Three across, not two. "Maybe instead of two films side by side on one
+                     page, make it three." He is right beyond the count: at two
+                     columns a poster is 165px wide on a 390px screen, which is
+                     larger than the artwork needs to be recognised and means a
+                     library of any size is mostly scrolling. Three fits a
+                     screenful of a real collection. */
+                  className="mt-5 grid grid-cols-3 gap-2.5 sm:grid-cols-4 md:grid-cols-6"
                 >
                   {/*
                     Plain AnimatePresence, not `mode="popLayout"`.
@@ -720,40 +745,88 @@ function LibraryTile({
           )}
         </span>
 
-        {/* ── back: what the poster cannot say ── */}
+        {/*
+          ── back: built exactly like the deck card's back ──
+
+          The user: "do you see the design of the back? Why isn't it exactly
+          like the design of the back of the cards in the swipe? I see it is
+          more beautiful — how the original card becomes blurred and everything
+          else. I like it more."
+
+          He is right and the first version here was lazier than it needed to
+          be: a plain surface panel with dark text, which is a *different* idea
+          of what the back of a card is. The deck's back is the poster itself,
+          blurred and scrimmed, with white type over it — so every card's back
+          is coloured by its own artwork instead of being the same grey box
+          forty times over.
+
+          It is the same construction, at tile scale: `background-image` +
+          `filter: blur()` on a static subtree, which the browser rasterises
+          once and reuses, rather than `backdrop-filter`, which would re-sample
+          the page on every frame the tile moves. That distinction is why the
+          deck stopped stuttering, and it is not going to be re-broken here.
+        */}
         <span
-          className="absolute inset-0 flex flex-col overflow-hidden rounded-[20px] border border-line bg-surface p-3 text-start"
+          className="absolute inset-0 overflow-hidden rounded-[20px] bg-ink-strong"
           style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
         >
-          <span className="block text-[13px] font-bold leading-tight text-ink">
-            {title.title[locale]}
-          </span>
-          <span className="mt-0.5 block text-[10.5px] font-medium text-ink-faint">
-            {title.year} · {title.type === "movie" ? t("card.movie") : t("card.tv")} ·{" "}
-            {title.rating.toFixed(1)}
-          </span>
-          <span className="mt-1.5 block text-[10px] font-semibold capitalize text-ink-dim">
-            {title.genres.slice(0, 2).map((g) => genreLabel(g, locale)).join(" · ")}
-          </span>
-          {title.overview[locale] && (
-            <span className="mt-2 block min-h-0 flex-1 overflow-hidden text-[10.5px] leading-relaxed text-ink-dim">
-              {title.overview[locale]}
-            </span>
-          )}
-          <motion.span
-            role="button"
-            tabIndex={0}
-            aria-label={t("common.delete")}
-            whileTap={{ scale: 0.92 }}
-            onClick={(e) => {
-              e.stopPropagation();
-              onRemove();
+          <span
+            className="absolute inset-0 scale-125"
+            style={{
+              backgroundImage: title.posterPath
+                ? `url(https://image.tmdb.org/t/p/w500${title.posterPath})`
+                : undefined,
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+              filter: "blur(14px)",
             }}
-            className="mt-2 flex shrink-0 items-center justify-center gap-1.5 rounded-full bg-danger py-2 text-[11.5px] font-bold text-white"
-          >
-            <TrashIcon size={14} />
-            {t("common.delete")}
-          </motion.span>
+            aria-hidden
+          />
+          <span
+            className="absolute inset-0"
+            style={{ background: "rgb(var(--rgb-scrim) / 0.76)" }}
+            aria-hidden
+          />
+
+          <span className="relative flex h-full flex-col p-2.5 text-start text-white">
+            <span className="block text-[12.5px] font-bold leading-tight">
+              {title.title[locale]}
+            </span>
+            <span className="mt-0.5 flex items-center gap-1 text-[9.5px] font-semibold text-white/60">
+              {title.year} · {title.type === "movie" ? t("card.movie") : t("card.tv")}
+              <StarIcon size={9} filled className="text-accent-soft" />
+              {title.rating.toFixed(1)}
+            </span>
+            <span className="mt-1.5 flex flex-wrap gap-1">
+              {title.genres.slice(0, 2).map((g) => (
+                <span
+                  key={g}
+                  className="rounded-full bg-white/20 px-1.5 py-0.5 text-[8.5px] font-semibold capitalize"
+                >
+                  {genreLabel(g, locale)}
+                </span>
+              ))}
+            </span>
+            {title.overview[locale] && (
+              <span className="mt-1.5 block min-h-0 flex-1 overflow-hidden text-[9.5px] leading-relaxed text-white/80">
+                {title.overview[locale]}
+              </span>
+            )}
+            <motion.span
+              role="button"
+              tabIndex={0}
+              aria-label={t("common.delete")}
+              whileTap={{ scale: 0.92 }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove();
+              }}
+              className="mt-1.5 flex shrink-0 items-center justify-center gap-1 rounded-full bg-danger py-1.5 text-[10px] font-bold text-white"
+            >
+              <TrashIcon size={12} />
+              {t("common.delete")}
+            </motion.span>
+          </span>
         </span>
       </motion.button>
     </motion.div>

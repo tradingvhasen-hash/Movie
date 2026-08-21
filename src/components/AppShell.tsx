@@ -64,10 +64,45 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <div className="mx-auto flex max-w-5xl items-stretch justify-around">
             {TABS.map(({ href, label, Icon }) => {
               const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+              /**
+               * THE "TEN SECONDS" WAS NOT SLOWNESS. IT WAS SAFARI'S LINK MENU.
+
+               * The user reported, twice, that pressing a tab sometimes did
+               * nothing for several seconds and called it the most important
+               * problem. I measured every tab three times round on a
+               * phone-speed CPU — 87 to 600ms — could not reproduce it, and
+               * said so honestly rather than claim a fix.
+
+               * Then he filmed it. Cut to frames, the recording shows the
+               * answer at 0.5s and again at 5.5s: he presses Discover and iOS
+               * opens its **link preview context menu** — فتح / فتح في علامة
+               * تبويب جديدة / نسخ الرابط / مشاركة — over the page. No
+               * navigation happens. He dismisses it, presses again, gets the
+               * menu again, and only the third press goes through. What looked
+               * like ten seconds of loading was two taps that were never
+               * delivered to the app at all.
+
+               * Safari raises that menu on a long press of an `<a href>`, and
+               * its long-press timer is wall-clock: if the main thread is busy
+               * when the finger lands, the tap's own handling is late and the
+               * timer wins. So the freeze was real *and* the symptom was a
+               * menu, which is why my navigation timings never showed it.
+
+               * `-webkit-touch-callout: none` removes the menu from these
+               * links entirely, and `touch-action: manipulation` drops the
+               * 300ms double-tap wait with it. A tab press is now a tab press
+               * even on a frame the phone is struggling with.
+               */
               return (
                 <Link
                   key={href}
                   href={href}
+                  style={{
+                    WebkitTouchCallout: "none",
+                    WebkitUserSelect: "none",
+                    userSelect: "none",
+                    touchAction: "manipulation",
+                  }}
                   className={`relative flex flex-1 flex-col items-center gap-1 py-2.5 text-[10.5px] font-semibold ${
                     active ? "text-accent" : "text-ink-faint hover:text-ink-dim"
                   }`}

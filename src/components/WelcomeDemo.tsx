@@ -35,14 +35,10 @@
  * And it can be skipped by touching the screen. A demo nobody can interrupt is
  * a demo that has stopped being a courtesy.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { animate, motion, useMotionValue, useTransform } from "framer-motion";
 import ScreenFeedback from "./ScreenFeedback";
-import PosterArt from "./PosterArt";
-import { getLocalCatalog } from "@/lib/catalog";
-import { resolveSeeds } from "@/lib/data/taste-seeds";
 import { EASE_OUT, SPRING_SETTLE } from "@/lib/motion";
-import type { Title } from "@/lib/types";
 
 let shownThisLoad = false;
 
@@ -51,14 +47,47 @@ export function demoAlreadyShown(): boolean {
   return shownThisLoad;
 }
 
+/**
+ * The three faces of the demo stack.
+ *
+ * Each one names the direction it is about to be thrown in, so the gesture and
+ * its meaning arrive together instead of the meaning arriving later on a
+ * screen the person has already left. Colours are the verdict colours, so by
+ * the time a real card appears the vocabulary is already learned.
+ */
+const WELCOME_CARDS = [
+  {
+    id: "w-right",
+    line: "Swipe right",
+    note: "you watched it and loved it",
+    from: "var(--color-accent)",
+  },
+  {
+    id: "w-left",
+    line: "Swipe left",
+    note: "you watched it, it was not for you",
+    from: "var(--color-danger)",
+  },
+  {
+    id: "w-up",
+    line: "Swipe up",
+    note: "you have not seen it",
+    from: "var(--color-skip)",
+  },
+] as const;
+
 /** the script, in the two numbers the deck itself is driven by */
-const BEATS: { x: number; y: number; hold: number }[] = [
-  { x: 0, y: 0, hold: 620 },
+const BEATS: { x: number; y: number; hold: number; face?: number }[] = [
+  { x: 0, y: 0, hold: 620, face: 0 },
   { x: 142, y: -10, hold: 700 },
   { x: 0, y: 0, hold: 220 },
-  { x: -142, y: -10, hold: 700 },
+  /* the face changes at the centre, between the two throws, so the card never
+     carries the wrong word while it is moving. Photographed on the first cut of
+     this: the front card said "Swipe right" while the demo dragged it left,
+     which teaches the gesture and then contradicts it. */
+  { x: -142, y: -10, hold: 700, face: 1 },
   { x: 0, y: 0, hold: 220 },
-  { x: 0, y: -150, hold: 640 },
+  { x: 0, y: -150, hold: 640, face: 2 },
 ];
 
 export default function WelcomeDemo({ onDone }: { onDone: () => void }) {
@@ -67,16 +96,33 @@ export default function WelcomeDemo({ onDone }: { onDone: () => void }) {
   /* the deck's own tilt curve, imported rather than re-guessed */
   const rotate = useTransform(x, [-260, 0, 260], [-16, 0, 16]);
   const [stage, setStage] = useState<"name" | "demo">("name");
+  /** which welcome face the front card is showing — see BEATS */
+  const [face, setFace] = useState(0);
   const done = useRef(false);
 
-  /** three real posters, so the demo is the product rather than a diagram */
-  const cards = useMemo<Title[]>(() => {
-    const pool = getLocalCatalog().map((c) => c.title);
-    if (pool.length === 0) return [];
-    const named = resolveSeeds(pool, 12);
-    const source = named.length >= 3 ? named : [...pool].sort((a, b) => b.voteCount - a.voteCount);
-    return source.slice(0, 3);
-  }, []);
+  /**
+   * THREE WELCOME CARDS, NOT THREE FILMS.
+   *
+   * This asked the catalog for its three most famous posters. Two things were
+   * wrong with that, and the user named both.
+   *
+   * IT AGREED NOT TO. "Didn't we agree that the card in the demo and the card
+   * behind it are welcome cards and not a real film?" We did, and I let real
+   * titles back in when I rebuilt the screen.
+   *
+   * AND IT COULD NOT KEEP ITS PROMISE ANYWAY. His recording shows every demo
+   * card as a grey-blue placeholder with a film-strip icon and a title in
+   * plain text — "the cards appear as if they didn't load", and they had not.
+   * That one is mine end to end: I stopped the welcome screen waiting for the
+   * catalog so it could paint in 1.3s instead of 3.4s, which was right, and it
+   * meant the posters it was about to display had not been fetched yet. The
+   * fix for the blank screen created the empty cards.
+   *
+   * Designed cards close both. Nothing is fetched, so nothing can fail to
+   * arrive; the demo shows the *gesture*, which is all it was ever teaching,
+   * and it now says in three lines what the three directions mean.
+   */
+  const cards = WELCOME_CARDS;
 
   const finish = useRef(onDone);
   finish.current = onDone;
@@ -96,6 +142,7 @@ export default function WelcomeDemo({ onDone }: { onDone: () => void }) {
 
       for (const beat of BEATS) {
         if (cancelled) return;
+        if (beat.face !== undefined) setFace(beat.face);
         await Promise.all([
           animate(x, beat.x, SPRING_SETTLE).finished,
           animate(y, beat.y, SPRING_SETTLE).finished,
@@ -170,19 +217,41 @@ export default function WelcomeDemo({ onDone }: { onDone: () => void }) {
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.95, ease: [0.16, 0.9, 0.24, 1] }}
         >
-          <h1 className="text-[54px] font-bold tracking-[-0.045em] text-ink">Seenit</h1>
-          {/* the sweep: one pass of light across the word, transform-only */}
-          <motion.span
-            className="absolute inset-y-0 w-1/2"
+          {/*
+            THE SHEEN IS INSIDE THE LETTERS, NOT ON TOP OF THEM.
+
+            v1 of this was a translucent accent-coloured bar sliding across the
+            word. In his recording it is unmistakable at 2.25 seconds, and his
+            reading of it was exactly right: "this blue colour that appears —
+            no, I don't like it." It looks like a text selection, because a
+            semi-transparent blue rectangle over black text is what a text
+            selection is.
+
+            The light has to live *in* the glyphs. `background-clip: text` with
+            a moving gradient does that: the word is painted with a gradient of
+            ink → light → ink and the gradient's position animates, so the
+            highlight travels through the letterforms and never exists as a
+            shape of its own. Netflix's wordmark does the same thing, which is
+            the reference he keeps giving me.
+
+            `background-position` is a paint, not a composite — but this is one
+            element, once, for 1.1 seconds, on a screen with nothing else
+            moving. That is the one place in this app where a repaint is
+            affordable, and the alternative is the rectangle he rejected.
+          */}
+          <motion.h1
+            className="bg-clip-text text-[54px] font-bold tracking-[-0.045em] text-transparent"
             style={{
-              background:
-                "linear-gradient(100deg, transparent, rgb(var(--rgb-accent) / 0.5), transparent)",
+              backgroundImage:
+                "linear-gradient(100deg, var(--color-ink) 38%, rgb(var(--rgb-accent) / 0.95) 50%, var(--color-ink) 62%)",
+              backgroundSize: "320% 100%",
             }}
-            initial={{ x: "-160%" }}
-            animate={{ x: "260%" }}
-            transition={{ duration: 1.15, delay: 0.34, ease: [0.4, 0, 0.2, 1] }}
-            aria-hidden
-          />
+            initial={{ backgroundPositionX: "100%" }}
+            animate={{ backgroundPositionX: "0%" }}
+            transition={{ duration: 1.1, delay: 0.28, ease: [0.4, 0, 0.2, 1] }}
+          >
+            Seenit
+          </motion.h1>
         </motion.div>
       </motion.div>
 
@@ -217,7 +286,7 @@ export default function WelcomeDemo({ onDone }: { onDone: () => void }) {
         <div className="relative mx-auto h-full w-fit">
           <div className="relative h-full max-w-[80vw]" style={{ aspectRatio: "10 / 14.6" }}>
             {/* two cards behind, so the stack looks like the deck it becomes */}
-            {cards.slice(1, 3).map((tt, i) => (
+            {[cards[(face + 1) % 3], cards[(face + 2) % 3]].map((tt, i) => (
               <motion.div
                 key={tt.id}
                 className="soft-card absolute inset-0 overflow-hidden"
@@ -230,7 +299,7 @@ export default function WelcomeDemo({ onDone }: { onDone: () => void }) {
                 transition={{ duration: 0.45, ease: EASE_OUT, delay: 0.08 * i }}
                 style={{ zIndex: 10 - i }}
               >
-                <PosterArt title={tt} sizes="320px" />
+                <WelcomeFace card={tt} />
                 {/*
                   The cards behind sit slightly in shadow. This used to be
                   `filter: brightness(0.93)` in the `animate` block above —
@@ -274,11 +343,7 @@ export default function WelcomeDemo({ onDone }: { onDone: () => void }) {
               transition={{ duration: 0.45, ease: EASE_OUT }}
             >
               <div className="soft-card relative h-full w-full overflow-hidden">
-                {cards[0] ? (
-                  <PosterArt title={cards[0]} sizes="380px" />
-                ) : (
-                  <div className="h-full w-full bg-gradient-to-br from-surface-2 to-line" />
-                )}
+                <WelcomeFace card={cards[face]} />
                 <div className="card-sheen absolute inset-0" />
               </div>
             </motion.div>
@@ -299,6 +364,34 @@ export default function WelcomeDemo({ onDone }: { onDone: () => void }) {
           />
         ))}
       </div>
+    </div>
+  );
+}
+
+/**
+ * One welcome card: a colour, a direction, and what it means.
+ *
+ * Deliberately not a fake poster. A blank rectangle pretending to be a film was
+ * the mistake two versions ago — it taught the shape of a movement and nothing
+ * about it. This is not pretending to be anything: it is a card that says what
+ * throwing it will record, which is the only thing this screen exists to
+ * teach, and it is drawn entirely from CSS so there is nothing to download and
+ * nothing that can arrive late.
+ */
+function WelcomeFace({ card }: { card: (typeof WELCOME_CARDS)[number] }) {
+  return (
+    <div
+      className="flex h-full w-full flex-col items-center justify-center gap-3 px-7 text-center"
+      style={{
+        background: `linear-gradient(155deg, color-mix(in srgb, ${card.from} 82%, white) 0%, ${card.from} 58%, color-mix(in srgb, ${card.from} 72%, black) 100%)`,
+      }}
+    >
+      <span className="text-[27px] font-bold leading-tight tracking-[-0.03em] text-white [text-shadow:0_1px_4px_rgb(0_0_0/0.28)]">
+        {card.line}
+      </span>
+      <span className="max-w-[15rem] text-[13.5px] font-medium leading-relaxed text-white/85">
+        {card.note}
+      </span>
     </div>
   );
 }

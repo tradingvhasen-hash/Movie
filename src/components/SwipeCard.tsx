@@ -11,7 +11,7 @@ import {
 import PosterArt from "./PosterArt";
 import { StarIcon } from "./ui/Icons";
 import { genreLabel } from "@/lib/genres";
-import { EASE_SWEEP, SPRING_SETTLE } from "@/lib/motion";
+import { SPRING_SETTLE } from "@/lib/motion";
 import { locale, t } from "@/lib/i18n";
 import type { SwipeAction, Title } from "@/lib/types";
 
@@ -39,6 +39,15 @@ export interface SwipeCardProps {
   /** what an upward swipe records — a user setting */
   upAction: SwipeAction;
   /**
+   * A finger is on the card and moving it.
+   *
+   * The deck mounts the whole-screen feedback on this and nothing else. It
+   * used to infer "is the card off centre" from the position itself, which was
+   * true during a drag *and* during the exit animation of a card answered with
+   * a button — so a tap lit the entire drag apparatus.
+   */
+  onDragActive?: (active: boolean) => void;
+  /**
    * The top card's position, owned by the deck.
    *
    * It lives up there rather than here because the *screen* reacts to this
@@ -54,6 +63,7 @@ export default function SwipeCard({
   onSwipe,
   forcedExit,
   upAction,
+  onDragActive,
   x: sharedX,
   y: sharedY,
 }: SwipeCardProps) {
@@ -153,20 +163,35 @@ export default function SwipeCard({
           : px < -SWIPE_X_THRESHOLD
             ? "disliked"
             : null;
+    onDragActive?.(false);
     if (!action) return;
     setExiting(action);
     onSwipe(action);
   }
 
-  /* flies off along an arc, tilting and fading as it goes */
-  const exitTarget =
-    activeExit === "liked"
-      ? { x: 640, y: -90, rotate: 24, opacity: 0, scale: 0.92 }
-      : activeExit === "disliked"
-        ? { x: -640, y: -90, rotate: -24, opacity: 0, scale: 0.92 }
-        : activeExit
-          ? { x: 0, y: -780, rotate: 0, opacity: 0, scale: 0.9 }
-          : null;
+  /**
+   * A CARD THAT HAS BEEN ANSWERED NEVER TOUCHES THE SHARED POSITION AGAIN.
+   *
+   * There used to be an `exitTarget` here that animated this card's `x` out to
+   * 640 as it left. That `x` is the deck's shared motion value — the one the
+   * whole-screen drag feedback reads — so the moment anybody *tapped* a verdict
+   * button, the exit animation drove the drag apparatus: the screen washed with
+   * colour and a giant mark appeared for a gesture that had never happened.
+   * The user filmed it, along with the four-second freeze that followed as the
+   * phone tried to composite it all.
+   *
+   * The animation was pointless as well as harmful: this card is removed from
+   * the tree in the same frame (`exit` below has a zero duration) and the
+   * fly-off the viewer actually watches is `LeavingCards`, an inert copy. So
+   * an answered card now simply stops, and the position resets to centre for
+   * whichever card is next.
+   */
+  useEffect(() => {
+    if (!activeExit) return;
+    x.set(0);
+    y.set(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeExit]);
 
   /**
    * Resting pose in the stack — springs whenever the index changes.
@@ -208,12 +233,8 @@ export default function SwipeCard({
         scale: 1 - index * 0.05 - 0.06,
         opacity: 0,
       }}
-      animate={exitTarget ?? restingPose}
-      transition={
-        exitTarget
-          ? { duration: 0.52, ease: EASE_SWEEP }
-          : { ...SPRING_SETTLE, opacity: { duration: 0.35 } }
-      }
+      animate={restingPose}
+      transition={{ ...SPRING_SETTLE, opacity: { duration: 0.35 } }}
       /**
        * Leaves instantly, because it is not the thing you watch leave. The
        * deck keeps an inert copy on screen for the fly-off; this one is gone
@@ -224,6 +245,7 @@ export default function SwipeCard({
       drag={isTop && !activeExit}
       dragElastic={0.55}
       dragTransition={{ bounceStiffness: 260, bounceDamping: 26 }}
+      onDragStart={() => onDragActive?.(true)}
       onDragEnd={handleDragEnd}
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
@@ -252,19 +274,29 @@ export default function SwipeCard({
           <div className="card-sheen absolute inset-0" />
 
           <div className="absolute inset-x-0 bottom-0 p-4">
+            {/*
+              THESE THREE BADGES USED TO BE FROSTED GLASS.
+
+              `backdrop-blur` on an element inside a card that is transformed
+              every frame is the worst shape of this feature: the browser must
+              re-sample the pixels behind a moving element on every frame, and
+              there were three of them per card across three mounted cards.
+              They sit on the dark end of a poster gradient, so a flat scrim
+              reads the same and costs nothing.
+            */}
             <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-              <span className="rounded-md bg-white/15 px-2 py-0.5 text-[10px] font-bold text-white/95 backdrop-blur">
+              <span className="rounded-md bg-black/35 px-2 py-0.5 text-[10px] font-bold text-white/95">
                 {title.type === "movie" ? t("card.movie") : t("card.tv")}
               </span>
-              <span className="rounded-md bg-white/15 px-2 py-0.5 text-[10px] font-semibold text-white/95 backdrop-blur">
+              <span className="rounded-md bg-black/35 px-2 py-0.5 text-[10px] font-semibold text-white/95">
                 {title.year}
               </span>
-              <span className="flex items-center gap-1 rounded-md bg-white/15 px-2 py-0.5 text-[10px] font-semibold text-white/95 backdrop-blur">
+              <span className="flex items-center gap-1 rounded-md bg-black/35 px-2 py-0.5 text-[10px] font-semibold text-white/95">
                 <StarIcon size={10} filled className="text-accent" />
                 {title.rating.toFixed(1)}
               </span>
             </div>
-            <h2 className="text-xl font-bold leading-tight text-white drop-shadow">
+            <h2 className="text-xl font-bold leading-tight text-white [text-shadow:0_1px_3px_rgb(0_0_0/0.55)]">
               {title.title[locale]}
             </h2>
             <div className="mt-1 flex flex-wrap gap-x-2.5">
@@ -284,7 +316,7 @@ export default function SwipeCard({
           */}
           {isTop && (
             <motion.span
-              className="absolute end-3.5 top-3.5 flex h-7 w-7 items-center justify-center rounded-full bg-black/30 backdrop-blur-md"
+              className="absolute end-3.5 top-3.5 flex h-7 w-7 items-center justify-center rounded-full bg-black/40"
               animate={{ opacity: [0.45, 0.9, 0.45] }}
               transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}
               aria-hidden
@@ -371,7 +403,7 @@ export default function SwipeCard({
                   {title.genres.slice(0, 3).map((g) => (
                     <span
                       key={g}
-                      className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-semibold capitalize backdrop-blur-sm"
+                      className="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-semibold capitalize"
                     >
                       {genreLabel(g, locale)}
                     </span>

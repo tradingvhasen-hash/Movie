@@ -48,8 +48,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     <div className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col">
       <main className="flex-1">{children}</main>
 
+      {/*
+        NO `backdrop-filter` ON THE BAR, AND IT IS NOT A STYLE PREFERENCE.
+
+        A frosted bar has to re-sample everything painted behind it every time
+        that content changes — and what is behind it is the deck, where a card
+        moves sixty times a second. On a phone's compositor a permanent
+        backdrop filter over permanently moving content is one of the most
+        expensive things a page can ask for, and this bar is on screen on every
+        route. The bar sits on an opaque background anyway, so the blur was
+        doing almost nothing visible: same colour, same border, solid.
+      */}
       {!isSharePage && (
-        <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/90 backdrop-blur-lg">
+        <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface">
           <div className="mx-auto flex max-w-5xl items-stretch justify-around">
             {TABS.map(({ href, label, Icon }) => {
               const active = href === "/" ? pathname === "/" : pathname.startsWith(href);

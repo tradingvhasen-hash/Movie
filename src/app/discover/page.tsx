@@ -188,7 +188,7 @@ export default function DiscoverPage() {
                   </span>
 
                   <div className="absolute inset-x-0 bottom-0 p-4">
-                    <h2 className="text-[22px] font-bold leading-tight text-white drop-shadow">
+                    <h2 className="text-[22px] font-bold leading-tight text-white [text-shadow:0_1px_3px_rgb(0_0_0/0.5)]">
                       {hero.title.title[locale]}
                     </h2>
                     <p className="mt-1 text-[11.5px] font-medium text-white/70">

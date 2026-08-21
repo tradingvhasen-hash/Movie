@@ -108,7 +108,7 @@ const SwipeBurst = forwardRef<BurstHandle>(function SwipeBurst(_props, ref) {
         >
           {/* the flash */}
           <motion.div
-            className="absolute inset-0"
+            className="absolute inset-0 will-change-[opacity]"
             style={{
               background: `radial-gradient(95% 80% at ${origin.x} ${origin.y}, ${tint} 0%, transparent 68%)`,
             }}
@@ -119,7 +119,7 @@ const SwipeBurst = forwardRef<BurstHandle>(function SwipeBurst(_props, ref) {
 
           {/* the shockwave */}
           <motion.span
-            className="absolute rounded-full"
+            className="absolute rounded-full will-change-[opacity,transform]"
             style={{
               left: origin.x,
               top: origin.y,
@@ -134,15 +134,33 @@ const SwipeBurst = forwardRef<BurstHandle>(function SwipeBurst(_props, ref) {
             transition={{ duration: DUR + 0.08, ease: EASE_OUT }}
           />
 
-          {/* the mark */}
+          {/*
+            The mark — with its glow painted rather than filtered.
+
+            It used to carry `filter: drop-shadow(0 0 30px …)` while its scale
+            and opacity animated. A filter on a moving element is a
+            re-rasterisation on every frame, and on a phone's compositor that
+            is the difference between an effect and a stall. A radial gradient
+            behind the glyph looks the same and is painted once.
+          */}
           <motion.div
-            className="absolute inset-0 grid place-items-center"
-            style={{ color: tint, filter: `drop-shadow(0 0 30px ${tint})` }}
+            className="absolute inset-0 grid place-items-center will-change-[opacity,transform]"
+            style={{ color: tint }}
             initial={{ opacity: 0, scale: 0.78 }}
             animate={{ opacity: [0.95, 0], scale: [1, 1.1] }}
             transition={{ duration: DUR, ease: EASE_OUT }}
           >
-            <Icon size={104} filled strokeWidth={1.6} />
+            <span className="relative grid h-[190px] w-[190px] place-items-center">
+              <span
+                className="absolute inset-0 rounded-full"
+                style={{
+                  background: `radial-gradient(circle, color-mix(in srgb, ${tint} 60%, transparent) 0%, transparent 66%)`,
+                }}
+              />
+              <span className="relative">
+                <Icon size={104} filled strokeWidth={1.6} />
+              </span>
+            </span>
           </motion.div>
         </motion.div>
       )}

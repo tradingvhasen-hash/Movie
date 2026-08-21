@@ -257,7 +257,7 @@ export default function TogetherPage() {
                 <PosterArt title={answer} sizes="360px" className="aspect-[2/3] w-full" />
                 <div className="card-sheen absolute inset-0" />
                 <div className="absolute inset-x-0 bottom-0 p-4">
-                  <h2 className="text-xl font-bold leading-tight text-white drop-shadow">
+                  <h2 className="text-xl font-bold leading-tight text-white [text-shadow:0_1px_3px_rgb(0_0_0/0.5)]">
                     {answer.title[locale]}
                   </h2>
                   <p className="mt-1 text-[11px] font-medium text-white/70">

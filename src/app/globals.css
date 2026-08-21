@@ -662,8 +662,10 @@ svg,
 .rich-tooltip-panel {
   position: relative;
   padding: 1rem 1.1rem;
-  background: rgb(var(--rgb-surface) / 0.96);
-  backdrop-filter: blur(20px);
+  /* the surface is 96% opaque, so the blur behind it was invisible and paid
+     for anyway — and a backdrop filter is the most expensive thing on this
+     page's budget */
+  background: rgb(var(--rgb-surface) / 0.98);
   border-radius: 1.15rem;
   border: 1px solid var(--color-line);
   box-shadow: 0 12px 40px rgb(var(--rgb-shadow) / 0.22);

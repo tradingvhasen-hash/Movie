@@ -126,8 +126,7 @@ export default function WelcomeDemo({ onDone }: { onDone: () => void }) {
       style={{ height: "calc(100dvh - 74px - env(safe-area-inset-bottom))" }}
       onPointerDown={skip}
     >
-      <ScreenFeedback layer="back" x={x} y={y} upAction="not_seen" />
-      <ScreenFeedback layer="front" x={x} y={y} upAction="not_seen" />
+      {stage === "demo" && <ScreenFeedback x={x} y={y} upAction="not_seen" />}
 
       {/* the name, once */}
       <motion.div

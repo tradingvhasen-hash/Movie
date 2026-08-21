@@ -1,54 +1,57 @@
 "use client";
 
 /**
- * THE WHOLE SCREEN ANSWERS THE GESTURE.
+ * THE WHOLE SCREEN ANSWERS THE GESTURE — WITHOUT ASKING THE GPU FOR A FAVOUR.
  *
- * The user, after three attempts at this: "swiping still feels cheap… I don't
- * feel anything." Every previous version put the feedback *on the card* — a
- * stamp in the corner, a burst after the fact — and a stamp in a corner is a
- * label, not a sensation. What he asked for, in his words, was the screen
- * turning red, glowing, light, neon, and the effects flowing into each other
- * as the thumb moves.
+ * The look here is unchanged and deliberately so: the user asked for the screen
+ * to turn red, to glow, to feel like something. It does. What changed is what
+ * it is *made of*.
  *
- * Three ideas, and they are the ones every platform uses for a gesture that is
- * supposed to feel like something:
+ * ── WHAT THE FIRST VERSION DID, AND WHAT IT COST ────────────────────────
  *
- *   1. IT IS CONTINUOUS, NOT TRIGGERED. Everything here is a pure function of
- *      the card's position. There is no state, no threshold event, no timer:
- *      move the thumb a millimetre and the light moves a millimetre. That is
- *      the entire difference between an interface that responds and one that
- *      announces. It also means the transition between two directions is free
- *      — drag right and the blue rises as the red falls, because both are
- *      reading the same number.
+ * It was built out of the three most expensive things a phone browser can be
+ * asked to composite:
  *
- *   2. IT IS LIGHT, NOT OBJECTS. A wash from the edge, a rim of glow, a
- *      vignette closing in. Light has no edges to look cheap; a graphic always
- *      can.
+ *   `mix-blend-mode: plus-lighter` on a fixed, full-screen layer. Blending
+ *   forces everything painted beneath it to be flattened into one buffer
+ *   before the blend can happen — so a single blended overlay drags the entire
+ *   page, posters included, off the fast path on every frame.
  *
- *   3. IT COMMITS VISIBLY. Past the point where the card will actually go, the
- *      glow steps up and the mark reaches full size. Feeling the moment the
- *      verdict locks in — before letting go — is what makes the gesture
- *      confident rather than hopeful.
+ *   `filter: blur(14px)` on three full-height rims, whose width was animated.
+ *   A blur is a re-rasterisation; animating the geometry of a blurred element
+ *   re-rasterises it every frame.
  *
- * ── WHY IT IS MOUNTED TWICE ─────────────────────────────────────────────
+ *   An animated `filter` on the mark itself — blur plus two drop-shadows,
+ *   interpolated from a motion value, sixty times a second.
  *
- * The first version of this was a single layer painted behind the card stack,
- * and in a browser at 390px it was almost invisible: the card is 80% of the
- * width and sits exactly where the light was brightest, so the effect only
- * showed in the strips of background either side of it — and dragging right
- * moves the card right, covering the very edge the glow was coming from.
+ * On the machine I measured with, none of that showed up: headless Chromium
+ * composites in software and I was watching JavaScript long-tasks, which were
+ * clean. On the user's iPhone the result was a screen frozen for four to five
+ * seconds after a swipe, with the wash and a half-blurred mark stuck exactly
+ * where the compositor gave up. He filmed it. I had told him it was fixed.
  *
- * So it is two layers around the card rather than one behind it:
+ * ── WHAT THIS VERSION IS MADE OF ────────────────────────────────────────
  *
- *   BACK   the wash and the vignette, under the stack, colouring the room the
- *          card is in
- *   FRONT  the rim of light at the screen edge and the verdict mark, over the
- *          stack, in `plus-lighter` so they read as light falling *on* the
- *          card rather than as a panel covering it
+ * Only two properties are ever animated: `opacity` and `transform`. Both are
+ * handled by the compositor without repainting anything, on every browser and
+ * every phone. There is no blend mode, no filter, and nothing whose *geometry*
+ * changes.
  *
- * `plus-lighter` is the piece doing the work. A normal-blended overlay on a
- * poster is a sticker; an additive one is illumination, and illumination is
- * what a screen can actually do that paper cannot.
+ * The glow that the blurred rim used to draw is now painted into the gradient
+ * itself — a gradient is a blur that costs nothing, because it is rasterised
+ * once when the layer is created and never again. The halo around the mark is
+ * the same trick: a radial gradient behind it rather than a drop-shadow on it.
+ *
+ * Seven static layers, each fading. Where there were fifteen, blended, blurred
+ * and re-rasterising.
+ *
+ * ── AND IT ONLY EXISTS WHILE A FINGER IS ON THE GLASS ───────────────────
+ *
+ * The deck mounts this while a drag is in progress and not otherwise. It used
+ * to appear on button presses too, because the exiting card animated the same
+ * motion values this reads — so tapping "loved" lit the whole drag apparatus
+ * for a gesture that never happened. That is fixed at the source: a card
+ * leaving no longer touches the shared position at all.
  */
 import { motion, useTransform, type MotionValue } from "framer-motion";
 import { ArrowUpIcon, EyeIcon, HeartIcon, ThumbsDownIcon } from "./ui/Icons";
@@ -63,26 +66,23 @@ const GLYPH = {
 } as const;
 
 const UP_TINT = "var(--color-skip)";
+const LIKE_TINT = "var(--color-accent)";
+const NOPE_TINT = "var(--color-danger)";
 
 export default function ScreenFeedback({
   x,
   y,
   upAction,
-  layer,
-  enabled = true,
 }: {
   x: MotionValue<number>;
   y: MotionValue<number>;
   upAction: SwipeAction;
-  layer: "back" | "front";
-  enabled?: boolean;
 }) {
   /**
    * Three progresses, each 0 → 1 → past 1.
    *
-   * They are deliberately *not* clamped at 1: dragging beyond the commit point
-   * keeps feeding the bloom, so a hard throw looks harder than a nudge. The
-   * consumers clamp where clamping matters.
+   * Deliberately not clamped at 1: dragging beyond the commit point keeps
+   * feeding the bloom, so a hard throw looks harder than a nudge.
    */
   const right = useTransform(x, [10, SWIPE_X_THRESHOLD], [0, 1], { clamp: false });
   const left = useTransform(x, [-10, -SWIPE_X_THRESHOLD], [0, 1], { clamp: false });
@@ -94,160 +94,103 @@ export default function ScreenFeedback({
     return dy * (1 - sideways);
   });
 
-  if (!enabled) return null;
-
-  if (layer === "back") {
-    return (
-      <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden" aria-hidden>
-        <Wash progress={right} tint="var(--color-accent)" origin="88% 46%" />
-        <Wash progress={left} tint="var(--color-danger)" origin="12% 46%" />
-        <Wash progress={up} tint={UP_TINT} origin="50% 8%" />
-      </div>
-    );
-  }
+  /** the vignette is one layer for all three directions, not three */
+  const focus = useTransform(() => Math.min(1, Math.max(right.get(), left.get(), up.get())));
+  const vignette = useTransform(focus, [0, 1], [0, 0.5], { clamp: true });
 
   return (
-    <>
-      {/* light, added to whatever is under it */}
-      <div
-        className="pointer-events-none fixed inset-0 z-[45] overflow-hidden"
-        style={{ mixBlendMode: "plus-lighter" }}
-        aria-hidden
-      >
-        <Rim progress={right} tint="var(--color-accent)" side="right" />
-        <Rim progress={left} tint="var(--color-danger)" side="left" />
-        <Rim progress={up} tint={UP_TINT} side="top" />
-
-        <Flood progress={right} tint="var(--color-accent)" />
-        <Flood progress={left} tint="var(--color-danger)" />
-        <Flood progress={up} tint={UP_TINT} />
-      </div>
-
+    <div className="pointer-events-none fixed inset-0 z-[45] overflow-hidden" aria-hidden>
       {/*
-        The mark is NOT additive.
-
-        It was, in the first version, and on a bright poster an additive glyph
-        washed out into a pale smear — the one element that has to be legible
-        on all fifteen thousand posters in the catalog was the one element
-        whose legibility depended on the poster. Solid colour with a glow
-        around it reads on black and on white alike, which is why every neon
-        sign ever built is drawn exactly this way.
+        The flood is what makes it read as "the screen turned red" rather than
+        "there is a glow at the edge". It used to be additive — `plus-lighter`,
+        which brightens whatever is beneath it — and additive is prettier over a
+        poster. It is also the single most expensive compositing mode a phone
+        can be asked for. A flat colour at ordinary opacity tints instead of
+        brightening, which at these levels is a difference the eye has to be
+        told about, and it costs one composited layer with nothing to blend.
       */}
-      <div className="pointer-events-none fixed inset-0 z-[46] overflow-hidden" aria-hidden>
-        <Mark progress={right} tint="var(--color-accent)" side="right" action="liked" />
-        <Mark progress={left} tint="var(--color-danger)" side="left" action="disliked" />
-        <Mark progress={up} tint={UP_TINT} side="top" action={upAction} />
-      </div>
-    </>
-  );
-}
+      <Flood progress={right} tint={LIKE_TINT} />
+      <Flood progress={left} tint={NOPE_TINT} />
+      <Flood progress={up} tint={UP_TINT} />
 
-/**
- * The verdict's colour over the entire screen, card included.
- *
- * Low alpha and additive, so it lifts everything a shade toward the colour
- * rather than covering anything — the literal "the screen turns red" the user
- * described. It starts late, at 60% of the way to the commit point, because
- * the whole screen changing colour is a statement and a statement made at the
- * first millimetre of a drag is noise.
- */
-function Flood({ progress, tint }: { progress: MotionValue<number>; tint: string }) {
-  const opacity = useTransform(progress, [0.6, 1, 1.4], [0, 0.16, 0.24], { clamp: true });
-  return (
-    <motion.div className="absolute inset-0" style={{ opacity, background: tint }} />
-  );
-}
+      <Wash progress={right} tint={LIKE_TINT} at="102% 46%" />
+      <Wash progress={left} tint={NOPE_TINT} at="-2% 46%" />
+      <Wash progress={up} tint={UP_TINT} at="50% -2%" />
 
-/**
- * The room the card is in: a bloom from the edge it is heading for, and a
- * vignette closing in from everywhere else so the eye is pulled that way.
- */
-function Wash({
-  progress,
-  tint,
-  origin,
-}: {
-  progress: MotionValue<number>;
-  tint: string;
-  origin: string;
-}) {
-  const opacity = useTransform(progress, [0, 1, 1.6], [0, 0.85, 1], { clamp: true });
-  const vignette = useTransform(progress, [0, 1], [0, 0.5], { clamp: true });
-  const scale = useTransform(progress, [0, 1.6], [1.3, 1], { clamp: true });
-
-  return (
-    <>
       <motion.div
-        className="absolute inset-0"
-        style={{
-          opacity,
-          scale,
-          background: `radial-gradient(110% 92% at ${origin}, ${tint} 0%, color-mix(in srgb, ${tint} 52%, transparent) 40%, transparent 78%)`,
-        }}
-      />
-      <motion.div
-        className="absolute inset-0"
+        className="absolute inset-0 will-change-[opacity]"
         style={{
           opacity: vignette,
           background:
             "radial-gradient(115% 88% at 50% 50%, transparent 32%, rgb(var(--rgb-scrim) / 0.9) 100%)",
         }}
       />
-    </>
+
+      <Mark progress={right} tint={LIKE_TINT} side="right" action="liked" />
+      <Mark progress={left} tint={NOPE_TINT} side="left" action="disliked" />
+      <Mark progress={up} tint={UP_TINT} side="top" action={upAction} />
+    </div>
   );
 }
 
 /**
- * A rim of light along the edge the card is going to.
+ * The light: a bloom from the edge the card is heading for.
  *
- * This is the part that survives the card covering the screen: it hugs the
- * viewport, not the card, so it is visible however far the poster has been
- * dragged over it — and being additive, it brightens whatever it lands on
- * instead of hiding it.
+ * The bright stop at the very edge is what the blurred rim layer used to draw
+ * separately — a gradient can be its own glow, and unlike a filter it is
+ * painted once into the layer and then only faded.
  */
-function Rim({
+function Wash({
   progress,
   tint,
-  side,
+  at,
 }: {
   progress: MotionValue<number>;
   tint: string;
-  side: "left" | "right" | "top";
+  at: string;
 }) {
-  const opacity = useTransform(progress, [0, 1, 1.5], [0, 0.8, 1], { clamp: true });
-  const size = useTransform(progress, [0, 1.5], [22, 96], { clamp: true });
-  const dim = useTransform(size, (s) => `${s}px`);
-
-  const geometry =
-    side === "top"
-      ? { top: 0, left: 0, right: 0, height: dim }
-      : side === "left"
-        ? { top: 0, bottom: 0, left: 0, width: dim }
-        : { top: 0, bottom: 0, right: 0, width: dim };
-
-  const direction =
-    side === "top" ? "to bottom" : side === "left" ? "to right" : "to left";
+  const opacity = useTransform(progress, [0, 1, 1.6], [0, 0.92, 1], { clamp: true });
+  const scale = useTransform(progress, [0, 1.6], [1.2, 1], { clamp: true });
 
   return (
     <motion.div
-      className="absolute"
+      className="absolute inset-0 will-change-[opacity,transform]"
       style={{
-        ...geometry,
         opacity,
-        background: `linear-gradient(${direction}, ${tint} 0%, color-mix(in srgb, ${tint} 40%, transparent) 45%, transparent 100%)`,
-        filter: "blur(14px)",
+        scale,
+        background:
+          `radial-gradient(96% 82% at ${at}, ${tint} 0%, ` +
+          `color-mix(in srgb, ${tint} 74%, transparent) 26%, ` +
+          `color-mix(in srgb, ${tint} 42%, transparent) 54%, ` +
+          `color-mix(in srgb, ${tint} 14%, transparent) 74%, transparent 88%)`,
       }}
     />
   );
 }
 
 /**
- * One mark, at the edge the card is going to.
+ * The verdict's colour over everything, card included — the literal "the
+ * screen turns red". It starts at 45% of the way to the commit point, because
+ * the whole screen changing colour is a statement and a statement made at the
+ * first millimetre of a drag is noise.
+ */
+function Flood({ progress, tint }: { progress: MotionValue<number>; tint: string }) {
+  const opacity = useTransform(progress, [0.45, 1, 1.4], [0, 0.26, 0.34], { clamp: true });
+  return (
+    <motion.div
+      className="absolute inset-0 will-change-[opacity]"
+      style={{ opacity, background: tint }}
+    />
+  );
+}
+
+/**
+ * One mark, at the edge the card is going to, reaching full size exactly at
+ * the commit point — the moment worth feeling.
  *
- * It is allowed to sit over the poster because it is additive: what a person
- * sees is the shape burned into the image in the verdict's own colour, which
- * is both unmistakable and impossible to confuse with a sticker. It reaches
- * full size exactly at the commit point — the moment worth feeling.
+ * The halo behind it is a static radial gradient rather than a drop-shadow,
+ * for the same reason the rim is gone: a filter on a moving element is a
+ * repaint, and a gradient on a fading element is not.
  */
 function Mark({
   progress,
@@ -263,26 +206,30 @@ function Mark({
   const Icon = GLYPH[action];
   const opacity = useTransform(progress, [0.14, 0.7], [0, 1], { clamp: true });
   const scale = useTransform(progress, [0.14, 1, 1.3], [0.5, 1, 1.1], { clamp: true });
-  const blur = useTransform(progress, [0.14, 0.78], [12, 0], { clamp: true });
-  const filter = useTransform(
-    blur,
-    (b) =>
-      `blur(${b}px) drop-shadow(0 0 30px ${tint}) drop-shadow(0 0 8px ${tint}) drop-shadow(0 2px 10px rgba(0,0,0,0.45))`
-  );
 
   const place =
     side === "top"
-      ? "inset-x-0 top-[13vh] justify-center"
+      ? "inset-x-0 top-[10vh] justify-center"
       : side === "right"
-        ? "inset-y-0 right-[7vw] items-center justify-end"
-        : "inset-y-0 left-[7vw] items-center justify-start";
+        ? "inset-y-0 right-[4vw] items-center justify-end"
+        : "inset-y-0 left-[4vw] items-center justify-start";
 
   return (
     <motion.div
-      className={`absolute flex ${place}`}
-      style={{ opacity, scale, filter, color: tint }}
+      className={`absolute flex will-change-[opacity,transform] ${place}`}
+      style={{ opacity, scale, color: tint }}
     >
-      <Icon size={96} filled strokeWidth={1.6} />
+      <span className="relative grid h-[150px] w-[150px] place-items-center">
+        <span
+          className="absolute inset-0 rounded-full"
+          style={{
+            background: `radial-gradient(circle, color-mix(in srgb, ${tint} 55%, transparent) 0%, transparent 68%)`,
+          }}
+        />
+        <span className="relative">
+          <Icon size={96} filled strokeWidth={1.6} />
+        </span>
+      </span>
     </motion.div>
   );
 }

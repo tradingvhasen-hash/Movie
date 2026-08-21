@@ -75,7 +75,7 @@ export default function PosterArt({
       >
         <TypeIcon size={50} strokeWidth={1.4} className="text-white/40" />
         <div className="mt-5 px-6 text-center">
-          <div className="text-2xl font-bold leading-snug text-white drop-shadow-md">
+          <div className="text-2xl font-bold leading-snug text-white [text-shadow:0_2px_6px_rgb(0_0_0/0.4)]">
             {title.title[locale]}
           </div>
           <div className="mt-2 text-sm font-medium tracking-[0.25em] text-white/70">

@@ -81,38 +81,31 @@ export default function SwipeDeck() {
    */
   const wasPast = useRef(false);
   /**
-   * Is the card off centre at all?
+   * Is a finger actually dragging the card right now?
    *
-   * The screen feedback is a dozen full-screen layers — washes, a vignette, an
-   * additive rim, a flood, three marks — and every one of them was mounted for
-   * the entire life of the deck, sitting at opacity 0. A layer at opacity 0
-   * still costs: it is styled on every render, it holds compositor memory at
-   * three times device scale, and the `plus-lighter` group forces everything
-   * beneath it to be composited together.
+   * The whole-screen feedback exists only while this is true, for two separate
+   * reasons and the second one is the one that mattered.
    *
-   * They exist only while the card is somewhere other than the middle, which
-   * is the only time they can be seen. Nothing about the effect changes — this
-   * is the same code, mounted for the half second it is actually doing
-   * something instead of for the whole session.
+   * CHEAPNESS: several full-screen layers held for a whole session cost
+   * compositor memory at three times device scale even at opacity zero.
    *
-   * The check is `!== 0` rather than a threshold, so the wash still fades out
-   * with the card as it springs back rather than being cut off.
+   * CORRECTNESS: this used to be inferred from the card's position — "is it
+   * off centre" — which is true during a drag and *also* true while a card
+   * answered by a button press animates away. So tapping a verdict lit the
+   * entire drag apparatus for a gesture nobody made, and on a real phone the
+   * screen then froze for four seconds trying to composite it. The user filmed
+   * exactly that and was right to be furious: I had reported it fixed.
+   *
+   * A drag is now reported by the card that is being dragged, which is the
+   * only thing that actually knows.
    */
   const [live, setLive] = useState(false);
-  const liveRef = useRef(false);
   const checkThreshold = useCallback(() => {
-    const dx = x.get();
-    const dy = y.get();
     const past =
-      Math.abs(dx) > SWIPE_X_THRESHOLD || -dy > SWIPE_UP_THRESHOLD;
+      Math.abs(x.get()) > SWIPE_X_THRESHOLD || -y.get() > SWIPE_UP_THRESHOLD;
     if (past !== wasPast.current) {
       wasPast.current = past;
       if (past) haptic("tick", settings.haptics);
-    }
-    const moving = Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5;
-    if (moving !== liveRef.current) {
-      liveRef.current = moving;
-      setLive(moving);
     }
   }, [x, y, settings.haptics]);
   useMotionValueEvent(x, "change", checkThreshold);
@@ -271,10 +264,7 @@ export default function SwipeDeck() {
       style={{ height: "calc(100dvh - 74px - env(safe-area-inset-bottom))" }}
     >
       {live && settings.screenFeedback && (
-        <>
-          <ScreenFeedback layer="back" x={x} y={y} upAction={settings.swipeUp} />
-          <ScreenFeedback layer="front" x={x} y={y} upAction={settings.swipeUp} />
-        </>
+        <ScreenFeedback x={x} y={y} upAction={settings.swipeUp} />
       )}
       <SwipeBurst ref={burstRef} />
 
@@ -360,6 +350,7 @@ export default function SwipeDeck() {
                   onSwipe={handleSwipe}
                   forcedExit={i === 0 ? forcedExit : null}
                   upAction={settings.swipeUp}
+                  onDragActive={i === 0 ? setLive : undefined}
                   x={i === 0 ? x : undefined}
                   y={i === 0 ? y : undefined}
                 />

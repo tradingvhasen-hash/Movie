@@ -13,13 +13,15 @@ import {
   SearchIcon,
   ThumbsDownIcon,
   TrashIcon,
+  CheckIcon,
 } from "@/components/ui/Icons";
 import { matches, searchCatalog } from "@/lib/search";
 import { getLocalTitle, loadCatalog } from "@/lib/catalog";
 import { EASE_OUT, FADE_UP, QUICK, SECTION, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
 import { haptic } from "@/lib/haptics";
 import { useDhawq } from "@/lib/store";
-import { t } from "@/lib/i18n";
+import { locale, t } from "@/lib/i18n";
+import { genreLabel } from "@/lib/genres";
 import type { Swipe, SwipeAction, Title } from "@/lib/types";
 
 type Filter = "all" | "liked" | "disliked";
@@ -87,6 +89,9 @@ export default function LibraryPage() {
    */
   const [settled, setSettled] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  /** bulk-delete mode, and what is ticked in it — see the Select control */
+  const [picking, setPicking] = useState(false);
+  const [chosen, setChosen] = useState<Set<string>>(new Set());
   const [catalogReady, setCatalogReady] = useState(false);
 
   useEffect(() => {
@@ -162,15 +167,29 @@ export default function LibraryPage() {
       animate="show"
       className="px-5 pb-28 pt-6"
     >
-      <motion.h1 variants={FADE_UP} className="text-[26px] font-bold tracking-[-0.03em]">
-        {t("library.title")}
-      </motion.h1>
+      {/*
+        FOUR STACKED ROWS BECAME TWO.
 
-      <motion.div
-        variants={FADE_UP}
-        className="mt-4 flex rounded-full border border-line bg-surface-2 p-1"
-        dir="ltr"
-      >
+        The user counted them: "first the title at the top, then the two
+        options Watched and Lists, then the bar, then the three options All,
+        Loved and Disliked. Then only then the movie appears. There is a lot of
+        chaos at the top that we could just minimize."
+
+        He is counting correctly, and the fix is not to delete controls — every
+        one of them is wanted, he said so — it is to stop giving each of them a
+        full-width row of its own. The heading and the Watched/Lists switch sit
+        on one line, because a switch between two views of a page belongs beside
+        that page's name. The search field and the three verdict filters sit on
+        the next, because filtering and searching are the same act: narrowing.
+
+        Same five controls, half the vertical space, and the first poster is
+        now above the fold instead of below it.
+      */}
+      <motion.div variants={FADE_UP} className="flex items-center gap-3">
+        <h1 className="min-w-0 flex-1 truncate text-[26px] font-bold tracking-[-0.03em]">
+          {t("library.title")}
+        </h1>
+        <div className="flex shrink-0 rounded-full border border-line bg-surface-2 p-1" dir="ltr">
         {(
           [
             ["watched", "Watched"],
@@ -181,7 +200,7 @@ export default function LibraryPage() {
             key={m}
             type="button"
             onClick={() => setTab(m)}
-            className={`relative flex-1 rounded-full px-3 py-2 text-xs font-semibold transition-colors ${
+            className={`relative rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${
               tab === m ? "text-[color:var(--color-on-accent)]" : "text-ink-dim"
             }`}
           >
@@ -195,6 +214,7 @@ export default function LibraryPage() {
             <span className="relative">{label}</span>
           </button>
         ))}
+        </div>
       </motion.div>
 
       <AnimatePresence mode="wait" initial={false}>
@@ -211,39 +231,85 @@ export default function LibraryPage() {
           </motion.div>
         ) : (
           <motion.div key="watched" variants={SECTION} initial="hidden" animate="show" exit="exit">
-            {/* one field, two corpora */}
-            <SearchField onSettled={setSettled} />
+            {/* one field, two corpora — and the filters ride the same line */}
+            <motion.div variants={FADE_UP} className="mt-3 flex items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <SearchField onSettled={setSettled} />
+              </div>
+              <LayoutGroup id="library-filters">
+                <div className="flex shrink-0 items-center gap-1 rounded-2xl border border-line bg-surface p-1">
+                  {FILTERS.map((f) => {
+                    const active = filter === f;
+                    return (
+                      <motion.button
+                        key={f}
+                        onClick={() => setFilter(f)}
+                        whileTap={{ scale: 0.9 }}
+                        transition={SPRING_SNAPPY}
+                        aria-label={t(`library.${f}`)}
+                        title={t(`library.${f}`)}
+                        aria-pressed={active}
+                        className={`relative grid h-9 w-9 place-items-center rounded-xl transition-colors ${
+                          active ? "text-[color:var(--color-on-accent)]" : "text-ink-faint"
+                        }`}
+                      >
+                        {active && (
+                          <motion.span
+                            layoutId="filter-pill"
+                            className="absolute inset-0 rounded-xl bg-accent"
+                            transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                          />
+                        )}
+                        <span className="relative">
+                          {f === "all" ? (
+                            <FilmIcon size={17} strokeWidth={2} />
+                          ) : f === "liked" ? (
+                            <HeartIcon size={16} filled />
+                          ) : (
+                            <ThumbsDownIcon size={16} filled />
+                          )}
+                        </span>
+                      </motion.button>
+                    );
+                  })}
+                </div>
+              </LayoutGroup>
+            </motion.div>
 
-            {/* filters — the active pill slides between options */}
-            <LayoutGroup id="library-filters">
-              <motion.div variants={FADE_UP} className="mt-4 flex items-center gap-2.5">
-                {FILTERS.map((f) => {
-                  const active = filter === f;
-                  return (
-                    <motion.button
-                      key={f}
-                      onClick={() => setFilter(f)}
-                      whileTap={{ scale: 0.93 }}
-                      transition={SPRING_SNAPPY}
-                      className={`relative rounded-full border px-4 py-1.5 text-sm font-semibold transition-colors ${
-                        active
-                          ? "border-transparent text-[color:var(--color-on-accent)]"
-                          : "border-line bg-surface text-ink-dim hover:text-ink"
-                      }`}
-                    >
-                      {active && (
-                        <motion.span
-                          layoutId="filter-pill"
-                          className="absolute inset-0 rounded-full bg-accent"
-                          transition={{ type: "spring", stiffness: 420, damping: 34 }}
-                        />
-                      )}
-                      <span className="relative">{t(`library.${f}`)}</span>
-                    </motion.button>
-                  );
-                })}
+            {/*
+              SELECTING MANY, BECAUSE DELETING MANY ONE AT A TIME IS NOT A PLAN.
+
+              The user, thinking it through out loud while asking for the flip
+              card: "this is gonna make it harder — people are gonna want to
+              delete a lot of things, maybe 20 or 30. It's gonna be hard to
+              flip every card then delete it. You should add a way where you
+              could select as much as you want from your library and deal with
+              it." He guessed it might live in the settings and said he did not
+              know where it belonged.
+
+              It belongs here, on the screen holding the things being selected.
+              Off by default so the common case — look at what I have watched —
+              costs nothing; one tap turns every tile into a checkbox and puts
+              a single Delete at the bottom with the count on it.
+            */}
+            {filtered.length > 0 && (
+              <motion.div variants={FADE_UP} className="mt-3 flex items-center justify-between">
+                <span className="text-[11.5px] font-semibold uppercase tracking-wider text-ink-faint">
+                  {filtered.length} {filtered.length === 1 ? "title" : "titles"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPicking((v) => !v);
+                    setChosen(new Set());
+                    setSelectedId(null);
+                  }}
+                  className="rounded-full px-2 py-1 text-[13px] font-semibold text-accent"
+                >
+                  {picking ? t("common.cancel") : "Select"}
+                </button>
               </motion.div>
-            </LayoutGroup>
+            )}
 
             <AnimatePresence mode="wait" initial={false}>
               {filtered.length === 0 && !searching ? (
@@ -297,10 +363,21 @@ export default function LibraryPage() {
                       <LibraryTile
                         key={sw.titleId}
                         swipe={sw}
+                        picking={picking}
+                        ticked={chosen.has(sw.titleId)}
                         selected={selectedId === sw.titleId}
-                        onSelect={() =>
-                          setSelectedId(selectedId === sw.titleId ? null : sw.titleId)
-                        }
+                        onSelect={() => {
+                          if (picking) {
+                            setChosen((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(sw.titleId)) next.delete(sw.titleId);
+                              else next.add(sw.titleId);
+                              return next;
+                            });
+                            return;
+                          }
+                          setSelectedId(selectedId === sw.titleId ? null : sw.titleId);
+                        }}
                         onRemove={() => {
                           setSelectedId(null);
                           removeSwipe(sw.titleId);
@@ -308,6 +385,41 @@ export default function LibraryPage() {
                       />
                     ))}
                   </AnimatePresence>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/*
+              One Delete, with the count on it, above the tab bar.
+
+              Deliberately not a per-tile action while picking: the whole point
+              of the mode is that thirty decisions become one, so the button
+              says how many it is about to take and there is exactly one of it.
+            */}
+            <AnimatePresence>
+              {picking && chosen.size > 0 && (
+                <motion.div
+                  key="bulk"
+                  initial={{ y: 90, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  exit={{ y: 90, opacity: 0 }}
+                  transition={SPRING_SNAPPY}
+                  className="fixed inset-x-0 bottom-[calc(74px+env(safe-area-inset-bottom))] z-40 px-5"
+                >
+                  <motion.button
+                    type="button"
+                    whileTap={{ scale: 0.97 }}
+                    onClick={() => {
+                      haptic("commit", haptics);
+                      for (const id of chosen) removeSwipe(id);
+                      setChosen(new Set());
+                      setPicking(false);
+                    }}
+                    className="mx-auto flex w-full max-w-md items-center justify-center gap-2 rounded-full bg-danger py-3.5 text-sm font-bold text-white shadow-[0_10px_30px_rgb(var(--rgb-shadow)/0.28)]"
+                  >
+                    <TrashIcon size={17} />
+                    {t("common.delete")} {chosen.size}
+                  </motion.button>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -479,13 +591,44 @@ function LogButton({
   );
 }
 
+/**
+ * A LIBRARY TILE THAT TURNS OVER, LIKE THE CARD IT CAME FROM.
+ *
+ * The user: "when you press at any work in the library, instead of the delete
+ * button showing — no. The card gets flipped, the same effect you have at the
+ * swiping page, and it shows you the information of this work. Remove the title
+ * written at the bottom of the card. And only then the trash icon appears."
+ *
+ * Three separate things in that, and they cohere:
+ *
+ *   THE FRONT IS THE POSTER. Nothing else. The title and year printed under
+ *   every tile were a caption for something that does not need captioning —
+ *   forty posters with forty labels is a spreadsheet, not a shelf. The verdict
+ *   badge stays, because that is the one thing the poster genuinely cannot say.
+ *
+ *   THE BACK IS THE FACTS. Title, year, genres, the summary — the same content
+ *   the deck's card shows on its back, so turning a tile over here means the
+ *   same thing it means there.
+ *
+ *   DELETE LIVES ON THE BACK. It used to be a scrim with a red button dropped
+ *   over the poster, which is a destructive action one tap away from a browsing
+ *   gesture. Behind the card it is deliberate: you have already turned the
+ *   thing over and read it.
+ *
+ * And while `picking` is on the flip is suspended entirely — a tap is a tick,
+ * because in that mode the person is not reading, they are clearing out.
+ */
 function LibraryTile({
   swipe,
+  picking,
+  ticked,
   selected,
   onSelect,
   onRemove,
 }: {
   swipe: Swipe;
+  picking: boolean;
+  ticked: boolean;
   selected: boolean;
   onSelect: () => void;
   onRemove: () => void;
@@ -493,76 +636,126 @@ function LibraryTile({
   const title = getLocalTitle(swipe.titleId) ?? swipe.title;
   if (!title) return null;
 
+  const flipped = selected && !picking;
+
   return (
-    <TitleTile
-      title={title}
-      onClick={onSelect}
-      badge={
-        /* three states, not two. A title added without a verdict is watched
-           with no opinion — showing it a thumbs-down would put words in the
-           viewer's mouth, and it is the deck's job to ask which it is. */
+    <motion.div
+      layout="position"
+      initial={{ opacity: 0, scale: 0.94 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.9 }}
+      transition={SPRING_SNAPPY}
+      className="relative"
+      style={{ perspective: 1100 }}
+    >
+      <motion.button
+        type="button"
+        onClick={onSelect}
+        whileTap={{ scale: 0.96 }}
+        aria-label={title.title[locale]}
+        aria-pressed={picking ? ticked : flipped}
+        className="relative block aspect-[2/3] w-full"
+        style={{ transformStyle: "preserve-3d" }}
+        animate={{ rotateY: flipped ? 180 : 0 }}
+        transition={{ type: "spring", stiffness: 260, damping: 30, mass: 0.9 }}
+      >
+        {/* ── front: the poster, and the verdict ── */}
         <span
-          className={`flex h-6 w-6 items-center justify-center rounded-full text-white shadow-sm ${
-            swipe.action === "liked"
-              ? "bg-accent"
-              : swipe.action === "disliked"
-                ? "bg-danger"
-                : "bg-ink-strong"
-          }`}
+          className="absolute inset-0 overflow-hidden rounded-[20px] bg-surface-2"
+          style={{ backfaceVisibility: "hidden" }}
         >
-          {swipe.action === "liked" ? (
-            <HeartIcon size={13} filled />
-          ) : swipe.action === "disliked" ? (
-            <ThumbsDownIcon size={12} filled />
-          ) : (
-            <EyeIcon size={12} strokeWidth={2.2} />
+          <PosterArt title={title} sizes="200px" className="h-full w-full" />
+          {/* three states, not two. A title added without a verdict is watched
+              with no opinion — showing it a thumbs-down would put words in the
+              viewer's mouth, and it is the deck's job to ask which it is. */}
+          <span
+            className={`absolute end-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full text-white shadow-sm ${
+              swipe.action === "liked"
+                ? "bg-accent"
+                : swipe.action === "disliked"
+                  ? "bg-danger"
+                  : "bg-ink-strong"
+            }`}
+          >
+            {swipe.action === "liked" ? (
+              <HeartIcon size={13} filled />
+            ) : swipe.action === "disliked" ? (
+              <ThumbsDownIcon size={12} filled />
+            ) : (
+              <EyeIcon size={12} strokeWidth={2.2} />
+            )}
+          </span>
+
+          {/* the tick, only while clearing out */}
+          {/*
+            The tick, only while clearing out.
+
+            Screenshotted first as a translucent scrim disc with a transparent
+            glyph, which over a light poster read as a smudge rather than a
+            control — you could not tell an empty checkbox from a mark on the
+            artwork. It is a solid white disc with a hairline ring now, which
+            is legible on any poster, and the whole tile dims when it is ticked
+            so the state is readable from across the grid rather than from one
+            24px corner.
+          */}
+          {picking && (
+            <>
+              <span
+                className={`absolute inset-0 bg-accent transition-opacity ${
+                  ticked ? "opacity-25" : "opacity-0"
+                }`}
+              />
+              <span className="absolute inset-0 flex items-start justify-start p-2">
+                <span
+                  className={`grid h-[26px] w-[26px] place-items-center rounded-full border shadow-sm transition-colors ${
+                    ticked
+                      ? "border-accent bg-accent text-[color:var(--color-on-accent)]"
+                      : "border-black/10 bg-white text-transparent"
+                  }`}
+                >
+                  <CheckIcon size={14} strokeWidth={3} />
+                </span>
+              </span>
+            </>
           )}
         </span>
-      }
-      /**
-       * DELETE, WITH THE FEELING OF HAVING PRESSED SOMETHING.
-       *
-       * The user's words: "it just appears — I want to feel like the card is
-       * getting pushed". That is the difference between a state being
-       * *revealed* and a surface *responding*: the tile itself takes the press
-       * and sinks, and the scrim and the action arrive on top of that movement
-       * rather than instead of it.
-       */
-      overlay={
-        <AnimatePresence>
-          {selected && (
-            <motion.div
-              key="actions"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: QUICK, ease: EASE_OUT }}
-              className="absolute inset-0 z-20 flex items-center justify-center rounded-[20px] bg-[rgb(var(--rgb-scrim)/0.45)] backdrop-blur-[6px]"
-              onClick={(e) => {
-                e.stopPropagation();
-                onSelect();
-              }}
-            >
-              <motion.button
-                type="button"
-                aria-label={t("common.delete")}
-                initial={{ scale: 0.88, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.92, opacity: 0 }}
-                transition={{ duration: QUICK, ease: EASE_OUT }}
-                whileTap={{ scale: 0.9 }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRemove();
-                }}
-                className="grid h-12 w-12 place-items-center rounded-full bg-danger text-white shadow-[0_6px_20px_rgb(var(--rgb-shadow)/0.35)]"
-              >
-                <TrashIcon size={20} />
-              </motion.button>
-            </motion.div>
+
+        {/* ── back: what the poster cannot say ── */}
+        <span
+          className="absolute inset-0 flex flex-col overflow-hidden rounded-[20px] border border-line bg-surface p-3 text-start"
+          style={{ backfaceVisibility: "hidden", transform: "rotateY(180deg)" }}
+        >
+          <span className="block text-[13px] font-bold leading-tight text-ink">
+            {title.title[locale]}
+          </span>
+          <span className="mt-0.5 block text-[10.5px] font-medium text-ink-faint">
+            {title.year} · {title.type === "movie" ? t("card.movie") : t("card.tv")} ·{" "}
+            {title.rating.toFixed(1)}
+          </span>
+          <span className="mt-1.5 block text-[10px] font-semibold capitalize text-ink-dim">
+            {title.genres.slice(0, 2).map((g) => genreLabel(g, locale)).join(" · ")}
+          </span>
+          {title.overview[locale] && (
+            <span className="mt-2 block min-h-0 flex-1 overflow-hidden text-[10.5px] leading-relaxed text-ink-dim">
+              {title.overview[locale]}
+            </span>
           )}
-        </AnimatePresence>
-      }
-    />
+          <motion.span
+            role="button"
+            tabIndex={0}
+            aria-label={t("common.delete")}
+            whileTap={{ scale: 0.92 }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove();
+            }}
+            className="mt-2 flex shrink-0 items-center justify-center gap-1.5 rounded-full bg-danger py-2 text-[11.5px] font-bold text-white"
+          >
+            <TrashIcon size={14} />
+            {t("common.delete")}
+          </motion.span>
+        </span>
+      </motion.button>
+    </motion.div>
   );
 }

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import PosterArt from "@/components/PosterArt";
 import { PlusIcon, SearchIcon, ShuffleIcon, SparklesIcon, XIcon } from "@/components/ui/Icons";
-import { loadCatalog } from "@/lib/catalog";
+import { getLocalCatalog, loadCatalog } from "@/lib/catalog";
 import { searchCatalog } from "@/lib/search";
 import { rank } from "@/lib/engine/rank-client";
 import { applySwipe, emptyProfile } from "@/lib/engine/taste";
@@ -224,7 +224,7 @@ export default function TogetherPage() {
           onClick={addSlot}
           whileTap={{ scale: 0.97 }}
           transition={SPRING_SNAPPY}
-          className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-line py-3.5 text-ink-faint transition-colors hover:text-ink-dim"
+          className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-ink-faint/40 bg-surface py-3.5 text-sm font-semibold text-ink-dim transition-colors hover:text-ink"
           aria-label="One more person"
         >
           <PlusIcon size={18} strokeWidth={2.4} />
@@ -337,14 +337,22 @@ function Slot({
         className={`block aspect-[2/3] w-full overflow-hidden rounded-2xl ${
           title
             ? "shadow-[0_6px_20px_rgb(var(--rgb-shadow)/0.14)]"
-            : "grid place-items-center border-2 border-dashed border-line text-ink-faint"
+            : /* The user: "everything about it is faded, you barely can see the
+                 squares, you barely see the plus button, you barely see
+                 anything." A dashed hairline in `--color-line` on the page
+                 background is a hole in the layout; this is a surface with an
+                 edge, which is a place something goes. */
+              "grid place-items-center gap-1.5 border-2 border-dashed border-ink-faint/40 bg-surface text-ink-dim"
         }`}
         aria-label={title ? title.title.en : "Name a film"}
       >
         {title ? (
           <PosterArt title={title} sizes="160px" className="h-full w-full" />
         ) : (
-          <SearchIcon size={20} />
+          <>
+            <SearchIcon size={22} />
+            <span className="text-[11px] font-semibold">Name one</span>
+          </>
         )}
       </motion.button>
 
@@ -389,28 +397,55 @@ function PickSheet({
 }) {
   const [q, setQ] = useState("");
 
+  /**
+   * IT OPENS FULL, NOT EMPTY.
+   *
+   * The user: "when you press the square there is a whole big page that is
+   * blank and only contains a bar to search the movie. It's complicated, I
+   * don't like it."
+   *
+   * The sheet was never a whole page — it is 78dvh — but it *was* blank, and
+   * blank is what he actually saw: nothing appeared until the second character
+   * was typed, so opening it presented an empty rectangle and a keyboard and
+   * asked the person to guess what belonged in it.
+   *
+   * A screen that asks "name a film you love" already knows what most answers
+   * look like: they are famous. So before a single key is pressed it shows the
+   * most-recognised titles in the catalog, which turns a blank prompt into a
+   * grid you can simply tap — and typing still narrows it the moment you start.
+   */
+  const suggestions = useMemo(() => {
+    if (!ready) return [];
+    return getLocalCatalog()
+      .map((c) => c.title)
+      .filter((t) => !taken.has(t.id))
+      .sort((a, b) => b.voteCount - a.voteCount)
+      .slice(0, 30);
+  }, [ready, taken]);
+
   const results = useMemo(() => {
-    if (!ready || q.trim().length < 2) return [];
+    if (!ready) return [];
+    if (q.trim().length < 2) return suggestions;
     return searchCatalog(q, { limit: 30, skip: (id) => taken.has(id) });
-  }, [ready, q, taken]);
+  }, [ready, q, taken, suggestions]);
 
   return (
-    <motion.div
-      className="fixed inset-0 z-50 flex flex-col justify-end"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.18, ease: EASE_OUT }}
-    >
-      <div
+    <motion.div className="fixed inset-0 z-50 flex flex-col justify-end">
+      {/* the scrim owns its own, unhurried fade — see the Discover sheet for
+          why the shared 180ms wrapper fade read as a hard cut in both places */}
+      <motion.div
         className="absolute inset-0 bg-[rgb(var(--rgb-scrim)/0.5)] backdrop-blur-sm"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0, transition: { duration: 0.3, ease: EASE_OUT } }}
+        transition={{ duration: 0.38, ease: EASE_OUT }}
         onClick={onClose}
       />
       <motion.div
         initial={{ y: "100%" }}
         animate={{ y: 0 }}
-        exit={{ y: "100%" }}
-        transition={{ type: "spring", stiffness: 340, damping: 34 }}
+        exit={{ y: "100%", transition: { duration: 0.34, ease: [0.4, 0, 0.7, 1] } }}
+        transition={{ type: "spring", stiffness: 210, damping: 30, mass: 1 }}
         /* a definite height, not a maximum.
            With `max-h` and a `flex-1` scroll area, the scroller's flex-basis of
            0 contributes nothing to an auto-height parent — so the sheet sized

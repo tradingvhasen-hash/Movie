@@ -1,77 +1,64 @@
 "use client";
 
 /**
- * THE WHOLE SCREEN ANSWERS THE GESTURE — WITHOUT ASKING THE GPU FOR A FAVOUR.
- *
- * The look here is unchanged and deliberately so: the user asked for the screen
- * to turn red, to glow, to feel like something. It does. What changed, twice
- * now, is what it is *made of*.
+ * THE WHOLE SCREEN ANSWERS THE GESTURE — FROM BEHIND THE CARD.
  *
  * ── V1: THE VERSION THAT FROZE HIS PHONE ────────────────────────────────
  *
- * It was built out of the three most expensive things a phone browser can be
- * asked to composite:
- *
- *   `mix-blend-mode: plus-lighter` on a fixed, full-screen layer. Blending
- *   forces everything painted beneath it to be flattened into one buffer
- *   before the blend can happen — so a single blended overlay drags the entire
- *   page, posters included, off the fast path on every frame.
- *
- *   `filter: blur(14px)` on three full-height rims, whose width was animated.
- *   A blur is a re-rasterisation; animating the geometry of a blurred element
- *   re-rasterises it every frame.
- *
- *   An animated `filter` on the mark itself — blur plus two drop-shadows,
- *   interpolated from a motion value, sixty times a second.
- *
- * On the machine I measured with, none of that showed up: headless Chromium
- * composites in software and I was watching JavaScript long-tasks, which were
- * clean. On the user's iPhone the result was a screen frozen for four to five
+ * Built out of the three most expensive things a phone browser can be asked to
+ * composite: `mix-blend-mode: plus-lighter` on a fixed full-screen layer, which
+ * forces everything beneath it to be flattened before the blend can happen;
+ * `filter: blur(14px)` on three full-height rims whose width was animated, so
+ * they re-rasterised every frame; and an animated `filter` on the mark itself.
+ * On my machine none of it showed up — headless Chromium composites in software
+ * and I was watching JavaScript. On the user's iPhone the screen froze for four
  * seconds after a swipe. He filmed it. I had told him it was fixed.
  *
  * ── V2: CHEAP PROPERTIES, BUT TEN OF THEM ───────────────────────────────
  *
- * V2 removed every blend and every filter and animated nothing but `opacity`
- * and `transform`. That was correct and it was not enough. It still built the
- * effect out of *ten* full-screen composited layers — three floods, three
- * washes, a vignette and three marks — all of them mounted the instant a
- * finger moved and all of them destroyed the instant it lifted.
+ * Only `opacity` and `transform` animated, which was correct and insufficient:
+ * the effect was still ten full-screen composited layers, all created the
+ * instant a finger moved and destroyed the instant it lifted. The card he threw
+ * did not fly, it teleported — the frame that should have started its exit was
+ * spent tearing those layers down.
  *
- * The user filmed the consequence: the card he threw did not fly, it
- * teleported. A 560ms exit was being drawn about twice, because the frame that
- * should have started it was spent tearing down ten layers and standing up the
- * landing burst's four.
+ * ── V3: THREE LAYERS, SAME PICTURE ──────────────────────────────────────
  *
- * ── V3: THE SAME PICTURE, PAINTED IN THREE LAYERS ───────────────────────
+ * The flood, the bloom and the vignette became three stops of one `background`
+ * stack instead of three elements. A browser rasterises a multi-stop gradient
+ * once and then only fades it.
  *
- * Nothing is removed. The flood, the bloom and the vignette are all still
- * there — they are simply three stops of one `background` stack instead of
- * three separate elements, because a browser rasterises a multi-stop gradient
- * exactly once when the layer is created and then only fades it.
+ * ── V4: BEHIND THE CARD, WHICH IS WHERE IT BELONGED ──────────────────────
  *
- * Three full-screen layers, one per direction, plus three 150px marks. Where
- * there were ten full-screen layers, seven of them permanently at opacity 0
- * waiting for a direction that would never come.
+ * The user, on the version that finally performed: "at the beginning it is
+ * beautiful, maybe for the first ten seconds, then it starts hurting your eyes.
+ * The glow is so powerful it covers the whole page. It is on top of the card
+ * you are swiping, on top of the other cards, on top of the buttons — you swipe
+ * a card and suddenly the whole page disappears into the colour."
  *
- * ── AND IT ONLY EXISTS WHILE A FINGER IS ON THE GLASS ───────────────────
+ * Two separate faults and he separated them correctly.
  *
- * The deck mounts this while a drag is in progress and not otherwise. It used
- * to appear on button presses too, because the exiting card animated the same
- * motion values this reads — so tapping "loved" lit the whole drag apparatus
- * for a gesture that never happened. That is fixed at the source: a card
- * leaving no longer touches the shared position at all.
+ * IT WAS IN FRONT. `z-[45]` put it above the deck, the buttons and the heading,
+ * so the answer to "which card am I throwing" was hidden by the feedback about
+ * throwing it. It is `z-0` now: the deck, the buttons and the name all carry
+ * `z-10`, so the colour blooms *behind* the card and the card stays legible
+ * against it. That is also simply the better picture — light behind a subject
+ * reads as depth; light over a subject reads as an overlay.
+ *
+ * IT WAS TOO STRONG. The flat flood dropped from 28% to 18% and the peak
+ * opacity from 0.92 to 0.84. Both were tuned when the layer sat in front and
+ * had to survive being looked through; behind the card it does not.
+ *
+ * AND THE MARK IS GONE FROM HERE. A 150px glyph floating over the poster was
+ * the other half of what he disliked — "I don't like how it appears at the top
+ * of the card, I don't like anything about it". Behind the card it would simply
+ * be invisible, so it did not move: it was replaced. The verdict is now a small
+ * stamp on the card's own corner, which is a thing the card carries rather than
+ * a thing dropped on top of it. See `VerdictStamp` in SwipeCard.
  */
 import { motion, useTransform, type MotionValue } from "framer-motion";
-import { ArrowUpIcon, EyeIcon, HeartIcon, ThumbsDownIcon } from "./ui/Icons";
 import { SWIPE_UP_THRESHOLD, SWIPE_X_THRESHOLD } from "./SwipeCard";
 import type { SwipeAction } from "@/lib/types";
-
-const GLYPH = {
-  liked: HeartIcon,
-  disliked: ThumbsDownIcon,
-  not_seen: ArrowUpIcon,
-  seen: EyeIcon,
-} as const;
 
 const UP_TINT = "var(--color-skip)";
 const LIKE_TINT = "var(--color-accent)";
@@ -84,8 +71,10 @@ export default function ScreenFeedback({
 }: {
   x: MotionValue<number>;
   y: MotionValue<number>;
-  upAction: SwipeAction;
+  /** kept in the signature: the deck decides what up means, not this layer */
+  upAction?: SwipeAction;
 }) {
+  void upAction;
   /**
    * Three progresses, each 0 → 1 → past 1.
    *
@@ -103,14 +92,18 @@ export default function ScreenFeedback({
   });
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-[45] overflow-hidden" aria-hidden>
+    <div
+      /* a stable hook for the guards. They used to select on `z-[45]`, so
+         moving the layer behind the deck made two of them report the app
+         broken when only their selector was. A test that tracks a Tailwind
+         class is a test that fails on a design change. */
+      data-wash
+      className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
+      aria-hidden
+    >
       <Wash progress={right} tint={LIKE_TINT} at="102% 46%" />
       <Wash progress={left} tint={NOPE_TINT} at="-2% 46%" />
       <Wash progress={up} tint={UP_TINT} at="50% -2%" />
-
-      <Mark progress={right} tint={LIKE_TINT} side="right" action="liked" />
-      <Mark progress={left} tint={NOPE_TINT} side="left" action="disliked" />
-      <Mark progress={up} tint={UP_TINT} side="top" action={upAction} />
     </div>
   );
 }
@@ -121,23 +114,14 @@ export default function ScreenFeedback({
  * Read the `background` stack top-down, because that is the order the browser
  * paints it in — first listed is nearest the viewer:
  *
- *   1. THE VIGNETTE. Transparent through the middle, scrim at the corners. It
- *      sits above the bloom exactly as its own element used to, so the glow
- *      still darkens as it reaches the edge of the screen.
+ *   1. THE VIGNETTE. Transparent through the middle, scrim at the corners, so
+ *      the glow still darkens as it reaches the edge of the screen.
  *   2. THE BLOOM. A gradient from the edge the card is heading for. The bright
  *      stop at the very edge is the glow that v1 drew with `filter: blur()` —
  *      a gradient is a blur that costs nothing, because it is rasterised once
  *      when the layer is created and never again.
  *   3. THE FLOOD. A flat wall of the verdict's colour: the literal "the screen
- *      turns red", over everything, card included.
- *
- * The one thing genuinely lost in the merge is that the flood used to hold
- * back until 45% of the way to the commit point, on the argument that the
- * whole screen changing colour is a statement and a statement made at the
- * first millimetre is noise. Sharing one opacity means it now fades in with
- * everything else — at a fifth of a drag it is 5% alpha behind a poster, which
- * is below the threshold of noticing. That is the price of the merge and it is
- * the whole price.
+ *      turns red", now under the card rather than over it.
  */
 function Wash({
   progress,
@@ -148,7 +132,7 @@ function Wash({
   tint: string;
   at: string;
 }) {
-  const opacity = useTransform(progress, [0, 1, 1.6], [0, 0.92, 1], { clamp: true });
+  const opacity = useTransform(progress, [0, 1, 1.6], [0, 0.84, 0.92], { clamp: true });
   const scale = useTransform(progress, [0, 1.6], [1.2, 1], { clamp: true });
 
   return (
@@ -158,67 +142,15 @@ function Wash({
         opacity,
         scale,
         background: [
-          "radial-gradient(115% 88% at 50% 50%, transparent 32%, rgb(var(--rgb-scrim) / 0.49) 100%)",
+          "radial-gradient(115% 88% at 50% 50%, transparent 32%, rgb(var(--rgb-scrim) / 0.42) 100%)",
           `radial-gradient(96% 82% at ${at}, ${tint} 0%, ` +
-            `color-mix(in srgb, ${tint} 74%, transparent) 26%, ` +
-            `color-mix(in srgb, ${tint} 42%, transparent) 54%, ` +
-            `color-mix(in srgb, ${tint} 14%, transparent) 74%, transparent 88%)`,
-          `linear-gradient(color-mix(in srgb, ${tint} 28%, transparent), ` +
-            `color-mix(in srgb, ${tint} 28%, transparent))`,
+            `color-mix(in srgb, ${tint} 70%, transparent) 26%, ` +
+            `color-mix(in srgb, ${tint} 38%, transparent) 54%, ` +
+            `color-mix(in srgb, ${tint} 12%, transparent) 74%, transparent 88%)`,
+          `linear-gradient(color-mix(in srgb, ${tint} 18%, transparent), ` +
+            `color-mix(in srgb, ${tint} 18%, transparent))`,
         ].join(", "),
       }}
     />
-  );
-}
-
-/**
- * One mark, at the edge the card is going to, reaching full size exactly at
- * the commit point — the moment worth feeling.
- *
- * The halo behind it is a static radial gradient rather than a drop-shadow,
- * for the same reason the rim is gone: a filter on a moving element is a
- * repaint, and a gradient on a fading element is not. It stays its own element
- * rather than being folded into the wash because it is 150px wide — the layers
- * worth merging are the ones that cover the screen.
- */
-function Mark({
-  progress,
-  tint,
-  side,
-  action,
-}: {
-  progress: MotionValue<number>;
-  tint: string;
-  side: "left" | "right" | "top";
-  action: SwipeAction;
-}) {
-  const Icon = GLYPH[action];
-  const opacity = useTransform(progress, [0.14, 0.7], [0, 1], { clamp: true });
-  const scale = useTransform(progress, [0.14, 1, 1.3], [0.5, 1, 1.1], { clamp: true });
-
-  const place =
-    side === "top"
-      ? "inset-x-0 top-[10vh] justify-center"
-      : side === "right"
-        ? "inset-y-0 right-[4vw] items-center justify-end"
-        : "inset-y-0 left-[4vw] items-center justify-start";
-
-  return (
-    <motion.div
-      className={`absolute flex will-change-[opacity,transform] ${place}`}
-      style={{ opacity, scale, color: tint }}
-    >
-      <span className="relative grid h-[150px] w-[150px] place-items-center">
-        <span
-          className="absolute inset-0 rounded-full"
-          style={{
-            background: `radial-gradient(circle, color-mix(in srgb, ${tint} 55%, transparent) 0%, transparent 68%)`,
-          }}
-        />
-        <span className="relative">
-          <Icon size={96} filled strokeWidth={1.6} />
-        </span>
-      </span>
-    </motion.div>
   );
 }

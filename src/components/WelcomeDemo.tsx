@@ -36,7 +36,7 @@
  * a demo that has stopped being a courtesy.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { animate, motion, useMotionValue } from "framer-motion";
+import { animate, motion, useMotionValue, useTransform } from "framer-motion";
 import ScreenFeedback from "./ScreenFeedback";
 import PosterArt from "./PosterArt";
 import { getLocalCatalog } from "@/lib/catalog";
@@ -64,6 +64,8 @@ const BEATS: { x: number; y: number; hold: number }[] = [
 export default function WelcomeDemo({ onDone }: { onDone: () => void }) {
   const x = useMotionValue(0);
   const y = useMotionValue(0);
+  /* the deck's own tilt curve, imported rather than re-guessed */
+  const rotate = useTransform(x, [-260, 0, 260], [-16, 0, 16]);
   const [stage, setStage] = useState<"name" | "demo">("name");
   const done = useRef(false);
 
@@ -126,34 +128,90 @@ export default function WelcomeDemo({ onDone }: { onDone: () => void }) {
       style={{ height: "calc(100dvh - 74px - env(safe-area-inset-bottom))" }}
       onPointerDown={skip}
     >
-      {stage === "demo" && <ScreenFeedback x={x} y={y} upAction="not_seen" />}
+      {stage === "demo" && <ScreenFeedback x={x} y={y} />}
 
-      {/* the name, once */}
+      {/*
+        THE NAME, AND WHY IT IS BUILT LIKE THIS.
+
+        The user on the previous version: "it appears in a really fast way,
+        there is no animation, it is not smooth, it is not professional, it is
+        not dynamic — it is just a text that appears really fast and disappears
+        really fast. I like the idea, like how the Netflix logo appears when you
+        first open the app. You did it in a really bad way."
+
+        What it was: opacity 0 → 1 over 800ms with `letterSpacing` animated
+        alongside. Two faults in one line. `letter-spacing` is not a compositor
+        property — animating it re-lays-out and repaints the text on every
+        frame, which on his phone meant the whole reveal was drawn perhaps
+        three times, so a 800ms animation read as an instant cut. And a plain
+        cross-fade has no *arrival*: it has no moment where the thing lands.
+
+        What it is now, and every part of it is `transform` or `opacity`:
+
+          · the letters rise together from 22px below, on a long soft curve
+          · they settle from 1.08 scale, so the word arrives rather than fades
+          · a sweep of light crosses the word once, left to right — this is the
+            "Netflix" beat he is describing, and it is a translated gradient,
+            not a filter
+          · the whole card holds for a breath, then lifts away as one piece
+
+        And the subtitle is gone, as asked. "Everything you have ever watched"
+        was explaining a product to somebody who has not seen it yet, in the
+        one second where the only job is to say the name.
+      */}
       <motion.div
         className="pointer-events-none absolute inset-0 z-20 grid place-items-center"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: stage === "name" ? 1 : 0 }}
-        transition={{ duration: 0.4, ease: EASE_OUT }}
+        animate={{ opacity: stage === "name" ? 1 : 0, y: stage === "name" ? 0 : -26 }}
+        transition={{ duration: 0.5, ease: EASE_OUT }}
       >
-        <div className="text-center">
-          <motion.h1
-            initial={{ opacity: 0, y: 14, letterSpacing: "0.12em" }}
-            animate={{ opacity: 1, y: 0, letterSpacing: "-0.035em" }}
-            transition={{ duration: 0.8, ease: EASE_OUT }}
-            className="text-5xl font-bold text-ink"
-          >
-            Seenit
-          </motion.h1>
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5, delay: 0.42, ease: EASE_OUT }}
-            className="mt-3 text-sm font-medium text-ink-faint"
-          >
-            Everything you have ever watched
-          </motion.p>
-        </div>
+        <motion.div
+          className="relative overflow-hidden px-2"
+          initial={{ opacity: 0, y: 22, scale: 1.08 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.95, ease: [0.16, 0.9, 0.24, 1] }}
+        >
+          <h1 className="text-[54px] font-bold tracking-[-0.045em] text-ink">Seenit</h1>
+          {/* the sweep: one pass of light across the word, transform-only */}
+          <motion.span
+            className="absolute inset-y-0 w-1/2"
+            style={{
+              background:
+                "linear-gradient(100deg, transparent, rgb(var(--rgb-accent) / 0.5), transparent)",
+            }}
+            initial={{ x: "-160%" }}
+            animate={{ x: "260%" }}
+            transition={{ duration: 1.15, delay: 0.34, ease: [0.4, 0, 0.2, 1] }}
+            aria-hidden
+          />
+        </motion.div>
       </motion.div>
+
+      {/*
+        THE DEMO SITS EXACTLY WHERE THE DECK SITS.
+
+        The user: "when the demo appears the cards are stuck to the top, the
+        title is not showing, the whole page is not how it's supposed to be.
+        The demo should be exactly where the cards usually are when you are
+        swiping, and the name of the website should be there too."
+
+        He is right and the cause was that this screen was laid out by hand
+        instead of copying the deck. The deck is: `h1` at the top, then a
+        `flex-1` stack, then the button row. This had no `h1`, so the stack
+        started 40px higher and every card sat above where its real counterpart
+        would be — the demo taught the gesture in the wrong place.
+
+        The heading below is the deck's heading, same size, same weight, same
+        margin. It fades in with the deck rather than with the name card, so the
+        name still gets the screen to itself first.
+      */}
+      <motion.h1
+        className="relative z-10 mb-2 shrink-0 self-start text-[26px] font-bold tracking-[-0.03em]"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: stage === "demo" ? 1 : 0 }}
+        transition={{ duration: 0.45, ease: EASE_OUT }}
+      >
+        Seenit
+      </motion.h1>
 
       <div className="relative z-10 min-h-0 w-full flex-1">
         <div className="relative mx-auto h-full w-fit">
@@ -192,9 +250,25 @@ export default function WelcomeDemo({ onDone }: { onDone: () => void }) {
               </motion.div>
             ))}
 
+            {/*
+              THE CARD TILTS, BECAUSE A REAL ONE DOES.
+
+              The user: "the card is not being tilted, that's a problem in the
+              demo. It just moves right, the whole card as it is, fixed. It
+              feels like a robot. When you actually swipe a card it gets tilted
+              to the side you are swiping it to. It does not show the actual
+              dynamic of how you swipe the card."
+
+              Exactly right, and the omission was mine: `SwipeCard` derives
+              `rotate` from its own `x` and this screen never did, so the demo
+              was translating a rectangle while claiming to demonstrate a
+              gesture. The transform below is character-for-character the one
+              the real card uses — not a similar one, the same one — so the two
+              cannot drift apart again.
+            */}
             <motion.div
               className="absolute inset-0 z-20"
-              style={{ x, y }}
+              style={{ x, y, rotate }}
               initial={{ opacity: 0, scale: 0.94 }}
               animate={{ opacity: stage === "demo" ? 1 : 0, scale: 1 }}
               transition={{ duration: 0.45, ease: EASE_OUT }}

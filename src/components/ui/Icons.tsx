@@ -147,9 +147,33 @@ export const PopcornIcon = (p: IconProps) => (
   </svg>
 );
 
+/**
+ * REDRAWN, BECAUSE IT WAS THE ONE SHAPE IN THE APP WITH CORNERS.
+ *
+ * The user: "I believe you designed the dislike yourself, because that's not
+ * normally how a dislike looks. It feels like Minecraft — just straight lines
+ * with corners. Look at the heart button: it is not a square, it is really
+ * smooth. Then you look at the dislike and it feels like it was designed by an
+ * engineer. It does not have circles, just corners."
+ *
+ * He is describing the old path accurately. Its cuff was a rectangle with a 2px
+ * radius, its pad met the cuff at a hard right angle, and the four corners of
+ * the pad used a 1.8px radius against a 24px viewbox — at 27px on screen that
+ * reads as a hexagon. Next to the heart, which is nothing but curves, it looked
+ * like it came from a different set.
+ *
+ * This one is built the way the heart is: every join is a curve. The pad's
+ * corners carry a 3px radius, the thumb rolls out of the pad on a continuous
+ * arc rather than a corner, and the cuff is a full stadium — two semicircular
+ * ends — instead of a rounded box. It still reads instantly as a thumb down,
+ * which is the whole job; it just stops being the only angular thing on screen.
+ */
 export const ThumbsDownIcon = (p: IconProps & { filled?: boolean }) => (
   <svg {...base(p)} fill={p.filled ? "currentColor" : "none"}>
-    <path d="M17 14V4M7.1 20.3l3.4-6.3H4.8a1.8 1.8 0 01-1.7-2.4l1.9-6A1.8 1.8 0 016.7 4.4H17a2 2 0 012 2V12a2 2 0 01-2 2h-2.6l-3.6 6.8a1.6 1.6 0 01-2.9-.9l.2-.6z" />
+    {/* the pad: rounded on every corner, meeting the cuff on a curve */}
+    <path d="M14.6 4H7.3c-1 0-1.9.6-2.2 1.6l-1.9 5.7c-.5 1.5.6 3 2.2 3h3.2c.4 0 .7.4.6.8l-.6 2.8c-.3 1.3.6 2.6 2 2.7.6 0 1.2-.3 1.5-.9l2.5-4.9c.1-.3.2-.6.2-.9V5.4c0-.8-.6-1.4-1.2-1.4z" />
+    {/* the cuff: a stadium, not a box with clipped corners */}
+    <path d="M19 4.2h.4c.9 0 1.6.7 1.6 1.6v6.4c0 .9-.7 1.6-1.6 1.6H19c-.9 0-1.6-.7-1.6-1.6V5.8c0-.9.7-1.6 1.6-1.6z" />
   </svg>
 );
 

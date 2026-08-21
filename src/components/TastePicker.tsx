@@ -244,23 +244,35 @@ function PickTile({
       aria-label={title.title.en}
       whileTap={{ scale: 0.93 }}
       /**
-       * The tiles that are not chosen step back.
+       * The tiles that are not chosen step back — ONE property, not three.
        *
-       * This used to fade AND desaturate: `filter: saturate(0.55)`, animated.
-       * `dimmed` is `anyPicked && !picked.has(id)`, so the very first tap on
-       * the very first screen of the app started a filter animation on every
-       * other poster in the grid simultaneously — twenty-odd images
-       * re-rasterised per frame for 200ms, as the opening impression.
+       * v1 faded and desaturated: `filter: saturate(0.55)`, animated. `dimmed`
+       * is `anyPicked && !picked.has(id)`, so the first tap on the first screen
+       * of the app started a filter animation on every other poster in the grid
+       * at once — forty-odd images re-rasterised per frame, as the opening
+       * impression. Same construct that froze the deck.
        *
-       * It is the same construct that froze the deck on the user's phone. The
-       * fade does nearly all of the visual work on its own; the rest is a
-       * surface-coloured sheet, which composites.
+       * v2 replaced the filter with opacity plus a surface-coloured sheet. That
+       * removed the repaint and left two problems the user then reported:
+       *
+       *   "The movies you didn't choose are SO gray that it's hard to see the
+       *    movie itself. You don't know what to press because it isn't showing.
+       *    Make it a little bit less gray — just a little bit, not too much."
+       *
+       *   "Whenever you press, everything is slow. It is slow to press, slow to
+       *    scroll, slow to unselect. The page blinks for a second."
+       *
+       * Both had the same root: 0.62 opacity *and* a 34% sheet is 41% of the
+       * original poster, which is unreadable; and every tile was running three
+       * animations — its own opacity, its own scale, and its sheet's opacity —
+       * so one tap started ~140 concurrent animations.
+       *
+       * Now: one property, one animation per tile, and 0.82 rather than 0.41.
+       * The scale nudge is gone because 0.985 against 1 is not visible at this
+       * size and cost a third of the work; the sheet element is gone with it.
        */
-      animate={{
-        opacity: dimmed ? 0.62 : 1,
-        scale: selected ? 1 : 0.985,
-      }}
-      transition={{ ...SPRING_SNAPPY, opacity: { duration: QUICK, ease: EASE_OUT } }}
+      animate={{ opacity: dimmed ? 0.82 : 1 }}
+      transition={{ duration: QUICK, ease: EASE_OUT }}
       className="relative block w-full min-w-0 overflow-hidden rounded-2xl bg-surface-2"
       style={{
         boxShadow: selected
@@ -269,12 +281,6 @@ function PickTile({
       }}
     >
       <PosterArt title={title} sizes="140px" className="aspect-[2/3] w-full" />
-      <motion.span
-        className="pointer-events-none absolute inset-0 bg-surface"
-        animate={{ opacity: dimmed ? 0.34 : 0 }}
-        transition={{ duration: QUICK, ease: EASE_OUT }}
-        aria-hidden
-      />
     </motion.button>
   );
 }

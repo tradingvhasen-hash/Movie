@@ -241,11 +241,21 @@ export default function SwipeDeck() {
     }
   }, [queue]);
 
+  /**
+   * Decided from the profile, not from the catalog.
+   *
+   * "Has this person swiped anything" is answered by localStorage, which
+   * zustand rehydrates in about a millisecond. It used to wait on `hydrated`
+   * — the 5.7 MB catalog — for no reason other than that both facts happened
+   * to arrive from the same hook. That wait was the whole of the blank screen
+   * the user filmed; see the render branch below.
+   *
+   * The empty dependency list is deliberate: this runs once, on mount, and the
+   * answer must not change underneath a demo that has already started.
+   */
   useEffect(() => {
-    if (hydrated && showDemo === null) {
-      setShowDemo(answered === 0 && !demoAlreadyShown());
-    }
-  }, [hydrated, answered, showDemo]);
+    setShowDemo(useDhawq.getState().profile.totalSwipes === 0 && !demoAlreadyShown());
+  }, []);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -261,6 +271,49 @@ export default function SwipeDeck() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [trigger, takeBack, settings.swipeUp]);
+
+  /**
+   * THE FIVE BLANK SECONDS.
+   *
+   * The user, on his very first impression of the site: "it takes nearly five
+   * seconds, even six or seven, and it shows nothing. It is just a blank page."
+   * He filmed it — a skeleton card, a skeleton heading, three skeleton
+   * buttons, and nothing else.
+   *
+   * Measured on a phone-speed CPU and a 1.6 Mbps connection, the first real
+   * content arrived at 3,353ms while the skeleton had been painted since
+   * 715ms. Two and a half seconds of deliberate nothing, and the cause is one
+   * word in the line below: `hydrated`.
+   *
+   * `hydrated` is set by `loadCatalog()` — a 5.7 MB download, a JSON parse and
+   * a decode of 15,083 titles. The deck genuinely needs all of that before it
+   * can deal a card.
+   *
+   * THE WELCOME SCREEN NEEDS NONE OF IT. It says the product's name and then
+   * demonstrates a swipe on three posters it takes from `SAMPLE_TITLES`, which
+   * is bundled in the JavaScript and available synchronously. It was waiting
+   * for a 5.7 MB file it never reads.
+   *
+   * So it does not wait any more. The demo decides whether to run from the
+   * persisted profile alone — which zustand rehydrates from localStorage in a
+   * millisecond — and starts as soon as the page can paint. The catalog loads
+   * underneath it, and the demo's own five and a half seconds are exactly the
+   * budget it needs, so the deck is ready at the moment the demo ends.
+   *
+   * The skeleton still exists, for the person who has swiped before and comes
+   * back to the deck directly. For them the catalog is in the browser cache
+   * and it is on screen for a frame or two.
+   */
+  if (showDemo) {
+    return (
+      <WelcomeDemo
+        onDone={() => {
+          setShowDemo(false);
+          if (!onboardingSeen) setPicking(true);
+        }}
+      />
+    );
+  }
 
   if (!hydrated || showDemo === null) {
     return (
@@ -308,17 +361,6 @@ export default function SwipeDeck() {
    * nothing has been swiped yet — and never on a return from another tab,
    * which is what `demoAlreadyShown()` remembers. See WelcomeDemo.
    */
-  if (showDemo) {
-    return (
-      <WelcomeDemo
-        onDone={() => {
-          setShowDemo(false);
-          if (!onboardingSeen) setPicking(true);
-        }}
-      />
-    );
-  }
-
   /* ── onboarding: welcome, then the taste picker ── */
   if (!onboardingSeen && picking) {
     return (

@@ -9,7 +9,6 @@ import {
   HeartIcon,
   SparklesIcon,
   ThumbsDownIcon,
-  XIcon,
 } from "@/components/ui/Icons";
 import { getLocalTitle, loadCatalog } from "@/lib/catalog";
 import { rank } from "@/lib/engine/rank-client";
@@ -125,10 +124,25 @@ export default function DiscoverPage() {
   const ratedCount = profile.ratedSwipes;
   const [hero, ...rest] = recs;
 
+  /**
+   * A VERDICT NO LONGER SHUTS THE SHEET.
+   *
+   * The user: "let's say I press any of those three buttons — the whole square
+   * that shows you the story just disappears. Maybe I want to continue reading
+   * the story of the movie, but I just want to press like. I don't see the need
+   * for that."
+   *
+   * He is right, and the old behaviour was a category error: closing is
+   * navigation, and answering is not. Recording a verdict now records a verdict
+   * and nothing else. The sheet stays where it is, the buttons show which
+   * answer was given, and the person leaves when they have decided to leave.
+   */
+  const [answered, setAnswered] = useState<SwipeAction | null>(null);
+
   const log = (rec: Recommendation, action: SwipeAction) => {
     haptic("commit", haptics);
     doSwipe(rec.title, action);
-    setOpen(null);
+    setAnswered(action);
   };
 
   return (
@@ -171,7 +185,10 @@ export default function DiscoverPage() {
               <motion.button
                 variants={FADE_UP}
                 type="button"
-                onClick={() => setOpen(hero)}
+                onClick={() => {
+                  setAnswered(null);
+                  setOpen(hero);
+                }}
                 whileTap={{ scale: 0.985 }}
                 transition={SPRING_SNAPPY}
                 className="soft-card mt-5 block w-full overflow-hidden text-left"
@@ -218,7 +235,10 @@ export default function DiscoverPage() {
                     whileTap={{ scale: 0.94 }}
                     transition={SPRING_SNAPPY}
                     type="button"
-                    onClick={() => setOpen(rec)}
+                    onClick={() => {
+                      setAnswered(null);
+                      setOpen(rec);
+                    }}
                     aria-label={rec.title.title.en}
                     className="relative block w-full min-w-0 overflow-hidden rounded-2xl bg-surface-2 shadow-[0_3px_12px_rgb(var(--rgb-shadow)/0.08)]"
                   >
@@ -237,22 +257,44 @@ export default function DiscoverPage() {
       {/* ── one of them, up close ── */}
       <AnimatePresence>
         {open && (
-          <motion.div
-            className="fixed inset-0 z-50 flex flex-col justify-end"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18, ease: EASE_OUT }}
-          >
-            <div
+          <motion.div className="fixed inset-0 z-50 flex flex-col justify-end">
+            {/*
+              THE BLUR ARRIVES INSTEAD OF SNAPPING ON.
+
+              The user: "the blur that covers the rest of the page just appears.
+              Now the page is clear, now the page is blurred. It does not get
+              smoothly blurry — you blink your eyes and here it is, you blink
+              your eyes and it disappears. Nothing is smooth about this effect."
+
+              Two causes. The scrim and the sheet shared one 180ms opacity fade
+              on the wrapper, which is far too quick to read as anything but a
+              cut — and on the way out that fade erased the whole thing before
+              the sheet had begun to slide, so the "close" animation was never
+              seen at all.
+
+              They are separate now and neither is rushed: the scrim takes 380ms
+              to arrive and 300ms to go, and because `opacity` composites the
+              element's *result*, a blurred layer fading up reads as the blur
+              coming in gradually — without animating `backdrop-filter`, which
+              is the construct that froze his phone on the deck.
+            */}
+            <motion.div
               className="absolute inset-0 bg-[rgb(var(--rgb-scrim)/0.55)] backdrop-blur-md"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0, transition: { duration: 0.3, ease: EASE_OUT } }}
+              transition={{ duration: 0.38, ease: EASE_OUT }}
               onClick={() => setOpen(null)}
             />
+            {/*
+              And the sheet itself: a softer spring in, and a real slide out
+              rather than being deleted underneath a fade.
+            */}
             <motion.div
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              transition={{ type: "spring", stiffness: 340, damping: 34 }}
+              exit={{ y: "100%", transition: { duration: 0.34, ease: [0.4, 0, 0.7, 1] } }}
+              transition={{ type: "spring", stiffness: 210, damping: 30, mass: 1 }}
               className="relative z-10 max-h-[86dvh] overflow-y-auto rounded-t-[28px] border-t border-line bg-bg px-5 pb-[calc(24px+env(safe-area-inset-bottom))] pt-3"
             >
               <span className="mx-auto mb-4 block h-1 w-10 rounded-full bg-line" aria-hidden />
@@ -301,13 +343,15 @@ export default function DiscoverPage() {
                 <SheetAction
                   label={t("swipe.disliked")}
                   tint="var(--color-danger)"
+                  chosen={answered === "disliked"}
                   onPress={() => log(open, "disliked")}
                 >
-                  <ThumbsDownIcon size={20} />
+                  <ThumbsDownIcon size={20} filled={answered === "disliked"} />
                 </SheetAction>
                 <SheetAction
                   label={t("swipe.seen")}
                   tint="var(--color-ink-strong)"
+                  chosen={answered === "seen"}
                   onPress={() => log(open, "seen")}
                 >
                   <EyeIcon size={20} />
@@ -315,20 +359,20 @@ export default function DiscoverPage() {
                 <SheetAction
                   label={t("swipe.liked")}
                   tint="var(--color-accent)"
+                  chosen={answered === "liked"}
                   onPress={() => log(open, "liked")}
                 >
                   <HeartIcon size={20} filled />
                 </SheetAction>
-                <motion.button
-                  type="button"
-                  onClick={() => setOpen(null)}
-                  whileTap={{ scale: 0.9 }}
-                  transition={SPRING_SNAPPY}
-                  aria-label={t("common.close")}
-                  className="grid h-[52px] w-[52px] shrink-0 place-items-center rounded-full border border-line text-ink-faint"
-                >
-                  <XIcon size={18} strokeWidth={2.4} />
-                </motion.button>
+                {/*
+                  The close button is gone. "You don't need the X button,
+                  because you already just press at any place on the page and
+                  this square disappears. We're trying to minimize the website."
+                  Correct: the scrim above already closes on tap, and the drag
+                  handle at the top says the sheet is dismissible. A control
+                  that duplicates a gesture the screen already teaches is one
+                  more thing to look at for nothing.
+                */}
               </div>
             </motion.div>
           </motion.div>
@@ -358,14 +402,35 @@ function WhyLine({ rec }: { rec: Recommendation }) {
   );
 }
 
+/**
+ * THE THREE ANSWERS, AT THE WEIGHT OF THE SURFACE THEY SIT ON.
+ *
+ * The user: "the whole square is a milk colour, and then you go to the buttons
+ * and it is a white that is so lighting. It does not fit the place. The buttons
+ * feel so highlighted that it's too much."
+ *
+ * He is reading a real mismatch. These reused `.deck-action`, which is designed
+ * to sit on the *page* background — a raised white pill with a lifted shadow,
+ * because on the deck it has to read as a floating control over a photograph.
+ * Inside a sheet that is itself a raised near-white surface, the same treatment
+ * has nothing to be raised above, so it just glares.
+ *
+ * On a surface, a control is defined by its edge rather than by its elevation.
+ * These are now the sheet's own tone with a hairline border and no shadow —
+ * and the one that has been pressed fills with its verdict colour, which is
+ * both the confirmation that was missing and the only saturated thing in the
+ * row.
+ */
 function SheetAction({
   label,
   tint,
+  chosen,
   onPress,
   children,
 }: {
   label: string;
   tint: string;
+  chosen?: boolean;
   onPress: () => void;
   children: React.ReactNode;
 }) {
@@ -373,12 +438,18 @@ function SheetAction({
     <motion.button
       type="button"
       aria-label={label}
+      aria-pressed={chosen}
       title={label}
       onClick={onPress}
-      whileTap={{ scale: 0.9 }}
+      whileTap={{ scale: 0.94 }}
+      animate={{
+        backgroundColor: chosen ? tint : "rgb(var(--rgb-surface-2) / 1)",
+        color: chosen ? "var(--color-on-accent)" : "var(--color-ink-dim)",
+        borderColor: chosen ? tint : "var(--color-line)",
+      }}
       transition={SPRING_SNAPPY}
-      style={{ height: 52, ["--tint" as string]: tint }}
-      className="deck-action flex-1"
+      style={{ height: 52 }}
+      className="flex flex-1 items-center justify-center rounded-full border"
     >
       {children}
     </motion.button>

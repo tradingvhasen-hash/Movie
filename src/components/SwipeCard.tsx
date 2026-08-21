@@ -12,7 +12,7 @@ import {
 import PosterArt from "./PosterArt";
 import { StarIcon } from "./ui/Icons";
 import { genreLabel } from "@/lib/genres";
-import { SPRING_SETTLE } from "@/lib/motion";
+import { EASE_OUT, SPRING_SETTLE } from "@/lib/motion";
 import { locale, t } from "@/lib/i18n";
 import type { SwipeAction, Title } from "@/lib/types";
 
@@ -116,6 +116,15 @@ export default function SwipeCard({
 
   const rotate = useTransform(x, [-260, 0, 260], [-16, 0, 16]);
 
+  /* how far this drag has gone toward each verdict — read by the stamps */
+  const likeAt = useTransform(x, [24, SWIPE_X_THRESHOLD], [0, 1], { clamp: true });
+  const nopeAt = useTransform(x, [-24, -SWIPE_X_THRESHOLD], [0, 1], { clamp: true });
+  const upAt = useTransform(() => {
+    const dy = Math.max(0, (-y.get() - 24) / (SWIPE_UP_THRESHOLD - 24));
+    const sideways = Math.min(1, Math.abs(x.get()) / SWIPE_X_THRESHOLD);
+    return Math.min(1, dy) * (1 - sideways);
+  });
+
   const isTop = index === 0;
   const activeExit = isTop ? (exiting ?? forcedExit) : null;
 
@@ -157,6 +166,8 @@ export default function SwipeCard({
    * it — which is why the corner button is gone rather than redrawn.
    */
   const press = useRef<{ px: number; py: number; at: number } | null>(null);
+  /** set by the release, read by the exit transition — see handleDragEnd */
+  const flightSeconds = useRef(0.56);
 
   function handlePointerDown(e: React.PointerEvent) {
     press.current = { px: e.clientX, py: e.clientY, at: Date.now() };
@@ -194,6 +205,50 @@ export default function SwipeCard({
           : px < -SWIPE_X_THRESHOLD
             ? "disliked"
             : null;
+
+    /**
+     * HOW HARD YOU THREW IT IS THE ONE THING THE ANIMATION MUST NOT IGNORE.
+     *
+     * The user: "you throw the card as fast as you can, and then the moment
+     * the effect appears the card gets slow and gets thrown to the left. That
+     * takes out the feeling of throwing — it feels like a ready-made effect
+     * that plays anyway no matter how fast you throw."
+     *
+     * He is describing a fixed 560ms tween, which is exactly what it was. A
+     * flick and a shove produced the identical flight, so the gesture stopped
+     * being his.
+     *
+     * The fix is not to hand the animation back to physics — that was the
+     * previous version, and it threw the card off-screen in 284ms with the
+     * colour not yet drawn. It is to let velocity choose the duration inside a
+     * range where every value is still watchable: a hard throw leaves in
+     * 400ms, a gentle push takes 620ms, and nothing is ever faster than the
+     * eye. The gesture is felt, and the effect is always seen.
+     *
+     * The floor is 400 rather than the 340 I first picked, and the reason is
+     * measured: at 340 a hard flick put the card off-screen at 317ms, which is
+     * within thirty milliseconds of the 284ms he had already told me was too
+     * fast to see. A range whose fast end lands on the number he complained
+     * about is not a compromise, it is the same bug with extra arithmetic.
+     * 400 → 620 is still a 55% spread, which is plainly felt.
+     */
+    const speed = Math.hypot(info.velocity.x, info.velocity.y);
+    flightSeconds.current = Math.max(0.4, Math.min(0.62, 0.62 - speed / 9000));
+
+    /**
+     * And the momentum has to die at the exact moment a verdict is given.
+     *
+     * `dragMomentum` is back on, because turning it off is what cost the card
+     * its float — see the drag props below. But inertia and the exit tween
+     * animate the same two values, and if inertia is still running the card
+     * leaves on whichever finishes last, which is the arbitrary behaviour the
+     * user filmed. Stopping the values here means momentum owns the release
+     * and the exit owns the departure, with no overlap.
+     */
+    if (action) {
+      x.stop();
+      y.stop();
+    }
     /**
      * A gesture that commits does NOT switch the screen feedback off here.
      *
@@ -260,12 +315,31 @@ export default function SwipeCard({
    * That was the right diagnosis and an insufficient fix — see the transition
    * below, where the actual measurements are.
    */
+  /**
+   * THE CARD THAT FLEW UPWARD ON ITS OWN.
+   *
+   * The user, twice: "all of a sudden there is a random card underneath the
+   * card I'm swiping that gets swiped to the upside. I didn't swipe anything."
+   * He first saw it on a fresh load and then again mid-session.
+   *
+   * It was in this expression. `exitPose` fell through to the upward pose
+   * whenever `activeExit` was null — and `activeExit` is null for every card
+   * that leaves the queue *without a verdict*: a re-rank dropping a title from
+   * positions two or three, a refill replacing the tail, a title that has just
+   * been answered somewhere else. Every one of those played the full
+   * "haven't seen it" fly-up, from behind the top card, for no reason.
+   *
+   * A card that nobody answered has no direction to go, so it does not go
+   * anywhere: it fades where it stands. The three verdict poses are unchanged.
+   */
   const exitPose =
     activeExit === "liked"
       ? { x: 620, y: -70, rotate: 22, opacity: 0, scale: 0.94 }
       : activeExit === "disliked"
         ? { x: -620, y: -70, rotate: -22, opacity: 0, scale: 0.94 }
-        : { x: 0, y: -820, rotate: 0, opacity: 0, scale: 0.92 };
+        : activeExit
+          ? { x: 0, y: -820, rotate: 0, opacity: 0, scale: 0.92 }
+          : { opacity: 0, scale: 0.97 };
 
   /**
    * Resting pose in the stack — springs whenever the index changes.
@@ -340,17 +414,42 @@ export default function SwipeCard({
        * from a drag — the exact difference the user described. A verdict is a
        * verdict; it should look the same however hard you threw it.
        */
-      exit={{
-        ...exitPose,
-        transition: {
-          duration: 0.56,
-          ease: [0.32, 0.3, 0.55, 0.98],
-          opacity: { duration: 0.2, delay: 0.36, ease: "linear" },
-        },
-      }}
+      exit={
+        activeExit
+          ? {
+              ...exitPose,
+              transition: {
+                duration: flightSeconds.current,
+                ease: [0.32, 0.3, 0.55, 0.98],
+                opacity: {
+                  duration: flightSeconds.current * 0.36,
+                  delay: flightSeconds.current * 0.64,
+                  ease: "linear",
+                },
+              },
+            }
+          : { ...exitPose, transition: { duration: 0.24, ease: EASE_OUT } }
+      }
       drag={isTop && !activeExit}
       dragElastic={0.55}
-      dragMomentum={false}
+      /**
+       * MOMENTUM IS BACK, AND IT IS WHAT "FLOATING" MEANS.
+       *
+       * The user: "before, when you dragged the card and let go, it felt like
+       * it was floating. Now the moment you stop pressing it, it just stops.
+       * I like the previous one."
+       *
+       * He is describing `dragMomentum`, which I turned off last round to stop
+       * a hard flick outrunning the exit animation. That fixed the throw and
+       * broke the release, which is the trade I should have noticed: those are
+       * two different gestures and they deserved two different answers.
+       *
+       * They have them now. Momentum is on, so a card let go mid-drag carries
+       * and glides back. And `handleDragEnd` stops both values the instant a
+       * verdict is given, so the exit never has to race the inertia it used to
+       * lose to.
+       */
+      dragMomentum
       /**
        * There is no downward verdict, so downward should not be a gesture.
        *
@@ -379,6 +478,19 @@ export default function SwipeCard({
         transition={{ duration: 0.35 }}
         aria-hidden
       />
+
+      {isTop && (
+        <>
+          <VerdictStamp progress={likeAt} tint="var(--color-accent)" label={t("swipe.liked")} side="left" />
+          <VerdictStamp progress={nopeAt} tint="var(--color-danger)" label={t("swipe.disliked")} side="right" />
+          <VerdictStamp
+            progress={upAt}
+            tint={upAction === "seen" ? "var(--color-ink-strong)" : "var(--color-skip)"}
+            label={upAction === "seen" ? t("swipe.seen") : t("swipe.notSeen")}
+            side="top"
+          />
+        </>
+      )}
       <motion.div
         className="relative h-full w-full"
         style={{ transformStyle: "preserve-3d" }}
@@ -560,6 +672,81 @@ export default function SwipeCard({
           )}
         </div>
       </motion.div>
+    </motion.div>
+  );
+}
+
+/**
+ * THE VERDICT, AS SOMETHING THE CARD CARRIES.
+ *
+ * What this replaces: a 150px filled glyph that faded in over the middle of the
+ * poster, drawn by the full-screen feedback layer. The user's verdict on it was
+ * total — "I don't like how it appears at the top of the card, I don't like how
+ * it appears, I don't like anything about it" — with the one constraint that
+ * removing it outright would leave the moment empty.
+ *
+ * So the difference is not the size of the glyph, it is what the thing *is*. A
+ * mark floating over a poster is an overlay: it belongs to the screen, it
+ * obscures the film, and it is the same object whichever card is underneath.
+ * A stamp in the card's own corner belongs to the card — it tilts with it, it
+ * flies away with it, and it never covers the face of the poster.
+ *
+ * Built the way a physical stamp reads: a hairline outline in the verdict's
+ * colour, the word in capitals with wide tracking, rotated a few degrees off
+ * true, and pressed on with a slight overshoot in scale rather than faded in.
+ * It sits on the side the card is coming *from*, so a card thrown right shows
+ * its stamp on the left, which is the edge with nothing behind it.
+ *
+ * Only `opacity` and `transform` animate, so it composites with the card
+ * instead of costing a layer of its own.
+ */
+function VerdictStamp({
+  progress,
+  tint,
+  label,
+  side,
+}: {
+  progress: MotionValue<number>;
+  tint: string;
+  label: string;
+  side: "left" | "right" | "top";
+}) {
+  const opacity = useTransform(progress, [0.08, 0.42], [0, 1], { clamp: true });
+  const scale = useTransform(progress, [0.08, 0.55, 1], [0.72, 1.04, 1], { clamp: true });
+
+  /**
+   * The upward stamp lives at the BOTTOM of the card, and that is not a whim.
+   *
+   * An upward swipe carries the card off the top of the screen, so a stamp
+   * pinned to its top edge is the first thing to leave — screenshotted, it was
+   * already half cut off at the commit point. Anchored to the bottom it stays
+   * on screen for the whole gesture and is the last thing you see as the card
+   * goes. The two sideways stamps stay high, where a card moving horizontally
+   * keeps them in view.
+   */
+  const place =
+    side === "left"
+      ? "left-4 top-5 -rotate-[11deg] origin-top-left"
+      : side === "right"
+        ? "right-4 top-5 rotate-[11deg] origin-top-right"
+        : "left-1/2 bottom-5 -translate-x-1/2 origin-bottom";
+
+  return (
+    <motion.div
+      className={`pointer-events-none absolute z-20 ${place} will-change-[opacity,transform]`}
+      style={{ opacity, scale }}
+      aria-hidden
+    >
+      <span
+        className="block rounded-xl border-[2.5px] px-3 py-1.5 text-[15px] font-extrabold uppercase tracking-[0.14em]"
+        style={{
+          color: tint,
+          borderColor: tint,
+          background: "rgb(var(--rgb-scrim) / 0.28)",
+        }}
+      >
+        {label}
+      </span>
     </motion.div>
   );
 }

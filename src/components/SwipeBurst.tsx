@@ -115,7 +115,7 @@ const SwipeBurst = forwardRef<BurstHandle>(function SwipeBurst(_props, ref) {
   const origin = ORIGIN[burst.action];
 
   return (
-    <div key={burst.id} className="pointer-events-none fixed inset-0 z-50 overflow-hidden" aria-hidden>
+    <div key={burst.id} className="pointer-events-none fixed inset-0 z-0 overflow-hidden" aria-hidden>
       {/*
         The flash, with the mark inside it.
 

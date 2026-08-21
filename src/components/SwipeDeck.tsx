@@ -161,6 +161,32 @@ export default function SwipeDeck() {
     };
   }, [deckVisible]);
 
+  /**
+   * THE NEXT FEW POSTERS ARE FETCHED BEFORE THEIR CARD IS ON TOP.
+   *
+   * Every card in the recording shows its generated placeholder — a gradient
+   * with the film's name across it in large type — and then swaps to the real
+   * poster a beat later. That swap happens once per card, and it is a large
+   * part of why the deck reads as slow even when nothing is blocked: the thing
+   * you came to look at is the last thing to arrive.
+   *
+   * The deck already knows the next twenty-four films. Asking the browser for
+   * the next five images costs nothing on the main thread — the fetch and the
+   * decode both happen off it — and by the time a card reaches the front its
+   * poster is in the cache and paints on the first frame.
+   */
+  const warmed = useRef(new Set<string>());
+  useEffect(() => {
+    if (typeof Image === "undefined") return;
+    for (const t of queue.slice(0, 5)) {
+      if (!t.posterPath || warmed.current.has(t.posterPath)) continue;
+      warmed.current.add(t.posterPath);
+      const img = new Image();
+      img.decoding = "async";
+      img.src = `https://image.tmdb.org/t/p/w500${t.posterPath}`;
+    }
+  }, [queue]);
+
   useEffect(() => {
     if (hydrated && showDemo === null) {
       setShowDemo(answered === 0 && !demoAlreadyShown());
@@ -478,6 +504,18 @@ function DeckAction({
   onPress: () => void;
   children: React.ReactNode;
 }) {
+  /**
+   * The pressed state is React's, not CSS's.
+   *
+   * `:active` is the obvious way to colour a button under a thumb and it is
+   * the wrong one on iOS: Safari keeps `:active` on the last element touched
+   * until something else is touched, so the heart stayed filled blue for the
+   * rest of the user's recording — twenty seconds and eight cards after the
+   * tap that caused it. Three handlers cannot get that wrong.
+   */
+  const [pressed, setPressed] = useState(false);
+  const release = () => setPressed(false);
+
   return (
     <motion.button
       type="button"
@@ -486,6 +524,12 @@ function DeckAction({
       title={label}
       disabled={disabled}
       onClick={onPress}
+      onPointerDown={disabled ? undefined : () => setPressed(true)}
+      onPointerUp={release}
+      onPointerCancel={release}
+      onPointerLeave={release}
+      onBlur={release}
+      data-pressed={pressed && !disabled ? "" : undefined}
       whileTap={disabled ? undefined : { scale: 0.88 }}
       transition={SPRING_SNAPPY}
       style={{ width: size, height: size, ["--tint" as string]: tint }}

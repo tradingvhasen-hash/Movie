@@ -718,12 +718,18 @@ svg,
     0 0 0 4px color-mix(in srgb, var(--tint) 12%, transparent);
 }
 
-/* PRESSED MEANS FILLED.
+/* PRESSED MEANS FILLED — AND DRIVEN BY JAVASCRIPT, NOT BY `:active`.
    The user's note was that these "don't feel pressed" and that loved and
    not-for-you both looked blue. A tinted outline is a hint; a button that
-   *becomes* its colour under the thumb is an answer. The transition is the
-   QUICK token so it lands with the finger rather than trailing it. */
-.deck-action:not(:disabled):active {
+   *becomes* its colour under the thumb is an answer.
+
+   It was `:active`, and on iOS Safari `:active` does not reliably clear when
+   the finger lifts — it clears when something *else* is touched. The user's
+   second recording shows the heart button stuck bright blue for the entire
+   remaining twenty seconds of the video, on card after card. `[data-pressed]`
+   is set on pointerdown and removed on pointerup, pointercancel and pointer
+   leave, so it cannot outlive the finger. */
+.deck-action:not(:disabled)[data-pressed] {
   color: #fff;
   background: var(--tint);
   border-color: var(--tint);

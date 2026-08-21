@@ -122,7 +122,6 @@ export default function DiscoverPage() {
   }, [hydrated, swipes, profile, seed]);
 
   const ratedCount = profile.ratedSwipes;
-  const [hero, ...rest] = recs;
 
   /**
    * A VERDICT NO LONGER SHUTS THE SHEET.
@@ -139,10 +138,36 @@ export default function DiscoverPage() {
    */
   const [answered, setAnswered] = useState<SwipeAction | null>(null);
 
+  /**
+   * WHY A CARD USED TO VANISH INSTEAD OF LEAVING.
+   *
+   * The user: "the moment you press the dislike or whatever button, the card of
+   * the movie just disappears from the cards in the discover page. I know why —
+   * it went to the library. But it literally just disappeared. Now it exists,
+   * now it does not. There is no animation, no effect. That's not a luxurious
+   * website, that's a cheap website."
+   *
+   * The grid already had an `AnimatePresence` with an exit on every tile, which
+   * is why this took reading rather than guessing. The exit never ran because
+   * nothing was ever *removed*: recording a verdict changes the swipe history,
+   * which re-runs the ranker, which replaces the entire `recs` array. framer
+   * saw a wholesale swap of fourteen keys rather than one key leaving, so there
+   * was no departing element to animate — the old list was simply gone.
+   *
+   * Holding the answered id here removes exactly one tile, immediately, which
+   * is a thing `AnimatePresence` can see and play. The re-rank still happens
+   * and still excludes it — it just no longer has to be the mechanism that
+   * takes it off the screen.
+   */
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+
+  const [hero, ...rest] = recs.filter((r) => !dismissed.has(r.title.id));
+
   const log = (rec: Recommendation, action: SwipeAction) => {
     haptic("commit", haptics);
     doSwipe(rec.title, action);
     setAnswered(action);
+    setDismissed((prev) => new Set(prev).add(rec.title.id));
   };
 
   return (
@@ -230,8 +255,16 @@ export default function DiscoverPage() {
                 {rest.map((rec) => (
                   <motion.button
                     key={rec.title.id}
+                    layout="position"
                     variants={FADE_UP}
-                    exit={{ opacity: 0, scale: 0.9 }}
+                    /* long enough to read as a departure rather than a delete,
+                       and the survivors close the gap on `layout` instead of
+                       snapping into it */
+                    exit={{
+                      opacity: 0,
+                      scale: 0.86,
+                      transition: { duration: 0.32, ease: EASE_OUT },
+                    }}
                     whileTap={{ scale: 0.94 }}
                     transition={SPRING_SNAPPY}
                     type="button"

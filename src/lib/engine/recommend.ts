@@ -1867,14 +1867,6 @@ export function recommend(
     opts.homeLanguages,
     watched
   );
-  /**
-   * Built once per rebuild. Discover is left alone: it recommends things you
-   * have NOT watched, so a signal whose whole meaning is "you probably have"
-   * is pointing the wrong way there.
-   */
-  const frontier = mode === "swipe" && watched.length > 0
-    ? frontierVotes(watched, excludeIds)
-    : null;
   const coWatchScale =
     mode === "discover"
       ? COWATCH_ENV ?? CO_WATCH_DISCOVER_SCALE
@@ -1948,26 +1940,8 @@ export function recommend(
      * point of having it is that the argument is testable rather than
      * persuasive.
      */
-    /**
-     * The frontier, in the deck's own ordering.
-     *
-     * Same rule as the grid and for the same measured reason: a co-watch
-     * neighbour of a confirmed title is watched 48.7% of the time against a
-     * 3.5% base rate. `known` is a probability in [0,1] and a vote adds a
-     * whole point, so one confirmed neighbour outranks the best the exposure
-     * model can otherwise name.
-     *
-     * This is NOT the co-watch term that was tried and rejected twice today.
-     * That one added a raw *degree* — every edge to anything, clamped into
-     * `known`, which saturated a large share of candidates at 1.0 and
-     * destroyed the ordering underneath. This adds a *vote count over the
-     * unanswered frontier only*, outside the clamp, and it is measured on the
-     * goal ruler rather than on a component bench.
-     */
-    const votes = frontier ? (frontier.get(c.title.id) ?? 0) : 0;
-    const exposure = known + FRONTIER_LIFT * votes;
     const recognitionTerm =
-      TARGET_SEEN > 0 ? 1 - Math.abs(Math.min(1, exposure) - TARGET_SEEN) * 2 : exposure;
+      TARGET_SEEN > 0 ? 1 - Math.abs(known - TARGET_SEEN) * 2 : known;
     const score =
       W_QUALITY * q +
       wRecognition * recognitionTerm +
@@ -2280,21 +2254,39 @@ export function frontierVotes(watched: Title[], exclude: Set<string>): Map<strin
 }
 
 /**
- * How far a frontier vote lifts a candidate.
+ * How far a frontier vote lifts a candidate. **On.**
  *
- * **Defaults to 0 — off — until the goal ruler says otherwise.** The component
- * evidence is strong (48.7% against a 3.5% base rate) and a standalone
- * simulation of pure frontier expansion read 484.7 titles against the shipped
- * deck's 410.9. Neither is a session on this engine, and three times this week
- * a signal that benched well did nothing or hurt once it was wired in. The arm
- * that decides it is running; this flips to 1 when it lands, and stays 0 if it
- * does not.
+ * Measured on the goal ruler, 60 real histories, 1,200 titles each, grid of
+ * forty:
  *
- * At 0 the code is a measured no-op: the control arm reproduced the shipped
- * baseline to the decimal — 1,121 titles/hour, 410.9 harvested, 15.7% lost at
- * ranking.
+ *     off   226.1 of 533 harvested   1,750 titles/hour   43.0% lost at ranking
+ *     on    321.6 of 533             2,490/hour          26.7% lost at ranking
+ *
+ * +42% harvested and +42% rate, and 2,490 against the shipped deck's 1,121 —
+ * more than double. A vote count is an integer and `watchLikelihood` is a
+ * probability in [0,1], so at a weight of 1 a single confirmed neighbour
+ * already outranks the most likely title the exposure model can otherwise
+ * name. Raising the weight to 3 reads 321.6 and 2,490 — identical to the
+ * decimal, which is the saturation signature that says the effect is the
+ * frontier itself rather than a number that happened to be tuned well.
+ *
+ THE GRID ONLY. IT WAS TRIED IN THE DECK AND TAKEN BACK OUT.
+ *
+ * Through `recommend()` the same weight harvested 410.6 against 410.9 — no
+ * benefit — and `simulate`'s exploration guard caught the cost: 519 swipes to
+ * reach four named targets against 281 with the signal off, 1.85x against a
+ * 1.15x limit. The frontier walks a neighbourhood, and a deck that only walks
+ * neighbourhoods never leaves the first one. No gain, real harm, so it is not
+ * in the deck.
+ *
+ * The grid is different because its ordering is `watchLikelihood` plus this
+ * and nothing else, and because a screen of forty is a memory test rather than
+ * a taste probe — nobody is asking it to surprise them. Whether the deck can
+ * capture the same win needs a priority rather than a bigger weight, and that
+ * is a structural change to be measured on its own, not a fifth turn of this
+ * knob.
  */
-const FRONTIER_LIFT = num("FRONTIER_LIFT", 0);
+const FRONTIER_LIFT = num("FRONTIER_LIFT", 1);
 
 export function watchedGrid(
   pool: CandidateItem[],

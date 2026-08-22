@@ -80,12 +80,17 @@ const SWIPES = Number(process.env.SWIPES || 44);
 const SETTLE = 950;
 
 const launch = process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {};
+/* pointing BASE at the deployed site only works if the browser goes through
+   whatever proxy the shell is already using */
+const proxy = process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
+if (proxy && !/localhost|127\.0\.0\.1/.test(BASE)) launch.proxy = { server: proxy };
 const browser = await chromium.launch(launch);
 const ctx = await browser.newContext({
   viewport: { width: 390, height: 844 },
   deviceScaleFactor: 2,
   isMobile: true,
   hasTouch: true,
+  ignoreHTTPSErrors: Boolean(proxy),
 });
 /* posters are not what this measures, and fetching 44 of them is slow */
 await ctx.route("**://image.tmdb.org/**", (r) => r.abort());

@@ -7,21 +7,44 @@ Supabase's URL Configuration points at the live site. Those three were the only
 things blocking cloud accounts, and they are behind us. I have stopped
 reminding you about them.
 
-**The 👁 bug you reported is fixed and pushed.** It was worse than you
-described: the deck did not merely re-suggest the films you had marked — it
-**jammed**. Measured on 44 button presses with every third one 👁: the old build
-dealt 17 distinct films in 44 swipes and got stuck on a single title from swipe
-17 onward, forever. The new build deals 44 distinct films and re-deals nothing.
+**The 👁 bug you reported is fixed, and it is live now** — I compared the
+deployed file byte for byte against the build I tested, and they are the same
+file. You can start.
 
-The cause was mine, and it had been live since 15 August. A helper called
-`pendingVerdicts` collected every 👁 answer and put it at the **front** of every
-rebuild. I wrote it for a grid that says "I watched this" without giving a
-verdict, so the deck could follow up. That grid does not exist — `/calibrate`
-downloads a file and never touches your library. So its only real source was the
-deck's own output feeding straight back into the deck.
+It was worse than you described in two ways.
 
-**Wait for the deploy before you start the session below.** Render takes a few
-minutes. If the site still jams on a 👁 press, it has not landed yet.
+**It jammed the deck.** Measured on 44 button presses with every third one 👁:
+the old build dealt 17 distinct films in 44 swipes and then stuck on a single
+title from swipe 17 onward, forever. The new build deals 44 distinct films and
+re-deals nothing.
+
+**It destroyed answers you had already given.** A re-dealt card gets answered a
+second time, and the second answer overwrites the first. In one 44-press run:
+nine 👁 presses, **three** of them still recorded. So some films you told the
+site you had watched are now stored as something else — including "haven't
+seen", the one that drops a film out of your library entirely.
+
+I cannot repair that. When a title is answered twice the store keeps only the
+last answer and moves it to the end of the order; there is no copy of what you
+said the first time. It only touched films you pressed 👁 on, and only since
+15 August, so it should be a small number — but if you find a film in your
+library filed wrongly, that is why, and the fix for it is one swipe.
+
+The cause was mine. A helper called `pendingVerdicts` collected every 👁 answer
+and put it at the **front** of every rebuild. I wrote it for a grid that says
+"I watched this" without giving a verdict, so the deck could follow up. That
+grid does not exist — `/calibrate` downloads a file and never touches your
+library. Its only real source was the deck's own output, fed straight back into
+the deck.
+
+**And a note on why I did not catch it.** Every deck test I own pressed ❤️ and
+👎 and nothing else, because the 👁 button is **off by default** — it appears
+only once "Fourth button" is switched on in Settings. So the entire class of
+bug was unreachable by every guard I had. There is now a guard
+(`scripts/deck-guard.mjs`) that turns the setting on, presses all four answers
+over 44 cards, and fails if the deck ever repeats a title. I ran it against the
+broken build first to make sure it actually fails — 3 of 7 — before trusting it
+to pass.
 
 ---
 

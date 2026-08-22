@@ -190,6 +190,14 @@ export default function LibraryPage() {
         <h1 className="min-w-0 flex-1 truncate text-[26px] font-bold tracking-[-0.03em]">
           {t("library.title")}
         </h1>
+        {/* the fast way to grow this list, next to the list it grows */}
+        <Link
+          href="/add"
+          aria-label="Add films"
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-line bg-surface-2 text-lg font-semibold text-ink-dim transition-colors hover:text-ink-strong"
+        >
+          +
+        </Link>
         <div className="flex shrink-0 rounded-full border border-line bg-surface-2 p-1" dir="ltr">
         {(
           [

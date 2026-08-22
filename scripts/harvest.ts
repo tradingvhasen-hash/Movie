@@ -208,7 +208,22 @@ for (const [uid, history] of users) {
   while (cards < CARDS) {
     const batch: Title[] =
       MODE === "grid"
-        ? watchedGrid(pool, profile, { excludeIds: shown, count: GRID, seed: 7 })
+        ? /**
+           * The grid needs the confirmed titles too.
+           *
+           * It was called without them, so `watched` was empty, the frontier
+           * was empty, and a sweep of FRONTIER_LIFT read 226.1 at every
+           * weight — identical to the decimal, which is the signature of a
+           * feature that never ran rather than one that did not help. Third
+           * time today a measurement was void because the ruler withheld the
+           * input the thing under test consumes.
+           */
+          watchedGrid(pool, profile, {
+            excludeIds: shown,
+            count: GRID,
+            seed: 7,
+            watched: [...liked, ...neutral, ...disliked],
+          })
         : recommend(pool, profile, {
             excludeIds: shown,
             count: 10,

@@ -165,7 +165,18 @@ let totalShown = 0;
 let ranOut = 0;
 let seconds = 0;
 
-for (const [, history] of users) {
+/**
+ * PER_USER=1 prints one line per person: id and titles harvested.
+ *
+ * Comparing two builds on 30 aggregate numbers cannot separate a real effect
+ * from a lucky roster, and every run here is deterministic — same people, same
+ * seed — so the *pairing* is free and throwing it away is careless. With this
+ * the two arms can be compared person by person, which is a far stronger test
+ * than two grand totals that happen to differ.
+ */
+const PER_USER = process.env.PER_USER === "1";
+
+for (const [uid, history] of users) {
   const seen = new Map<string, number>();
   for (const [id, rating] of history) if (byId.has(id)) seen.set(id, rating);
   totalHistory += seen.size;
@@ -252,6 +263,7 @@ for (const [, history] of users) {
     }
   }
   totalHarvest += found;
+  if (PER_USER) console.log(`USER\t${uid}\t${found}`);
 
   // the denominator: everything the gate held at any point in the session
   let everReached = 0;

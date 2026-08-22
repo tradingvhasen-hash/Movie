@@ -192,10 +192,31 @@ Those intervals do not overlap. Your blind sample points the same way (0.862
 against fame's 0.826) though on 30 titles that gap is inside the noise and I am
 quoting it only for its direction.
 
-**It is not shipped yet.** A component bench is not the product; the number
-that decides it is the harvest ruler above, before and after, and that sweep is
-running. If it does not move the 71.8%, the change does not ship — however good
-the component looks.
+**The first version of that change did nothing and was deleted.** Adding the
+walk as a separate term read 307.3 / 307.9 / 306.8 titles at weights 0, 0.2 and
+0.35 — flat. What shipped instead is smaller: the graph the engine already
+walks is now seeded from your 👁 answers as well as your hearts.
+
+Measured person by person on 60 MovieLens histories, same roster, same seed:
+
+| | titles harvested per person |
+|---|---|
+| co-watch from hearts only | 282.6 |
+| co-watch from hearts + 👁 | **297.9** |
+| difference | **+15.3**, 95% interval [+11.2, +19.5], **+5.4%** |
+
+51 of 60 people improved, 8 got worse, one unchanged. Ranking loss 28.1% →
+26.3%.
+
+Nothing else moved: the 444-person ruler reads 33.8% before and after, and
+`simulate` is 13/13 including the tunnel-vision and exploration guards this
+change could plausibly have broken. Both of those are unchanged **by
+construction** — neither ruler ever produces a 👁, so they run the identical
+code path. That is also why this took two attempts to measure at all.
+
+**What it means for you:** the more you use 👁 instead of ↑, the better the
+deck gets at finding the rest of your library. Before today those answers fed
+nothing.
 
 ## 2.2 · Load still costs about 0.4 seconds · NEEDS A DECISION FROM YOU
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getLocalCatalog, getLocalItem, loadCatalog, vectorOf } from "@/lib/catalog";
+import { getLocalItem, loadCatalog } from "@/lib/catalog";
 import { rank, warmRanker } from "@/lib/engine/rank-client";
 import { COLD_START_TARGET, isCalibrating } from "@/lib/engine/taste";
 import { useDhawq } from "@/lib/store";
@@ -112,44 +112,32 @@ async function fetchRemoteBatch(count: number): Promise<Title[] | null> {
 
 /** local mode: run the engine over the bundled catalog */
 /**
- * Titles the grid harvested but nobody has an opinion on yet.
+ * Titles that must never be dealt again, because the viewer has already
+ * answered them. **Every** swipe counts, 👁 included.
  *
- * The grid answers "have you watched it" and deliberately stops there — thirty
- * taps cannot carry thirty verdicts. So a viewer who marks five hundred titles
- * has a library the site knows they watched and knows nothing about, and until
- * now the deck could never ask, because it excludes everything already swiped.
- * The two surfaces were harvesting into a bucket with no tap on it.
+ * This used to hold `seen` back and re-deal it, on the theory that a grid
+ * somewhere answered "have you watched it" without carrying a verdict, leaving
+ * the deck owing that title a question. A `pendingVerdicts()` helper put every
+ * such title at the *front* of each rebuild.
  *
- * These come first, and they are the best cards the deck will ever have: the
- * viewer has already told us they saw them, so the hit rate is 100% and every
- * answer is pure taste evidence. It is also the cheapest verdict available —
- * no recognition guessing, no gate, no wasted swipe.
- */
-function pendingVerdicts(exclude: Set<string>): Title[] {
-  const state = useDhawq.getState();
-  const out: Title[] = [];
-  for (const sw of Object.values(state.swipes)) {
-    if (sw.action !== "seen" || exclude.has(sw.titleId)) continue;
-    const title = getLocalItem(sw.titleId)?.title ?? sw.title;
-    if (title) out.push(title);
-  }
-  // newest first: what you tapped a minute ago is easier to have an opinion on
-  return out.reverse();
-}
-
-/**
- * Titles that must never be dealt again, because the viewer has already told
- * us what they think of them.
+ * That grid does not exist. `CalibrationGrid` downloads a file and never
+ * touches the store; `TastePicker` writes `liked` plus `learnPasses`, which is
+ * not a swipe at all. The only writers of `seen` are the deck's own 👁 button,
+ * the Library log row and the Discover sheet — and all three are a person
+ * deliberately saying "I watched this and felt nothing about it". That is a
+ * verdict. It is the whole point of the button.
  *
- * A grid tap (`seen`) is deliberately *not* in here: it says "I watched it"
- * and nothing more, so the deck still owes that title a verdict.
+ * So the helper had no legitimate source and exactly one real one: it fed the
+ * deck's own answers straight back into the deck. The user reported it as
+ * pressing 👁 on a few films and then being shown all of them again, every
+ * time, forever — which is precisely what up to `BATCH` re-injected titles at
+ * the head of every rebuild looks like from the outside.
+ *
+ * A title leaves the deck for good when it is answered. It returns only
+ * through `undo`, or by being deleted from the library (`removeSwipe`).
  */
 function answeredIds(): Set<string> {
-  const out = new Set<string>();
-  for (const [id, sw] of Object.entries(useDhawq.getState().swipes)) {
-    if (sw.action !== "seen") out.add(id);
-  }
-  return out;
+  return new Set(Object.keys(useDhawq.getState().swipes));
 }
 
 /**
@@ -170,9 +158,9 @@ function answeredIds(): Set<string> {
  * anyway: a request that costs nothing visible is still a request, and sixteen
  * cards of reserve means the worker is idle when the viewer is fast.
  */
-async function computeLocalBatch(excludeExtra: string[] = []): Promise<Title[]> {
+async function computeLocalBatch(): Promise<Title[]> {
   const state = useDhawq.getState();
-  const exclude = new Set<string>([...Object.keys(state.swipes), ...excludeExtra]);
+  const exclude = new Set<string>(Object.keys(state.swipes));
 
   const likedIds = Object.values(state.swipes)
     .filter((s) => s.action === "liked")
@@ -181,20 +169,17 @@ async function computeLocalBatch(excludeExtra: string[] = []): Promise<Title[]> 
     .filter((s) => s.action === "disliked")
     .map((s) => s.titleId);
 
-  const pending = pendingVerdicts(new Set(excludeExtra)).slice(0, BATCH);
-  if (pending.length >= BATCH) return pending;
-
   const { titles } = await rank({
     mode: "swipe",
     profile: state.profile,
     excludeIds: exclude,
-    count: BATCH - pending.length,
+    count: BATCH,
     seed: state.seed,
     likedIds,
     dislikedIds,
     homeLanguages: homeLanguages(),
   });
-  return [...pending, ...titles];
+  return titles;
 }
 
 /**

@@ -881,12 +881,102 @@ function homeFloor(
   return mass >= LANG_DOOR_MASS ? blended : Math.max(blended, prior);
 }
 
+/**
+ * How strongly this title is co-watched with the ones the viewer confirmed.
+ *
+ * THE SIGNAL THAT STOPS THE COLLAPSE, AND WHY THE OLD ONE RAN OUT.
+ *
+ * A long session falls apart. Measured on 60 real MovieLens histories over
+ * 1,200 cards, titles harvested per hundred:
+ *
+ *     71.5  58.8  49.1  39.4  32.8  27.1  25.7  20.6  19.2  14.8  12.0  11.9
+ *
+ * The one real user's own session has the same shape, 70% to 8%. It is not
+ * exhaustion — 162 of their films are still unfound in the last block, so the
+ * ceiling there is 100 and the number is the efficiency. Splitting it:
+ *
+ *     block  1   library density in the pool 10.7%   found 71.5   lift 6.7x
+ *     block 12   library density in the pool  4.9%   found 11.9   lift 2.4x
+ *
+ * The pool dilutes 2.2x and the *ranking* loses 2.8x, so most of the collapse
+ * is ours. The cause is that the exposure model's only real discriminator is
+ * fame. It opens by dealing the famous titles, which are the ones most people
+ * have seen, and collects a free 6.7x. Once those are gone it is blind:
+ * `watchLikelihood` blends fame with the seen-*facet* tables, and facets are
+ * far too coarse to go deeper. "Comedy · English · 2000s" holds thousands of
+ * titles and this person has watched five percent of them; no amount of facet
+ * evidence separates which five percent.
+ *
+ * The co-watch graph is title-level, so it does not saturate. Benched on 200
+ * MovieLens people, profile built from half their history, asked to float the
+ * other half out of 2,000 random negatives:
+ *
+ *     signal                        AUC     recall@200
+ *     vote count (ships)           0.932      72.0%
+ *     watchLikelihood (ships)      0.957      82.8%
+ *     watchLikelihood + co-watch   0.981      94.0%
+ *
+ * Degree, not the damped walk. The walk version of the same idea benched at
+ * 0.978 / 91.9% — the raw count of edges in either direction is both simpler
+ * and better here, and shipping the walk after measuring the count would be
+ * the proxy mistake this file has made before.
+ *
+ * It carries no genre, no language and no era of its own, which is what makes
+ * it work for everyone rather than for one taste. A horror viewer's confirmed
+ * titles have horror neighbours; a Korean drama viewer's have Korean drama
+ * neighbours. The signal is defined entirely by who is looking at it.
+ */
+function coWatchDegree(watched: Title[] | undefined): ((t: Title) => number) | null {
+  if (!watched?.length) return null;
+  const known = new Set(watched.map((t) => t.id));
+  /**
+   * Inbound edges have to be counted here rather than looked up, because
+   * `related` only points one way. A title the viewer watched listing this one
+   * as a neighbour is exactly as much evidence as the reverse, and the bench
+   * says so: out-edges alone reach 86.8% recall, in-edges alone 88.5%, both
+   * together 89.5%.
+   */
+  const inbound = new Map<string, number>();
+  for (const t of watched) {
+    for (const id of t.related ?? []) {
+      inbound.set(id, (inbound.get(id) ?? 0) + 1);
+    }
+  }
+  return (t: Title) => {
+    let out = 0;
+    for (const id of t.related ?? []) if (known.has(id)) out++;
+    return out + (inbound.get(t.id) ?? 0);
+  };
+}
+
+/**
+ * Weight on the co-watch degree inside the gate's exposure score.
+ *
+ * `watchLikelihood` is a probability in [0,1] and the degree is a small count,
+ * so 0.1 makes a title with a couple of confirmed neighbours outrank one that
+ * is merely a bit more famous, without letting a single edge overwhelm the
+ * prior. It is the weight the bench measured, not a fitted one.
+ *
+ * DEFAULT 0 — THE CODE IS IN, THE BEHAVIOUR IS NOT.
+ *
+ * The bench above is a component test: it ranks 2,000 candidates once, for a
+ * profile built in one shot. The product runs a session, where every card
+ * changes the profile that picks the next one, and this project has twice this
+ * week shipped something a component bench liked and a session ruler could not
+ * see. The sweep that decides this — weights 0 / 0.1 / 0.3, 60 people, 1,200
+ * cards, judged on the last block rather than the total — is running now. This
+ * flips to the weight that raises the tail, or the whole thing comes out.
+ */
+const CO_WATCH_EXPOSURE = num("CO_WATCH_EXPOSURE", 0);
+
 export function fameGate(
   pool: CandidateItem[],
   limit: number,
   facets?: FacetTables,
   profile?: TasteProfile,
-  homeLanguages?: string[]
+  homeLanguages?: string[],
+  /** everything the viewer has confirmed watching, in any of the three ways */
+  watched?: Title[]
 ): CandidateItem[] {
   const { movie, tv } = fameLists(pool);
   const home = homeLanguages?.length ? new Set(homeLanguages) : null;
@@ -904,6 +994,9 @@ export function fameGate(
   const personal = profile && (seenTrust(profile) > 0 || home) ? profile : null;
   const door = languageDoor(profile, homeLanguages);
   const langs = door.size > 0 ? languageLists(pool) : null;
+  // built once per gate call, not per candidate: the inbound map costs one
+  // pass over the viewer's confirmed titles and is then a lookup
+  const degree = coWatchDegree(watched);
 
   const reorder = (list: CandidateItem[], keep: number) => {
     if (!personal || keep >= list.length) return list.slice(0, keep);
@@ -939,13 +1032,15 @@ export function fameGate(
       c,
       w: (() => {
         const prior = famePrior(c.title, home, langIndex);
-        return homeFloor(
+        const blended = homeFloor(
           personal,
           c.title,
           home,
           prior,
           watchLikelihood(personal, titleTokens(c.title), prior)
         );
+        // the term that keeps working after fame stops discriminating
+        return degree ? blended + CO_WATCH_EXPOSURE * degree(c.title) : blended;
       })(),
     }));
     scored.sort((a, b) => b.w - a.w);
@@ -1802,12 +1897,26 @@ export function recommend(
    */
   const homeSet = opts.homeLanguages?.length ? new Set(opts.homeLanguages) : null;
   const langIndex = homeSet ? languageFame(pool) : null;
+  /**
+   * Everything the viewer confirmed watching, whatever they felt about it.
+   *
+   * Dislikes belong here and only here. For *taste* a dislike is the opposite
+   * of a like, which is why the aversion walk pushes away from it — but for
+   * *exposure* it is identical evidence: they saw the film. Leaving them out
+   * would throw away answers for no reason.
+   */
+  const watched = [
+    ...(opts.likedTitles ?? []),
+    ...(opts.seenTitles ?? []),
+    ...(opts.dislikedTitles ?? []),
+  ];
   const gated = fameGate(
     pool,
     fameTierSize(profile, mode),
     mode === "swipe" ? profile.facets : undefined,
     profile,
-    opts.homeLanguages
+    opts.homeLanguages,
+    watched
   );
   const coWatchScale =
     mode === "discover"

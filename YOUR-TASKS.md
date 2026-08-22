@@ -7,6 +7,22 @@ Supabase's URL Configuration points at the live site. Those three were the only
 things blocking cloud accounts, and they are behind us. I have stopped
 reminding you about them.
 
+**The 👁 bug you reported is fixed and pushed.** It was worse than you
+described: the deck did not merely re-suggest the films you had marked — it
+**jammed**. Measured on 44 button presses with every third one 👁: the old build
+dealt 17 distinct films in 44 swipes and got stuck on a single title from swipe
+17 onward, forever. The new build deals 44 distinct films and re-deals nothing.
+
+The cause was mine, and it had been live since 15 August. A helper called
+`pendingVerdicts` collected every 👁 answer and put it at the **front** of every
+rebuild. I wrote it for a grid that says "I watched this" without giving a
+verdict, so the deck could follow up. That grid does not exist — `/calibrate`
+downloads a file and never touches your library. So its only real source was the
+deck's own output feeding straight back into the deck.
+
+**Wait for the deploy before you start the session below.** Render takes a few
+minutes. If the site still jams on a 👁 press, it has not landed yet.
+
 ---
 
 # 1 · Yours — three things, one of them blocking me
@@ -142,3 +158,5 @@ Every item from the eleven screenshots and both recordings:
 - Cloud sync failing silently — Supabase returns errors rather than throwing
   them, so every `catch` in that file was catching nothing. The profile screen
   now says so in plain words.
+- The deck re-dealing every 👁 answer, and jamming on one of them — the deck was
+  feeding its own output back into its own queue.

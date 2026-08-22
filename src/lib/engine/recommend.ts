@@ -882,93 +882,37 @@ function homeFloor(
 }
 
 /**
- * How strongly this title is co-watched with the ones the viewer confirmed.
+ * TRIED TWICE AND REJECTED: co-watch degree as an exposure signal.
  *
- * THE SIGNAL THAT STOPS THE COLLAPSE, AND WHY THE OLD ONE RAN OUT.
+ * The idea was sound and the component evidence was strong. `watchLikelihood`
+ * blends fame with the seen-FACET tables, and facets saturate — "comedy ·
+ * English · 2000s" holds thousands of titles and a person has watched five
+ * percent of them, so no amount of facet evidence says which five percent.
+ * Co-watch degree is title-level and does not saturate. Benched on 200
+ * MovieLens people, half their history held out among 2,000 negatives:
  *
- * A long session falls apart. Measured on 60 real MovieLens histories over
- * 1,200 cards, titles harvested per hundred:
+ *     vote count (ships)           AUC 0.932   recall@200 72.0%
+ *     watchLikelihood (ships)      AUC 0.957   recall@200 82.8%
+ *     watchLikelihood + co-watch   AUC 0.981   recall@200 94.0%
  *
- *     71.5  58.8  49.1  39.4  32.8  27.1  25.7  20.6  19.2  14.8  12.0  11.9
+ * It was placed in the gate, then in the card ordering. Both measured worse on
+ * the goal ruler — 60 people, 1,200 cards, judged on the last block:
  *
- * The one real user's own session has the same shape, 70% to 8%. It is not
- * exhaustion — 162 of their films are still unfound in the last block, so the
- * ceiling there is 100 and the number is the efficiency. Splitting it:
+ *     in the gate       tail 12.1 -> 11.5    harvest 410.9 -> 410.0
+ *     in the ordering   tail 12.1 -> 12.6 / 10.9 / 10.8   at weights .05/.15/.4
+ *                       harvest 410.9 -> ~396.6           lost at ranking 15.7% -> 18.6%
  *
- *     block  1   library density in the pool 10.7%   found 71.5   lift 6.7x
- *     block 12   library density in the pool  4.9%   found 11.9   lift 2.4x
+ * Every weight cost about fourteen titles. The likely mechanism is worth
+ * keeping: `known` is a calibrated probability in [0,1], and adding an
+ * unbounded count to it then clamping saturates a large share of candidates at
+ * 1.0, which destroys the ordering `watchLikelihood` already had. A good
+ * signal added on top of another good signal made both useless.
  *
- * The pool dilutes 2.2x and the *ranking* loses 2.8x, so most of the collapse
- * is ours. The cause is that the exposure model's only real discriminator is
- * fame. It opens by dealing the famous titles, which are the ones most people
- * have seen, and collects a free 6.7x. Once those are gone it is blind:
- * `watchLikelihood` blends fame with the seen-*facet* tables, and facets are
- * far too coarse to go deeper. "Comedy · English · 2000s" holds thousands of
- * titles and this person has watched five percent of them; no amount of facet
- * evidence separates which five percent.
- *
- * The co-watch graph is title-level, so it does not saturate. Benched on 200
- * MovieLens people, profile built from half their history, asked to float the
- * other half out of 2,000 random negatives:
- *
- *     signal                        AUC     recall@200
- *     vote count (ships)           0.932      72.0%
- *     watchLikelihood (ships)      0.957      82.8%
- *     watchLikelihood + co-watch   0.981      94.0%
- *
- * Degree, not the damped walk. The walk version of the same idea benched at
- * 0.978 / 91.9% — the raw count of edges in either direction is both simpler
- * and better here, and shipping the walk after measuring the count would be
- * the proxy mistake this file has made before.
- *
- * It carries no genre, no language and no era of its own, which is what makes
- * it work for everyone rather than for one taste. A horror viewer's confirmed
- * titles have horror neighbours; a Korean drama viewer's have Korean drama
- * neighbours. The signal is defined entirely by who is looking at it.
+ * +11.2 points of recall@200 bought zero titles. That is the third time this
+ * week a component bench has liked something a session could not use, and the
+ * standing rule stands: the goal ruler decides, and a term that fails it comes
+ * out rather than being kept at whichever weight flatters it least.
  */
-function coWatchDegree(watched: Title[] | undefined): ((t: Title) => number) | null {
-  if (!watched?.length) return null;
-  const known = new Set(watched.map((t) => t.id));
-  /**
-   * Inbound edges have to be counted here rather than looked up, because
-   * `related` only points one way. A title the viewer watched listing this one
-   * as a neighbour is exactly as much evidence as the reverse, and the bench
-   * says so: out-edges alone reach 86.8% recall, in-edges alone 88.5%, both
-   * together 89.5%.
-   */
-  const inbound = new Map<string, number>();
-  for (const t of watched) {
-    for (const id of t.related ?? []) {
-      inbound.set(id, (inbound.get(id) ?? 0) + 1);
-    }
-  }
-  return (t: Title) => {
-    let out = 0;
-    for (const id of t.related ?? []) if (known.has(id)) out++;
-    return out + (inbound.get(t.id) ?? 0);
-  };
-}
-
-/**
- * Weight on the co-watch degree inside the gate's exposure score.
- *
- * `watchLikelihood` is a probability in [0,1] and the degree is a small count,
- * so 0.1 makes a title with a couple of confirmed neighbours outrank one that
- * is merely a bit more famous, without letting a single edge overwhelm the
- * prior. It is the weight the bench measured, not a fitted one.
- *
- * DEFAULT 0 — THE CODE IS IN, THE BEHAVIOUR IS NOT.
- *
- * The bench above is a component test: it ranks 2,000 candidates once, for a
- * profile built in one shot. The product runs a session, where every card
- * changes the profile that picks the next one, and this project has twice this
- * week shipped something a component bench liked and a session ruler could not
- * see. The sweep that decides this — weights 0 / 0.1 / 0.3, 60 people, 1,200
- * cards, judged on the last block rather than the total — is running now. This
- * flips to the weight that raises the tail, or the whole thing comes out.
- */
-const CO_WATCH_EXPOSURE = num("CO_WATCH_EXPOSURE", 0);
-
 export function fameGate(
   pool: CandidateItem[],
   limit: number,
@@ -994,9 +938,6 @@ export function fameGate(
   const personal = profile && (seenTrust(profile) > 0 || home) ? profile : null;
   const door = languageDoor(profile, homeLanguages);
   const langs = door.size > 0 ? languageLists(pool) : null;
-  // built once per gate call, not per candidate: the inbound map costs one
-  // pass over the viewer's confirmed titles and is then a lookup
-  const degree = coWatchDegree(watched);
 
   const reorder = (list: CandidateItem[], keep: number) => {
     if (!personal || keep >= list.length) return list.slice(0, keep);
@@ -1039,8 +980,7 @@ export function fameGate(
           prior,
           watchLikelihood(personal, titleTokens(c.title), prior)
         );
-        // the term that keeps working after fame stops discriminating
-        return degree ? blended + CO_WATCH_EXPOSURE * degree(c.title) : blended;
+        return blended;
       })(),
     }));
     scored.sort((a, b) => b.w - a.w);
@@ -1918,8 +1858,6 @@ export function recommend(
     opts.homeLanguages,
     watched
   );
-  /** the same degree function the gate uses, reused by the card ordering */
-  const degree = coWatchDegree(watched);
   const coWatchScale =
     mode === "discover"
       ? COWATCH_ENV ?? CO_WATCH_DISCOVER_SCALE
@@ -1993,33 +1931,8 @@ export function recommend(
      * point of having it is that the argument is testable rather than
      * persuasive.
      */
-    /**
-     * The exposure score the card order is actually built on.
-     *
-     * `known` is `watchLikelihood`, which is fame blended with the seen-facet
-     * tables — and facets saturate. That is why a long session collapses: the
-     * famous titles get dealt first and are mostly ones the viewer has seen,
-     * and after that the model cannot tell which five percent of "comedy ·
-     * English · 2000s" this particular person watched.
-     *
-     * The first attempt at this put the co-watch degree in the *gate*, and it
-     * did nothing — tail 12.1 to 11.5 over 60 people at 1,200 cards. The
-     * numbers said why, and they had been on screen the whole time:
-     *
-     *     lost at the gate      7.2%     <- what the gate change could reach
-     *     lost at the ranking  15.7%     <- where the titles actually die
-     *
-     * The gate already admits 93% of a person's library. Reordering *which*
-     * 3,300 titles are admitted cannot recover cards that were admitted and
-     * then never dealt. So the same signal belongs here, in the score that
-     * orders the cards, where twice as much of the loss lives.
-     */
-    const exposure =
-      degree && CO_WATCH_EXPOSURE > 0
-        ? Math.min(1, known + CO_WATCH_EXPOSURE * degree(c.title))
-        : known;
     const recognitionTerm =
-      TARGET_SEEN > 0 ? 1 - Math.abs(exposure - TARGET_SEEN) * 2 : exposure;
+      TARGET_SEEN > 0 ? 1 - Math.abs(known - TARGET_SEEN) * 2 : known;
     const score =
       W_QUALITY * q +
       wRecognition * recognitionTerm +

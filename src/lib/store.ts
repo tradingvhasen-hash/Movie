@@ -110,14 +110,32 @@ const deferredStorage: PersistStorage<DhawqState> = {
  * it, no strong feeling") is a real answer that maybe one person in ten wants
  * to give often enough to pay a permanent seat for it.
  *
- * So the deck has three verdicts and an undo by default, and the fourth is a
+ * So the deck had three verdicts and an undo by default, and the fourth was a
  * setting. And because a person who *does* turn it on probably wants it under
  * their thumb rather than in a fifth circle, the upward gesture is remappable:
  * it means "haven't seen it" out of the box and can be pointed at "seen it, no
  * opinion" instead.
  *
- * Nothing here changes what the engine learns. These are the same four actions
- * either way — this is which of them the interface makes cheap.
+ * WHAT IT COSTS, RECORDED SO NOBODY RE-DERIVES IT.
+ *
+ * Cross-referencing 78 titles this project's one real user answered twice —
+ * once in the blind calibration grid, once in the deck — the deck disagrees
+ * asymmetrically: 19% of titles he says he watched were recorded as ↑ "haven't
+ * seen", against 3.5% the other way. ↑ is the most damaging of the four: it
+ * tells the engine he never saw a film he did see, and drops the title out of
+ * the library entirely.
+ *
+ * The answer also feeds the ranking: the co-watch graph is seeded from `seen`
+ * as well as `liked`, worth +5.4% on the harvest ruler (paired, 60 people,
+ * p < 0.0001). With the button off by default that gain reaches only people
+ * who turn it on — for everyone else no `seen` answers exist, the seed list
+ * falls back to likes, and the code path is bit-identical to the old one.
+ *
+ * It was flipped on for exactly one commit and flipped back on the product
+ * owner's call: a fifth circle in the row is a real cost, anyone who wants the
+ * answer can switch it on, and the collapse in recognition over a long session
+ * is a far larger problem than this. Kept here as a measured trade, not as a
+ * thing to reopen without new evidence.
  */
 export type Settings = {
   /** show the fourth verdict — "watched it, no strong feeling" — in the row */

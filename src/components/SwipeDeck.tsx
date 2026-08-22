@@ -361,8 +361,21 @@ export default function SwipeDeck() {
    * nothing has been swiped yet — and never on a return from another tab,
    * which is what `demoAlreadyShown()` remembers. See WelcomeDemo.
    */
-  /* ── onboarding: welcome, then the taste picker ── */
-  if (!onboardingSeen && picking) {
+  /**
+   * `picking` is the authority, not `onboardingSeen`.
+   *
+   * `onboardingSeen` flips true the moment `totalSwipes` passes zero, which
+   * used to be safe because the only way to record a swipe from this screen
+   * was to finish it. Importing a library breaks that: the first of five
+   * hundred films unmounts the picker mid-loop, so the person who just handed
+   * over their whole Letterboxd export watches the screen vanish with no count
+   * and no explanation. The import itself survives — the loop is a closure —
+   * but every word of feedback is lost.
+   *
+   * `picking` is only ever set while onboarding, and `onDone` clears it, so
+   * this keeps the screen alive exactly as long as it has something to say.
+   */
+  if (picking) {
     return (
       <TastePicker
         onDone={() => {

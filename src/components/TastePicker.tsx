@@ -7,6 +7,7 @@ import { getLocalCatalog, loadCatalog } from "@/lib/catalog";
 import { resolveSeeds } from "@/lib/data/taste-seeds";
 import { EASE_OUT, FADE_UP, QUICK, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
 import { haptic } from "@/lib/haptics";
+import ImportLibrary from "./ImportLibrary";
 import { useDhawq } from "@/lib/store";
 import type { Title } from "@/lib/types";
 
@@ -181,6 +182,20 @@ export default function TastePicker({ onDone }: { onDone: () => void }) {
           />
         ))}
       </motion.div>
+
+      {/*
+        The faster road, offered next to the slower one rather than hidden
+        behind it. Someone who already keeps a library elsewhere should never
+        be asked to tap thirty posters first.
+      */}
+      <ImportLibrary
+        onDone={(added) => {
+          // let the count land before the screen goes. Importing a whole
+          // library and being thrown straight into the deck reads as though
+          // nothing happened — the number is the receipt.
+          if (added > 0) setTimeout(onDone, 1400);
+        }}
+      />
 
       {/*
         A PILL THAT IS NOT THERE UNTIL THERE IS SOMETHING TO SAY.

@@ -48,6 +48,69 @@ to pass.
 
 ---
 
+# 0 · What your two files said
+
+Both arrived and both were worth having. Everything below is measured, not
+argued.
+
+## Your library is about 755 titles, and the site has 407 of them
+
+Three blind calibration rounds now, and they agree closely: **4.52% · 5.00% ·
+5.50%** of a random draw from the whole catalog. Combined, **5.0%** of 15,083
+titles — call it **755 films and series**, give or take 130.
+
+Across six sessions the deck has dealt you 1,826 distinct titles and you kept
+**407**. So the site holds a bit over half your library, and the goal is the
+rest.
+
+## Your last session was the best one yet, and it still falls off a cliff
+
+31.7% of the cards were things you had seen, against 26.2% and 18.8% for the
+two previous long sessions. But the shape is the real story — recognition per
+hundred cards:
+
+    70%  58%  49%  37%  32%  29%  13%  18%  15%  17%   8%
+
+The first hundred cards are excellent. The last hundred are worse than dealing
+at random from the whole catalog would be.
+
+**This is not the gate being too tight**, which is what I assumed and told you
+last time. Broken down by fame, recognition is nearly flat — 36% for the top
+500, 25% at rank 4,000–8,000. By language it is 98% English on both sides. The
+deck is not wandering off into obscurity; it is running out of the part of your
+library it can find.
+
+## Your swiping under-reports by about a fifth
+
+78 titles appear in both your blind grid and your swipe sessions. They agree
+**92.3%** of the time, and the disagreement is one-sided:
+
+|  | deck said watched | deck said never seen |
+|---|---|---|
+| **grid said watched** | 17 | **4** |
+| **grid said not seen** | 2 | 55 |
+
+So about **19% of your library gets ↑'d** when you swipe, against 3.5% the
+other way. At 42 cards a minute that is not surprising. Your true recognition
+last session was nearer **39%** than the 31.5% the file says — and it means the
+single cheapest improvement available is you slowing down, not me writing code.
+
+## Two things I had wrong, corrected by your data
+
+**Fame is not worthless.** This codebase says in three separate files that a
+vote count predicts recognition at AUC 0.500 — a coin flip — and an expensive
+language-model estimate was commissioned to replace it. Measured properly on
+your blind sample, where the engine did not choose the titles, fame scores
+**0.826**. The old 0.500 came from measuring inside the top 7% of the catalog,
+where range restriction drives any AUC to 0.5 mechanically. It could not have
+come out differently.
+
+**And the replacement never shipped.** The `reach` estimate is present in 0 of
+15,083 catalog titles and its weight is 0 regardless. It has been dead the
+whole time.
+
+---
+
 # 1 · Yours — three things, one of them blocking me
 
 ## 1.1 · Swipe a full session, then export
@@ -95,24 +158,44 @@ those estimates set where the deck's gate stops. Not urgent.
 
 # 2 · Mine — what is actually left
 
-## 2.1 · The deck cannot reach what Discover finds · BLOCKED ON YOUR EXPORT
+## 2.1 · The tail of a long session · IN PROGRESS, NO LONGER BLOCKED
 
-`npx tsx scripts/cold-deck.ts`, measured today, after 3 likes of one genre:
+Your export unblocked this, and it moved the diagnosis.
 
-| genre | own genre /20 | reaches Discover's top 15 | recognised /20 |
-|---|---|---|---|
-| comedy | 19 ✅ | **5** ❌ | **11** ❌ |
-| horror | **11** ❌ | **7** ❌ | **16** ❌ |
-| science fiction | 15 ✅ | 12 ✅ | 19 ✅ |
+On 30 MovieLens strangers run for 1,100 cards each — the length your sessions
+actually are — the site pulls out **71.8%** of a real watch history. The loss
+splits cleanly:
 
-Science fiction is fine. Comedy shows the right genre but too obscure (median
-fame rank 1,887). Horror does not hold the genre at all after three likes.
+    LOST AT RETRIEVAL   9.3%    the gate never admitted it. No ranking can help.
+    LOST AT RANKING    18.9%    it was a candidate and we did not deal it.
 
-**Why I have not fixed it:** that ruler is a synthetic person I invented. The
-last time I tuned the gate against my own invention it measured better and felt
-worse, and you were the one who caught it. Your session is better evidence than
-my guess, and tuning the night before you swipe destroys the ability to
-attribute anything. **Send the export and this becomes my next job.**
+So the gate is not the binding constraint; **the ranking is**, by two to one.
+That is the opposite of what section 2.1 said yesterday, and your data is what
+turned it round.
+
+The change I am measuring now follows from one observation. The co-watch graph
+records *who watched two titles* — it is TMDB's "people who watched this also
+watched", with no opinion in it. The engine seeds that graph from your **likes
+only**. Your 61 👁 answers contributed nothing to it, and neither did anything
+you disliked, though a film you disliked is a film you watched.
+
+On 120 MovieLens histories cut in half, asked to float the unseen half out of
+2,000 random titles:
+
+| signal | AUC | of the held-out half, share in the top 200 |
+|---|---|---|
+| vote count | 0.931 | 77.4% |
+| what ships today | 0.957 | 87.8% |
+| plus the co-watch walk | **0.979** | **94.7%** |
+
+Those intervals do not overlap. Your blind sample points the same way (0.862
+against fame's 0.826) though on 30 titles that gap is inside the noise and I am
+quoting it only for its direction.
+
+**It is not shipped yet.** A component bench is not the product; the number
+that decides it is the harvest ruler above, before and after, and that sweep is
+running. If it does not move the 71.8%, the change does not ship — however good
+the component looks.
 
 ## 2.2 · Load still costs about 0.4 seconds · NEEDS A DECISION FROM YOU
 

@@ -51,6 +51,8 @@ export interface RankRequest {
   seed: number;
   likedIds: string[];
   dislikedIds: string[];
+  /** titles answered 👁 — they join the likes as co-watch seeds */
+  seenIds?: string[];
   homeLanguages?: string[];
   /** discover wants the numbers it displays; the deck only needs an order */
   withReasons?: boolean;
@@ -93,6 +95,7 @@ self.onmessage = async (event: MessageEvent<RankRequest>) => {
       vectorFor: vectorOf,
       likedTitles: titlesFor(req.likedIds),
       dislikedTitles: titlesFor(req.dislikedIds),
+      seenTitles: titlesFor(req.seenIds ?? []),
       homeLanguages: req.homeLanguages,
       mode: req.mode,
     });

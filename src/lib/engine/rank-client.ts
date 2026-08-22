@@ -29,6 +29,8 @@ export interface RankQuery {
   seed: number;
   likedIds: string[];
   dislikedIds: string[];
+  /** titles answered 👁 — they join the likes as co-watch seeds */
+  seenIds?: string[];
   homeLanguages?: string[];
   withReasons?: boolean;
 }
@@ -115,6 +117,7 @@ async function runHere(q: RankQuery): Promise<RankResult> {
     vectorFor: vectorOf,
     likedTitles: titlesFor(q.likedIds),
     dislikedTitles: titlesFor(q.dislikedIds),
+    seenTitles: titlesFor(q.seenIds ?? []),
     homeLanguages: q.homeLanguages,
     mode: q.mode,
   });

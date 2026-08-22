@@ -20,9 +20,13 @@
  * session runs for real: the deck picks a card, the person answers from their
  * history, the profile updates, repeat.
  *
- *     in their history, rated >= 3.5   ->  swipe right
- *     in their history, rated <  3.5   ->  swipe left
- *     not in their history             ->  swipe up
+ *     in their history, rated >= 4     ->  swipe right      ❤️
+ *     in their history, rated 3 - 3.5  ->  watched, no view  👁
+ *     in their history, rated <= 2.5   ->  swipe left        👎
+ *     not in their history             ->  swipe up          ↑
+ *
+ * `VERDICTS=binary` restores the old two-way split at 3.5 — see the note on
+ * VERDICTS below for why it changed and why both are kept.
  *
  * HARVEST is the score: how many titles of their real history the site pulled
  * out of them. Per block, because the shape is the finding — a real session
@@ -88,6 +92,32 @@ const SECONDS_PER_CARD = Number(process.env.SEC_CARD ?? 1.1);
 /** a screen costs a fixed beat to take in, plus a glance per poster */
 const GRID_FIXED = Number(process.env.GRID_FIXED ?? 1.5);
 const GRID_PER_TILE = Number(process.env.GRID_TILE ?? 0.35);
+/**
+ * THE RULER COULD NOT PRODUCE ONE OF THE PRODUCT'S FOUR ANSWERS.
+ *
+ * The deck offers ❤️, 👎, ↑ and 👁 — the last meaning "I watched it and felt
+ * nothing about it". This file mapped every MovieLens rating to like or
+ * dislike at a 3.5 cut, so 👁 never occurred in any simulated session, and the
+ * split it did produce is not a person: **32.5% dislikes**, against 4 dislikes
+ * in 1,101 cards from the one real session on record.
+ *
+ * `three` maps ≥4 to a like, 3 to 3.5 to 👁, and ≤2.5 to a dislike — 45.7% /
+ * 39.1% / 15.2% of MovieLens ratings. A 3-out-of-5 is exactly the answer that
+ * button exists for.
+ *
+ * STATED PLAINLY BECAUSE IT MATTERS: this was changed **after** a sweep of the
+ * exposure walk came back flat, and the reason it came back flat is that the
+ * walk's whole purpose is to use 👁 answers that this ruler never generated.
+ * Changing a ruler after it fails to show what you hoped is the exact mistake
+ * this project has made five times. The defence is that the fault is real and
+ * independent — a ruler that cannot express a quarter of the product's answers
+ * is incomplete whatever it is being used to test — and that `binary`
+ * reproduces the old behaviour exactly, so every number can be quoted both
+ * ways. The old baseline is not being retired, it is being kept alongside.
+ */
+const VERDICTS = process.env.VERDICTS ?? "three";
+/** SEED_SEEN=0 withholds the 👁 answers from the co-watch walk — the control */
+const SEED_SEEN = process.env.SEED_SEEN !== "0";
 const BLOCK = Number(process.env.BLOCK ?? 100);
 const LIMIT = Number(process.env.USERS ?? 60);
 /** how many of their favourites the opening grid collects, as the app does */
@@ -144,6 +174,8 @@ for (const [, history] of users) {
   const shown = new Set<string>();
   const liked: Title[] = [];
   const disliked: Title[] = [];
+  /* the 👁 answers: watched, no strong feeling. Co-watch seeds, nothing else. */
+  const neutral: Title[] = [];
   /** every title the gate has admitted at any point for this person */
   const reachedIds = new Set<string>();
 
@@ -173,6 +205,7 @@ for (const [, history] of users) {
             vectorFor: vf,
             likedTitles: liked,
             dislikedTitles: disliked,
+            seenTitles: SEED_SEEN ? neutral : [],
             mode: "swipe",
           }).map((r) => r.title);
     if (batch.length === 0) {
@@ -196,15 +229,22 @@ for (const [, history] of users) {
           ? "not_seen"
           : MODE === "grid"
             ? "seen"
-            : rating >= 3.5
-              ? "liked"
-              : "disliked";
+            : VERDICTS === "binary"
+              ? rating >= 3.5
+                ? "liked"
+                : "disliked"
+              : rating >= 4
+                ? "liked"
+                : rating >= 3
+                  ? "seen"
+                  : "disliked";
       if (rating !== undefined) {
         harvested[Math.floor(cards / BLOCK)]++;
         found++;
       }
       if (action === "liked") liked.push(title);
       else if (action === "disliked") disliked.push(title);
+      else if (action === "seen") neutral.push(title);
       if (MODE !== "grid") seconds += SECONDS_PER_CARD;
       profile = applySwipe(profile, title, vf(title), action);
       shown.add(title.id);

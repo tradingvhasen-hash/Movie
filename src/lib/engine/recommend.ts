@@ -1468,10 +1468,20 @@ const WALK_FRONTIER = 600;
  * A cheap rolling hash over every id costs microseconds against the 20ms it
  * saves, and cannot collide by construction of the thing it is summarising.
  */
-const walkCache = new WeakMap<
-  CandidateItem[],
-  { key: string; value: Map<string, CoWatch> }
->();
+/**
+ * Keyed by walk, not just by pool.
+ *
+ * This held a single entry per pool, which was right while there was one walk.
+ * There are now up to three in a rebuild — liked, disliked, and everything
+ * watched — and with one slot each call evicts the last, so every walk missed
+ * every time and the cache became pure overhead. Measured before the fix, a
+ * rebuild ran three full walks instead of the one it needed.
+ *
+ * A small Map per pool fixes it. It is bounded because the number of distinct
+ * walks in a rebuild is fixed by the code, not by the data.
+ */
+const walkCache = new WeakMap<CandidateItem[], Map<string, Map<string, CoWatch>>>();
+const WALK_CACHE_MAX = 6;
 
 /**
  * How a co-watch score enters the sum.
@@ -1535,8 +1545,13 @@ export function walkBonus(pool: CandidateItem[], liked: Title[]): Map<string, Co
     for (let i = 0; i < t.id.length; i++) h = (Math.imul(h, 31) + t.id.charCodeAt(i)) | 0;
   }
   const key = `${liked.length}|${h}`;
-  const hit = walkCache.get(pool);
-  if (hit && hit.key === key) return hit.value;
+  let slots = walkCache.get(pool);
+  if (!slots) {
+    slots = new Map();
+    walkCache.set(pool, slots);
+  }
+  const hit = slots.get(key);
+  if (hit) return hit;
 
   const graph = buildGraph(pool);
   const visits = new Map<string, CoWatch>();
@@ -1621,7 +1636,9 @@ export function walkBonus(pool: CandidateItem[], liked: Title[]): Map<string, Co
     }
   }
 
-  walkCache.set(pool, { key, value: visits });
+  // oldest out first: a Map iterates in insertion order
+  if (slots.size >= WALK_CACHE_MAX) slots.delete(slots.keys().next().value as string);
+  slots.set(key, visits);
   return visits;
 }
 
@@ -1644,6 +1661,17 @@ export interface RecommendOptions {
    * *backwards*. See CO_WATCH_AVERSION.
    */
   dislikedTitles?: Title[];
+  /**
+   * The titles they answered 👁 — "watched it, no strong feeling".
+   *
+   * These join `likedTitles` as seeds for the co-watch walk, and nothing else.
+   * The graph is TMDB's record of who *watched* two titles, with no opinion in
+   * it, so a neutral answer is exactly as good a seed as an enthusiastic one —
+   * while being useless as a statement of taste, which is why it stays out of
+   * every other term. One real 1,098-card session marked 61 titles this way
+   * and every one of them was invisible to the graph.
+   */
+  seenTitles?: Title[];
   /** BCP-47 primary subtags the viewer reads, e.g. ["ar"], from the browser */
   homeLanguages?: string[];
   /** candidate id → bonus from collaborative co-occurrence (cloud path) */
@@ -1707,10 +1735,27 @@ export function recommend(
       : W_RECOGNITION_COLD + (W_RECOGNITION_WARM - W_RECOGNITION_COLD) * relax;
   const { facets, facetWeights, streaks, totalSwipes } = profile;
 
-  const coWatch = opts.likedTitles?.length
+  /**
+   * SEEDS FOR THE GRAPH ARE THINGS THEY WATCHED, NOT THINGS THEY LOVED.
+   *
+   * `related` is TMDB's "people who watched this also watched" — a record of
+   * co-viewing with no opinion attached. Seeding it from likes alone was a
+   * category error that cost every neutral answer: 61 of them in the one real
+   * long session on record, all invisible to the graph they were perfectly
+   * good evidence for.
+   *
+   * Dislikes stay out. They are handled by the aversion walk below, which
+   * pushes *away* from that neighbourhood, and feeding the same titles to both
+   * would have the two terms cancel.
+   */
+  const affinitySeeds =
+    opts.seenTitles?.length && opts.likedTitles?.length
+      ? [...opts.likedTitles, ...opts.seenTitles]
+      : (opts.seenTitles?.length ? opts.seenTitles : opts.likedTitles);
+  const coWatch = affinitySeeds?.length
     ? process.env?.WALK === "0"
-      ? coWatchBonus(opts.likedTitles)
-      : walkBonus(pool, opts.likedTitles)
+      ? coWatchBonus(affinitySeeds)
+      : walkBonus(pool, affinitySeeds)
     : null;
 
   /**
@@ -1768,6 +1813,7 @@ export function recommend(
     mode === "discover"
       ? COWATCH_ENV ?? CO_WATCH_DISCOVER_SCALE
       : DECK_ENV ?? CO_WATCH_DECK_SCALE;
+
 
   // centre of meaning for everything the viewer has liked
   let soulCentre: number[] | null = null;

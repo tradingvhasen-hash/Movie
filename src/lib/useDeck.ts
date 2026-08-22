@@ -168,6 +168,17 @@ async function computeLocalBatch(): Promise<Title[]> {
   const dislikedIds = Object.values(state.swipes)
     .filter((s) => s.action === "disliked")
     .map((s) => s.titleId);
+  /**
+   * The 👁 answers.
+   *
+   * The co-watch graph records who *watched* two titles, not who enjoyed them,
+   * so a neutral answer seeds it exactly as well as a heart does. Before this
+   * they seeded nothing: one real session marked 61 titles that way and every
+   * one was invisible to the graph.
+   */
+  const seenIds = Object.values(state.swipes)
+    .filter((s) => s.action === "seen")
+    .map((s) => s.titleId);
 
   const { titles } = await rank({
     mode: "swipe",
@@ -177,6 +188,7 @@ async function computeLocalBatch(): Promise<Title[]> {
     seed: state.seed,
     likedIds,
     dislikedIds,
+    seenIds,
     homeLanguages: homeLanguages(),
   });
   return titles;

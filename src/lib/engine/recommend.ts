@@ -63,7 +63,18 @@ export interface CandidateItem {
  * reaches inside the viewer's own corner — a supply problem, not a weighting
  * one, which is the third time today that has been the answer.
  */
-const W_FACETS = 1.6;
+const num2 = (k: string, d: number) =>
+  typeof process !== "undefined" && process.env?.[k] ? Number(process.env[k]) : d;
+
+/**
+ * Made settable so the crowding-out hypothesis is testable rather than
+ * arguable. A term's influence on an ordering is its weight times its
+ * SPREAD, and these two terms do not have the same spread: the facet score
+ * runs over [-1, 1] while `watchLikelihood` is a probability bunched around
+ * 0.5. That would explain why tripling the recognition weight moved the tail
+ * by 0.2 — the wide term still wins.
+ */
+const W_FACETS = num2("W_FACETS", 1.6);
 /**
  * Weight of the meaning signal, when meaning-vectors are supplied.
  *
@@ -95,8 +106,6 @@ const W_QUALITY = 0.25;
  * established: a perfectly-matched film with 300 ratings is still a film the
  * user has never heard of, and a deck of those reads as random.
  */
-const num2 = (k: string, d: number) =>
-  typeof process !== "undefined" && process.env?.[k] ? Number(process.env[k]) : d;
 const W_RECOGNITION_COLD = num2("W_REC_COLD", 0.9);
 const W_RECOGNITION_WARM = num2("W_REC_WARM", 0.55);
 /**

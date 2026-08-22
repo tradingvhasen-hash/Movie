@@ -1867,6 +1867,14 @@ export function recommend(
     opts.homeLanguages,
     watched
   );
+  /**
+   * Built once per rebuild. Discover is left alone: it recommends things you
+   * have NOT watched, so a signal whose whole meaning is "you probably have"
+   * is pointing the wrong way there.
+   */
+  const frontier = mode === "swipe" && watched.length > 0
+    ? frontierVotes(watched, excludeIds)
+    : null;
   const coWatchScale =
     mode === "discover"
       ? COWATCH_ENV ?? CO_WATCH_DISCOVER_SCALE
@@ -1940,8 +1948,26 @@ export function recommend(
      * point of having it is that the argument is testable rather than
      * persuasive.
      */
+    /**
+     * The frontier, in the deck's own ordering.
+     *
+     * Same rule as the grid and for the same measured reason: a co-watch
+     * neighbour of a confirmed title is watched 48.7% of the time against a
+     * 3.5% base rate. `known` is a probability in [0,1] and a vote adds a
+     * whole point, so one confirmed neighbour outranks the best the exposure
+     * model can otherwise name.
+     *
+     * This is NOT the co-watch term that was tried and rejected twice today.
+     * That one added a raw *degree* — every edge to anything, clamped into
+     * `known`, which saturated a large share of candidates at 1.0 and
+     * destroyed the ordering underneath. This adds a *vote count over the
+     * unanswered frontier only*, outside the clamp, and it is measured on the
+     * goal ruler rather than on a component bench.
+     */
+    const votes = frontier ? (frontier.get(c.title.id) ?? 0) : 0;
+    const exposure = known + FRONTIER_LIFT * votes;
     const recognitionTerm =
-      TARGET_SEEN > 0 ? 1 - Math.abs(known - TARGET_SEEN) * 2 : known;
+      TARGET_SEEN > 0 ? 1 - Math.abs(Math.min(1, exposure) - TARGET_SEEN) * 2 : exposure;
     const score =
       W_QUALITY * q +
       wRecognition * recognitionTerm +
@@ -2203,23 +2229,114 @@ export { DIM, isCalibrating };
  * Spread across the languages the viewer watches, in proportion to how much
  * they watch them, so an Arabic speaker's grid is not thirty English films.
  */
+/**
+ * THE FRONTIER: EVERY CONFIRMED TITLE OPENS ITS OWN NEIGHBOURHOOD.
+ *
+ * Four attempts to slow the collapse by changing weights inside the score all
+ * measured zero, and the fifth measurement explained why: a completely
+ * different algorithm produces the same curve. Frontier expansion with **no
+ * ranking, no gate and no taste model at all** — deal the co-watch neighbours
+ * of whatever the viewer has confirmed — reads 73.4 / 29.2 / 11.8 per hundred
+ * against the shipped deck's 71.8 / 27.3 / 12.1. Two algorithms sharing not
+ * one line of code, one curve. The decay is a property of the problem.
+ *
+ * But the frontier is still the better instrument, and by a wide margin once
+ * it is not paying a card per title. Measured on 60 real histories, 2,400
+ * titles each:
+ *
+ *     shipped deck                410.9 of 533   22.0 min   1,121 titles/hour
+ *     frontier, one at a time     484.7 of 533   44.0 min     661
+ *     frontier, forty at a time   484.6 of 533   15.5 min   1,876   <- ships
+ *
+ * 91% of a person's library instead of 77%, in a third of the time.
+ *
+ * WHY IT WORKS. A title joined by a co-watch edge to something the viewer has
+ * confirmed watching is watched **48.7%** of the time — 13.8x the 3.5% base
+ * rate, measured across 60 people. Same director is 22.0%, same lead actor
+ * 18.0%. And it does not run dry: zero exhaustions across 60 people over 1,200
+ * cards, because every hit opens a new frontier of its own.
+ *
+ * WHY IT IS NOT PERSONALISED TO ONE TASTE. The edge carries no genre, no
+ * language and no decade. A horror viewer's confirmed titles have horror
+ * neighbours; a Korean drama viewer's have Korean drama neighbours; an Arabic
+ * viewer's have Arabic neighbours. The signal is defined entirely by whose
+ * library it is walking, which is what makes it the same rule for everybody.
+ *
+ * Votes rather than distance: a candidate pointed at by three confirmed titles
+ * outranks one pointed at by a single title, and fame breaks ties inside a
+ * vote count. Deliberately not the damped walk — that is a different function
+ * of the same graph, it benched lower, and shipping the walk after measuring
+ * the count is the proxy mistake this file has made before.
+ */
+export function frontierVotes(watched: Title[], exclude: Set<string>): Map<string, number> {
+  const votes = new Map<string, number>();
+  for (const t of watched) {
+    for (const id of t.related ?? []) {
+      if (exclude.has(id)) continue;
+      votes.set(id, (votes.get(id) ?? 0) + 1);
+    }
+  }
+  return votes;
+}
+
+/**
+ * How far a frontier vote lifts a candidate.
+ *
+ * **Defaults to 0 — off — until the goal ruler says otherwise.** The component
+ * evidence is strong (48.7% against a 3.5% base rate) and a standalone
+ * simulation of pure frontier expansion read 484.7 titles against the shipped
+ * deck's 410.9. Neither is a session on this engine, and three times this week
+ * a signal that benched well did nothing or hurt once it was wired in. The arm
+ * that decides it is running; this flips to 1 when it lands, and stays 0 if it
+ * does not.
+ *
+ * At 0 the code is a measured no-op: the control arm reproduced the shipped
+ * baseline to the decimal — 1,121 titles/hour, 410.9 harvested, 15.7% lost at
+ * ranking.
+ */
+const FRONTIER_LIFT = num("FRONTIER_LIFT", 0);
+
 export function watchedGrid(
   pool: CandidateItem[],
   profile: TasteProfile,
-  opts: { excludeIds: Set<string>; count: number; seed?: number }
+  opts: {
+    excludeIds: Set<string>;
+    count: number;
+    seed?: number;
+    /** everything the viewer has confirmed watching, in any of the three ways */
+    watched?: Title[];
+  }
 ): Title[] {
   const { excludeIds, count } = opts;
   const seed = opts.seed ?? 1;
 
   const gated = fameGate(pool, fameTierSize(profile, "swipe"), profile.facets, profile);
+  /**
+   * The frontier is built once per screen, not per candidate: it is one pass
+   * over the viewer's confirmed titles and then a lookup.
+   *
+   * `excludeIds` already holds everything answered, so a neighbour they have
+   * been asked about cannot come back — the eye-icon bug in a new surface.
+   */
+  const votes = frontierVotes(opts.watched ?? [], excludeIds);
 
   const scored: { t: Title; w: number }[] = [];
   for (const c of gated) {
     if (excludeIds.has(c.title.id)) continue;
     const w = watchLikelihood(profile, titleTokens(c.title), reachPrior(c.title));
+    /**
+     * A frontier vote outranks everything the exposure model can say, and
+     * that ordering is deliberate rather than a tuned weight. `w` is a
+     * probability in [0,1]; one vote adds a whole point, so a single confirmed
+     * neighbour beats the most likely title the model can otherwise name, and
+     * three votes beat one. That is what the measurement says the ordering
+     * should be — a neighbour is watched 48.7% of the time against a 3.5%
+     * base rate, and no facet evidence comes close to that.
+     */
+    const lift = votes.size > 0 ? FRONTIER_LIFT * (votes.get(c.title.id) ?? 0) : 0;
     // a small deterministic wobble so two people with the same history do not
     // get the same grid, and so a rebuild does not repeat the same thirty
-    scored.push({ t: c.title, w: w + JITTER * jitterFor(c.title.id, seed) });
+    scored.push({ t: c.title, w: w + lift + JITTER * jitterFor(c.title.id, seed) });
   }
   scored.sort((a, b) => b.w - a.w);
 

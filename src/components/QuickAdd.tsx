@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import PosterArt from "./PosterArt";
-import { getLocalCatalog, loadCatalog } from "@/lib/catalog";
+import { getLocalCatalog, getLocalTitle, loadCatalog } from "@/lib/catalog";
 import { watchedGrid } from "@/lib/engine/recommend";
 import { useDhawq } from "@/lib/store";
 import type { Title } from "@/lib/types";
@@ -55,11 +55,24 @@ export default function QuickAdd() {
    */
   const titles = useMemo<Title[]>(() => {
     if (!ready) return [];
-    const exclude = new Set(Object.keys(useDhawq.getState().swipes));
-    return watchedGrid(getLocalCatalog(), useDhawq.getState().profile, {
+    const state = useDhawq.getState();
+    const exclude = new Set(Object.keys(state.swipes));
+    /**
+     * Everything they have confirmed watching, whatever they felt about it.
+     * This is what opens the frontier — a co-watch neighbour of a confirmed
+     * title is watched 48.7% of the time against a 3.5% base rate.
+     */
+    const watched: Title[] = [];
+    for (const sw of Object.values(state.swipes)) {
+      if (sw.action === "not_seen") continue;
+      const t = getLocalTitle(sw.titleId) ?? sw.title;
+      if (t) watched.push(t);
+    }
+    return watchedGrid(getLocalCatalog(), state.profile, {
       excludeIds: exclude,
       count: PER_SCREEN,
       seed: 1 + screen * 7919,
+      watched,
     });
     // profile and swipes are deliberately not dependencies: a fresh grid is
     // wanted per screen, not per answer

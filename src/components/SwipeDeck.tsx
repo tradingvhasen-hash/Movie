@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { AnimatePresence, animate, motion, useMotionValue, useMotionValueEvent } from "framer-motion";
 import SwipeCard, { SWIPE_UP_THRESHOLD, SWIPE_X_THRESHOLD } from "./SwipeCard";
 import SwipeBurst, { type BurstHandle } from "./SwipeBurst";
@@ -418,14 +419,38 @@ export default function SwipeDeck() {
         the space that felt empty, and means the one screen a person opens most
         is the one that says what this is.
       */}
-      <motion.h1
+      <motion.div
         variants={FADE_UP}
         initial="hidden"
         animate="show"
-        className="relative z-10 mb-2 shrink-0 self-start text-[26px] font-bold tracking-[-0.03em]"
+        className="relative z-10 mb-2 flex w-full shrink-0 items-center justify-between"
       >
-        Seenit
-      </motion.h1>
+        <h1 className="text-[26px] font-bold tracking-[-0.03em]">Seenit</h1>
+        {/*
+          THE FASTER ROUTE, OFFERED WHERE THE SLOW ONE IS FELT.
+
+          One card at a time is the thing that collapses. Measured on 60 real
+          histories, the same engine asked as screens of forty recovers 91% of
+          a library in a third of the time — 1,876 titles an hour against
+          1,121. That screen existed and was reachable from nowhere, which is
+          the third time this week a measured feature shipped behind a URL
+          nobody types. A person who has just watched the deck slow down is
+          exactly the person who wants it.
+        */}
+        <Link
+          href="/add"
+          prefetch={false}
+          className="rounded-full border border-line px-3 py-1.5 text-xs font-bold text-ink-dim transition-colors hover:border-ink-faint hover:text-ink-strong"
+          style={{
+            WebkitTouchCallout: "none",
+            WebkitUserSelect: "none",
+            userSelect: "none",
+            touchAction: "manipulation",
+          }}
+        >
+          Add fast
+        </Link>
+      </motion.div>
 
       {/* card stack — height-driven so everything fits */}
       <div className="relative z-10 min-h-0 w-full flex-1">

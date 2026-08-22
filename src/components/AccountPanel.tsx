@@ -26,7 +26,7 @@ import { FADE_UP } from "@/lib/motion";
 import { GoogleIcon, LoginIcon } from "./ui/Icons";
 
 export default function AccountPanel() {
-  const { session, ready, enabled, busy, error, signInWithGoogle, signOut } =
+  const { session, ready, enabled, busy, error, sync, signInWithGoogle, signOut } =
     useAccount();
 
   if (!enabled) {
@@ -48,20 +48,48 @@ export default function AccountPanel() {
       (session.user.user_metadata?.full_name as string | undefined) ??
       session.user.email ??
       "Signed in";
+    /**
+     * ONE LINE THAT SAYS WHETHER THE BACKUP IS REAL.
+     *
+     * Signing in makes a promise — your history follows you to another device —
+     * and until today nothing on this screen could tell you whether that
+     * promise was being kept. Every sync call was wrapped in a bare `catch {}`,
+     * which is correct for a dropped connection and dangerously wrong for a
+     * permission that was never granted: you would sign in, see a clean screen,
+     * swipe for a week, open the app elsewhere and find it empty.
+     *
+     * Silent while it works — a green tick is noise on a screen where success
+     * is the expected state. Loud, and quoting the database verbatim, when it
+     * does not.
+     */
+    const failing = sync !== "idle" && sync !== "ok" && sync !== "working";
     return (
-      <motion.div variants={FADE_UP} className="flex items-center justify-between gap-4">
-        <div className="min-w-0">
-          <p className="truncate font-semibold">{name}</p>
-          <p className="truncate text-xs text-ink-faint">{session.user.email}</p>
+      <motion.div variants={FADE_UP} className="flex flex-col gap-3">
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <p className="truncate font-semibold">{name}</p>
+            <p className="truncate text-xs text-ink-faint">{session.user.email}</p>
+          </div>
+          <button
+            type="button"
+            onClick={signOut}
+            disabled={busy}
+            className="shrink-0 rounded-full border border-line px-4 py-2 text-sm font-semibold text-ink-dim transition-colors hover:text-ink disabled:opacity-40"
+          >
+            Sign out
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={signOut}
-          disabled={busy}
-          className="shrink-0 rounded-full border border-line px-4 py-2 text-sm font-semibold text-ink-dim transition-colors hover:text-ink disabled:opacity-40"
-        >
-          Sign out
-        </button>
+        {failing && (
+          <div className="rounded-2xl border border-danger/30 bg-danger/[0.06] px-4 py-3">
+            <p className="text-[13px] font-semibold text-danger">
+              Your history is not reaching the cloud
+            </p>
+            <p className="mt-1 text-[11.5px] leading-relaxed text-ink-dim">
+              Everything is safe on this device and nothing has been lost, but it
+              will not appear on another one. The database said: {String(sync)}
+            </p>
+          </div>
+        )}
       </motion.div>
     );
   }

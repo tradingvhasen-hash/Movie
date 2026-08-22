@@ -99,6 +99,10 @@ export async function syncLocalToCloud(userId: string): Promise<void> {
   const state = useDhawq.getState();
   const swipes = Object.values(state.swipes);
 
+  /* collected rather than logged: the caller turns these into the one line the
+     profile screen shows, and `console.warn` reaches nobody on a phone */
+  const rejected: string[] = [];
+
   if (swipes.length > 0) {
     /**
      * SWIPES USED TO BE THROWN AWAY HERE, SILENTLY, AND MOST OF THEM WERE.
@@ -148,18 +152,31 @@ export async function syncLocalToCloud(userId: string): Promise<void> {
       if (kept.length === 0) continue;
       const retry = await supabase.from("swipes").upsert(kept);
       if (retry.error) {
-        console.warn(
-          `dhawq: ${batch.length} swipes rejected by the database`,
-          retry.error.message
-        );
+        /**
+         * THE SUPABASE CLIENT DOES NOT THROW. IT RETURNS.
+         *
+         * `{ data, error }`, always resolved — so `await`ing one of these calls
+         * and not reading `.error` means a rejected write is indistinguishable
+         * from a successful one. Every caller above wrapped these in
+         * `try/catch`, which caught network faults and could never once have
+         * caught a permission denial or a missing column.
+         *
+         * That mattered the moment sign-in started working: a policy that says
+         * no would have looked exactly like a policy that says yes, for as long
+         * as anyone cared to keep swiping.
+         */
+        rejected.push(retry.error.message);
       }
     }
   }
 
   // the profile goes up whole, or not at all
   if (state.profile.totalSwipes > 0) {
-    await supabase.from("user_taste").upsert(toRow(userId, state.profile));
+    const { error } = await supabase.from("user_taste").upsert(toRow(userId, state.profile));
+    if (error) throw new Error(error.message);
   }
+
+  if (rejected.length > 0) throw new Error(rejected[0]);
 
   for (const list of state.lists) {
     const { data: created } = await supabase
@@ -208,7 +225,10 @@ export async function pushProfile(userId: string): Promise<void> {
   if (!supabase) return;
   const { profile } = useDhawq.getState();
   if (profile.totalSwipes === 0) return;
-  await supabase.from("user_taste").upsert(toRow(userId, profile));
+  const { error } = await supabase.from("user_taste").upsert(toRow(userId, profile));
+  /* see the note in `syncLocalToCloud`: an unread `.error` here is a backup
+     that silently is not one */
+  if (error) throw new Error(error.message);
 }
 
 export type { TasteRow };

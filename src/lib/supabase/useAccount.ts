@@ -7,6 +7,14 @@ import { loadCloudProfile, syncLocalToCloud, pushProfile } from "./sync";
 import { useDhawq } from "@/lib/store";
 
 /**
+ * "idle" — signed out, nothing to do.
+ * "working" — a reconcile or a push is in flight.
+ * "ok" — the cloud has everything this device has.
+ * anything else — the failure message, shown to the user verbatim.
+ */
+export type SyncState = "idle" | "working" | "ok" | (string & {});
+
+/**
  * Account state, and the one rule that governs it: **a swipe is never lost.**
  *
  * Everything works signed out. Local storage is the source of truth on the
@@ -29,6 +37,8 @@ export type AccountState = {
   busy: boolean;
   error: string | null;
   notice: string | null;
+  /** whether the cloud copy is actually happening — see SyncState */
+  sync: SyncState;
   signUp: (email: string, password: string) => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
@@ -64,11 +74,33 @@ export function useAccount(): AccountState {
     };
   }, []);
 
+  /**
+   * WHETHER THE CLOUD COPY IS ACTUALLY HAPPENING.
+   *
+   * Every sync call in this file was wrapped in a bare `catch {}` with the
+   * comment "offline is not an error the user needs to see". That was written
+   * before accounts could be created at all, and as a statement about a dropped
+   * connection it is still right — a swipe is never lost, local storage is the
+   * source of truth, and a failed upload costs nothing you can feel today.
+   *
+   * It is wrong as a statement about a *persistent* failure. The moment sign-in
+   * started working, this code path ran for the first time against a real
+   * account — and if a policy denies the write, or a column the migration was
+   * supposed to add is missing, it fails exactly as quietly as a train tunnel
+   * does. The user would sign in, see nothing wrong, swipe for a week, open the
+   * app on a second device and find it empty.
+   *
+   * So the outcome is now recorded and returned. Silent while it is working,
+   * and one honest line on the profile when it is not.
+   */
+  const [sync, setSync] = useState<SyncState>("idle");
+
   /* ── on sign-in: reconcile the two histories, once ── */
   const userId = session?.user.id ?? null;
   useEffect(() => {
     if (!userId) return;
     let alive = true;
+    setSync("working");
     (async () => {
       try {
         const cloud = await loadCloudProfile(userId);
@@ -80,8 +112,9 @@ export function useAccount(): AccountState {
           // nothing there, or thinner than what is here — push ours up
           await syncLocalToCloud(userId);
         }
-      } catch {
-        /* offline is not an error the user needs to see */
+        if (alive) setSync("ok");
+      } catch (e) {
+        if (alive) setSync(e instanceof Error ? e.message : "failed");
       }
     })();
     return () => {
@@ -99,7 +132,13 @@ export function useAccount(): AccountState {
       if (state.profile.totalSwipes === prev.profile.totalSwipes) return;
       if (timer) clearTimeout(timer);
       // a burst of swipes becomes one write
-      timer = setTimeout(() => void pushProfile(userId).catch(() => {}), 4000);
+      timer = setTimeout(
+        () =>
+          void pushProfile(userId)
+            .then(() => setSync("ok"))
+            .catch((e: unknown) => setSync(e instanceof Error ? e.message : "failed")),
+        4000
+      );
     });
     return () => {
       if (timer) clearTimeout(timer);
@@ -198,6 +237,7 @@ export function useAccount(): AccountState {
     session,
     ready,
     enabled,
+    sync,
     busy,
     error,
     notice,

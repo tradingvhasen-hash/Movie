@@ -1918,6 +1918,8 @@ export function recommend(
     opts.homeLanguages,
     watched
   );
+  /** the same degree function the gate uses, reused by the card ordering */
+  const degree = coWatchDegree(watched);
   const coWatchScale =
     mode === "discover"
       ? COWATCH_ENV ?? CO_WATCH_DISCOVER_SCALE
@@ -1991,8 +1993,33 @@ export function recommend(
      * point of having it is that the argument is testable rather than
      * persuasive.
      */
+    /**
+     * The exposure score the card order is actually built on.
+     *
+     * `known` is `watchLikelihood`, which is fame blended with the seen-facet
+     * tables — and facets saturate. That is why a long session collapses: the
+     * famous titles get dealt first and are mostly ones the viewer has seen,
+     * and after that the model cannot tell which five percent of "comedy ·
+     * English · 2000s" this particular person watched.
+     *
+     * The first attempt at this put the co-watch degree in the *gate*, and it
+     * did nothing — tail 12.1 to 11.5 over 60 people at 1,200 cards. The
+     * numbers said why, and they had been on screen the whole time:
+     *
+     *     lost at the gate      7.2%     <- what the gate change could reach
+     *     lost at the ranking  15.7%     <- where the titles actually die
+     *
+     * The gate already admits 93% of a person's library. Reordering *which*
+     * 3,300 titles are admitted cannot recover cards that were admitted and
+     * then never dealt. So the same signal belongs here, in the score that
+     * orders the cards, where twice as much of the loss lives.
+     */
+    const exposure =
+      degree && CO_WATCH_EXPOSURE > 0
+        ? Math.min(1, known + CO_WATCH_EXPOSURE * degree(c.title))
+        : known;
     const recognitionTerm =
-      TARGET_SEEN > 0 ? 1 - Math.abs(known - TARGET_SEEN) * 2 : known;
+      TARGET_SEEN > 0 ? 1 - Math.abs(exposure - TARGET_SEEN) * 2 : exposure;
     const score =
       W_QUALITY * q +
       wRecognition * recognitionTerm +

@@ -158,7 +158,20 @@ function sendCatalog(w: Worker): Promise<void> {
 export function rank(q: RankQuery): Promise<RankResult> {
   const w = getWorker();
   if (!w) return runHere(q);
-  void sendCatalog(w);
+  /**
+   * The catalog must reach the worker BEFORE the first rank request does.
+   *
+   * This was `void sendCatalog(w)` — fire and forget — which loses the race
+   * it was written to win. A rank request posted first makes the worker call
+   * `loadCatalog()` and fetch its own copy, and the handoff then arrives to
+   * find `loadPromise` already set and quietly does nothing. The second
+   * download it exists to prevent happened anyway, now 24 MB, while the deck
+   * waited on it.
+   */
+  return sendCatalog(w).then(() => rankViaWorker(w, q));
+}
+
+function rankViaWorker(w: Worker, q: RankQuery): Promise<RankResult> {
 
   const id = nextId++;
   const req: RankRequest = {

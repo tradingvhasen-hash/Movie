@@ -24,7 +24,7 @@ import { t } from "@/lib/i18n";
 import type { SwipeAction } from "@/lib/types";
 
 export default function SwipeDeck() {
-  const { queue, hydrated, swipeTop, undo, canUndo, refill } = useDeck();
+  const { queue, hydrated, filled, swipeTop, undo, canUndo, refill } = useDeck();
   /**
    * Someone who came in through the grid has already answered thirty
    * questions, and greeting them with "Swipe cards so we learn your taste"
@@ -457,7 +457,23 @@ export default function SwipeDeck() {
         <div className="relative mx-auto h-full w-fit">
           <div className="relative h-full max-w-[80vw]" style={{ aspectRatio: "10 / 14.6" }}>
             <AnimatePresence>
-              {queue.length === 0 && (
+              {/*
+                `hydrated` matters here, and it did not before.
+                
+                This read `queue.length === 0` alone, which is true for two
+                completely different reasons: the viewer has swiped everything,
+                or the catalog has not arrived yet. At 15,083 titles the second
+                case lasted a moment and nobody saw it. At 48,553 the download
+                takes about 75 seconds on a phone, and for all of it the deck
+                announced an empty deck and offered to reset cards that had
+                never been dealt — telling somebody they had run out before
+                they began.
+
+                `hydrated` is false until `loadCatalog()` resolves, so this now
+                says what it means: empty because you finished, not empty
+                because we are still loading.
+              */}
+              {hydrated && filled && queue.length === 0 && (
                 <motion.div
                   key="empty"
                   variants={SECTION}

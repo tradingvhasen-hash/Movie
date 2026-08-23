@@ -128,10 +128,26 @@ await page.waitForTimeout(600); // the store batches its writes for 400ms
 await page.goto(BASE + "/", { waitUntil: "domcontentloaded" });
 await page.waitForTimeout(3000);
 
+/**
+ * Count what a person can SEE, not what is in the DOM.
+ *
+ * This counted every matching node, which silently included the empty-deck
+ * card while it was mounted but invisible. At 15,083 titles the first ranking
+ * came back inside the 3s wait above and nothing was caught; at 48,553 it does
+ * not, and the count came back 6 against an expected 5 — reporting a failure
+ * for a "Reset all cards" button that screenshots at 1s, 3s and 6s confirm is
+ * never visible to anybody.
+ *
+ * `offsetParent === null` is the cheap, exact test for "not rendered", and it
+ * makes this check mean what its name says.
+ */
 const onScreen = await page
   .locator(".swipe-stage button, .swipe-actions button")
   .evaluateAll((els) =>
-    els.map((e) => e.getAttribute("aria-label") || e.textContent?.trim()).filter(Boolean)
+    els
+      .filter((e) => e.offsetParent !== null)
+      .map((e) => e.getAttribute("aria-label") || e.textContent?.trim())
+      .filter(Boolean)
   );
 
 /* ── every answer, in rotation, deep enough to force several rebuilds ── */

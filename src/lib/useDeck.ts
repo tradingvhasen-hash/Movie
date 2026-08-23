@@ -243,6 +243,9 @@ export function useDeck() {
 
   const [queue, setQueue] = useState<Title[]>([]);
   const [hydrated, setHydrated] = useState(false);
+  /** true once a ranking against the REAL catalog has come back — see `install` */
+  const [filled, setFilled] = useState(false);
+  const hydratedRef = useRef(false);
   const queueRef = useRef<Title[]>([]);
   queueRef.current = queue;
   const cancelPending = useRef<(() => void) | null>(null);
@@ -287,6 +290,26 @@ export function useDeck() {
       }
       setQueue(next);
       queueRef.current = next;
+      /**
+       * A ranking has come back — but only count it if it ranked the REAL
+       * catalog.
+       *
+       * Two separate windows could make the deck look finished when it was
+       * only loading, and the second is why a screenshot still showed "Reset
+       * all cards" three seconds into a returning visit:
+       *
+       *   1. the catalog file has not arrived. `hydrated` covers this.
+       *   2. it has not arrived, a rebuild ran anyway against the 50-title
+       *      fallback set, the viewer had already answered those in
+       *      onboarding, and so the rank came back EMPTY and marked the deck
+       *      filled. Nothing covered this.
+       *
+       * Gating on `hydratedRef` closes the second: an install that happened
+       * before the real catalog landed does not get to say the deck is empty.
+       * A ref rather than the state value because `install` is called from
+       * callbacks that captured an older render.
+       */
+      if (hydratedRef.current) setFilled(true);
     };
 
     /**
@@ -330,6 +353,7 @@ export function useDeck() {
       // a library saved by an older build carries a copy of every title it
       // already has in catalog.json; drop those now that we can check
       useDhawq.getState().compactSwipes();
+      hydratedRef.current = true;
       setHydrated(true);
       rebuild();
     });
@@ -393,6 +417,7 @@ export function useDeck() {
   return {
     queue,
     hydrated,
+    filled,
     swipeTop,
     undo: undoWithRerank,
     canUndo,

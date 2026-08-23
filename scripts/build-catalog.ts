@@ -223,51 +223,110 @@ async function tmdb(path: string, params: Record<string, string> = {}): Promise<
  * have actually heard of — the old year slices were what dragged in the
  * obscure regional tail.
  */
-async function collectIds(type: TitleType, want: number): Promise<number[]> {
-  const ids = new Set<number>();
+/**
+ * A QUOTA PER LANGUAGE, MOST-WATCHED FIRST.
+ *
+ * What this replaces: a global sweep sorted by vote count, topped up by
+ * per-language passes. `sort_by=vote_count.desc` across the whole of TMDB is
+ * an English ranking — every page is English until long past any target — so
+ * the global sweep decided most of the catalog and the other languages
+ * scrambled for leftovers. It produced 51,922 titles that were "the most-voted
+ * overall", which is not the same thing as "the best-known in each country".
+ *
+ * Now every language is a quota, English included, and each is filled with the
+ * most-watched titles IN THAT LANGUAGE. Turkey gets its top 2,000 whether or
+ * not a Turkish series out-votes an American one, because a Turkish viewer
+ * recognises Turkish series and TMDB's voters are not Turkish viewers.
+ *
+ * WHY VOTE COUNT AND NOT RATING. TMDB has no view counts. `vote_average` is
+ * quality — a beloved film nobody saw scores high — and that is the wrong
+ * question. `vote_count` is how many people bothered to rate it, which is the
+ * closest thing available to audience size. A widely-watched bad film has a
+ * high vote count and a low rating, and it belongs in here: the point is
+ * "have you seen this", not "was it good".
+ */
+const LANG_QUOTAS: Record<string, number> = {
+  en: 20000,
+  ja: 3000,
+  ko: 2200,
+  tr: 2000,
+  hi: 2000,
+  es: 2000,
+  fr: 1800,
+  ar: 1600,
+  zh: 1500,
+  de: 1200,
+  it: 1200,
+  ru: 1000,
+  pt: 1000,
+  ta: 800,
+  th: 800,
+  te: 600,
+  ml: 600,
+  fa: 600,
+  id: 600,
+  vi: 500,
+  pl: 450,
+  sv: 400,
+  da: 400,
+  no: 350,
+  nl: 400,
+  fi: 300,
+  cs: 300,
+  el: 300,
+  hu: 300,
+  ro: 300,
+  uk: 300,
+  kn: 400,
+  bn: 350,
+  ur: 300,
+  he: 300,
+  tl: 400,
+  ms: 300,
+  mr: 300,
+  pa: 250,
+};
+
+/**
+ * How the quota splits between film and television, per language.
+ *
+ * Turkey and Korea are television countries — their best-known works are
+ * series, and a 70/30 split towards film would spend most of their quota on
+ * the wrong medium. India and the Arab world lean the other way.
+ */
+const TV_SHARE_BY_LANG: Record<string, number> = {
+  tr: 0.55,
+  ko: 0.5,
+  ja: 0.45,
+  zh: 0.4,
+  th: 0.4,
+  ar: 0.35,
+  en: 0.3,
+};
+const DEFAULT_TV_SHARE = 0.25;
+
+/** the most-watched `want` titles in one language, newest page walked last */
+async function collectLang(
+  type: TitleType,
+  lang: string,
+  want: number,
+  into: Set<number>
+): Promise<number> {
+  if (want <= 0) return 0;
   const dateField = type === "movie" ? "primary_release_date" : "first_air_date";
   const floor = MIN_VOTES[type];
-
-  /**
-   * A DESCENDING VOTE CURSOR, BECAUSE TMDB STOPS AT PAGE 500.
-   *
-   * `/discover` will not serve past page 500 whatever `total_pages` claims, so
-   * one sorted query can only ever yield 10,000 ids. That was invisible while
-   * the target was 15,000 — the language passes and the curated lists topped
-   * it up — and it becomes the binding constraint the moment the catalog is
-   * asked to be five times bigger.
-   *
-   * The fix is to page until the wall, then move the window: take the lowest
-   * vote count on the last page and re-query with `vote_count.lte` just below
-   * it. Each sweep is a fresh 10,000-title budget over a lower band, and the
-   * ordering stays "most-voted first" across the whole walk.
-   *
-   * `lte` is inclusive and ties are common down in the tail, so the cursor
-   * steps to `low` rather than `low - 1` and the `ids` Set absorbs the
-   * overlap. Stepping below it would skip every title sharing that count.
-   */
-  /**
-   * The global sweep stops short so the language passes have somewhere to go.
-   *
-   * `sort_by=vote_count.desc` over the whole corpus is an English ranking, so
-   * left to run to the target it fills every slot before a single Arabic or
-   * Tamil title appears — and the per-language budget below then computes to
-   * nothing. Reserving the share up front is the only ordering that works.
-   */
-  const LANG_SHARE = Number(process.env.LANG_SHARE ?? 0.35);
-  const globalWant = Math.round(want * (1 - LANG_SHARE));
-
+  let added = 0;
+  /* TMDB refuses to serve past page 500, so when a language has more than
+     10,000 titles the window is moved down by vote count and re-walked */
   let ceiling = Number.POSITIVE_INFINITY;
-  let sweeps = 0;
-  while (ids.size < globalWant && sweeps < 40) {
-    sweeps++;
-    const before = ids.size;
+  for (let sweep = 0; sweep < 12 && added < want; sweep++) {
     let low = ceiling;
-    let pages = 0;
-    for (let page = 1; page <= 500 && ids.size < globalWant; page++) {
+    let gained = 0;
+    for (let page = 1; page <= 500 && added < want; page++) {
       const params: Record<string, string> = {
         page: String(page),
         sort_by: "vote_count.desc",
+        with_original_language: lang,
         "vote_count.gte": String(floor),
         [`${dateField}.lte`]: TODAY,
       };
@@ -275,93 +334,35 @@ async function collectIds(type: TitleType, want: number): Promise<number[]> {
       const data = await tmdb(`/discover/${type}`, params);
       const results = data.results ?? [];
       for (const r of results) {
-        ids.add(r.id);
         const v = r.vote_count ?? 0;
         if (v < low) low = v;
-      }
-      pages = page;
-      if (results.length === 0 || page >= (data.total_pages ?? 1)) break;
-    }
-    const gained = ids.size - before;
-    console.log(
-      `  ${type}/sweep ${sweeps}: ${pages} pages, +${gained} → ${ids.size} ids` +
-        (Number.isFinite(ceiling) ? ` (votes ≤ ${ceiling})` : "") +
-        ` · next ceiling ${low}`
-    );
-    // no new ids, or the window collapsed onto the floor: the corpus is spent
-    if (gained === 0 || !Number.isFinite(low) || low <= floor) break;
-    ceiling = low;
-  }
-  console.log(`  ${type}: ${ids.size} ids (floor ${floor} votes)`);
-
-  // top_rated adds acclaimed titles the vote ordering can bury
-  for (const list of ["top_rated", "popular"]) {
-    for (let page = 1; page <= 25 && ids.size < globalWant; page++) {
-      const data = await tmdb(`/${type}/${list}`, { page: String(page) });
-      for (const r of data.results ?? []) {
-        if ((r.vote_count ?? 0) >= floor) ids.add(r.id);
-      }
-      if (page >= (data.total_pages ?? 1)) break;
-    }
-  }
-  console.log(`  ${type}: ${ids.size} ids after lists`);
-
-  /**
-   * A pass per language, because the global one cannot reach them.
-   *
-   * `sort_by=vote_count.desc` over the whole corpus is an English ranking:
-   * every page of it is English until far past our target, so the loop above
-   * fills up and stops before a single Arabic or Tamil title appears. Asking
-   * each language separately, best-known first, is the only way they enter —
-   * and it keeps the "most recognisable first" principle intact, just applied
-   * inside the audience that would recognise them.
-   */
-  const before = ids.size;
-  /**
-   * THE LANGUAGE PASSES GET A BUDGET, NOT A BLANK CHEQUE.
-   *
-   * `PER_LANG` is a per-language cap and nothing enforced a total, so with 38
-   * languages at 2,500 the passes collected 41,105 ids on top of an already
-   * satisfied 38,087 — more than double the target, and every extra id is a
-   * TMDB request at 25/s and ~447 bytes in a file the browser downloads.
-   * Left alone this build would have run 80 minutes to produce a catalog
-   * twice the size that was asked for.
-   *
-   * So the remaining room is split evenly across the languages that have not
-   * been reached yet. Evenly rather than by corpus size on purpose: dividing
-   * by how much TMDB holds would hand nearly all of it back to the big
-   * European languages, which is the bias these passes exist to correct.
-   */
-  const langNames = Object.keys(LANG_FLOORS).filter((l) => l !== "en");
-  const room = Math.max(0, want - ids.size);
-  const perLang = Math.max(50, Math.min(PER_LANG, Math.floor(room / langNames.length)));
-  console.log(`  ${type}: ${room} ids of room left → ${perLang} per language`);
-  for (const [lang, langFloor] of Object.entries(LANG_FLOORS)) {
-    if (lang === "en") continue;
-    const floorFor = type === "tv" ? Math.round(langFloor * 0.4) : langFloor;
-    let added = 0;
-    for (let page = 1; page <= 500 && added < perLang; page++) {
-      const data = await tmdb(`/discover/${type}`, {
-        page: String(page),
-        sort_by: "vote_count.desc",
-        with_original_language: lang,
-        "vote_count.gte": String(floorFor),
-        [`${dateField}.lte`]: TODAY,
-      });
-      const results = data.results ?? [];
-      for (const r of results) {
-        if (added >= perLang) break;
-        if (!ids.has(r.id)) {
-          ids.add(r.id);
+        if (added >= want) break;
+        if (!into.has(r.id)) {
+          into.add(r.id);
           added++;
+          gained++;
         }
       }
       if (results.length === 0 || page >= (data.total_pages ?? 1)) break;
     }
-    if (added > 0) console.log(`    ${type}/${lang}: +${added} (floor ${floorFor})`);
+    if (gained === 0 || !Number.isFinite(low) || low <= floor) break;
+    ceiling = low;
   }
-  console.log(`  ${type}: ${ids.size} ids (+${ids.size - before} from language passes)`);
+  return added;
+}
 
+async function collectIds(type: TitleType, _want: number): Promise<number[]> {
+  const ids = new Set<number>();
+  const share = (lang: string) =>
+    type === "tv" ? (TV_SHARE_BY_LANG[lang] ?? DEFAULT_TV_SHARE) : 1 - (TV_SHARE_BY_LANG[lang] ?? DEFAULT_TV_SHARE);
+
+  const langs = Object.entries(LANG_QUOTAS).sort((a, b) => b[1] - a[1]);
+  for (const [lang, quota] of langs) {
+    const want = Math.round(quota * share(lang));
+    const got = await collectLang(type, lang, want, ids);
+    if (got > 0) console.log(`    ${type}/${lang}: ${got}/${want}`);
+  }
+  console.log(`  ${type}: ${ids.size} ids from ${langs.length} language quotas`);
   return [...ids];
 }
 
@@ -385,11 +386,16 @@ async function fetchTitle(type: TitleType, id: number): Promise<Title | null> {
     const year = Number(released?.slice(0, 4));
     const lang: string = d.original_language ?? "en";
     const originalName: string = String(d.original_title ?? d.original_name ?? "").trim();
-    const floor =
-      type === "tv"
-        ? Math.round((LANG_FLOORS[lang] ?? DEFAULT_FLOOR) * 0.4)
-        : LANG_FLOORS[lang] ?? DEFAULT_FLOOR;
-    if (!titleEn || !year || (d.vote_count ?? 0) < floor) return null;
+    /**
+     * The quota is the selection now, so this only rejects an empty record.
+     *
+     * A per-language vote floor used to run here as a second filter, which
+     * made sense when ids came from a global sweep. It cannot now: a title
+     * only reaches this function because it was in the top N of its own
+     * language, and re-checking it against a floor can only delete titles the
+     * quota deliberately chose.
+     */
+    if (!titleEn || !year || (d.vote_count ?? 0) < MIN_VOTES[type]) return null;
     if (d.adult) return null;
     // TMDB popularity spikes for unreleased titles; asking "have you watched
     // this?" about a film that isn't out yet is nonsense, so drop them
@@ -594,59 +600,25 @@ async function main() {
   );
 
   /**
-   * TWO FILES, BECAUSE ONE OF FIFTY THOUSAND TITLES CANNOT BE DOWNLOADED.
+   * ONE FILE AGAIN, AND EVERY TITLE RANKABLE.
    *
-   * Measured on a real build: 437 bytes a title, so 50,000 is 20.9 MB raw and
-   * about 9.9 MB gzipped. The catalog that shipped before this was 5.8 MB raw
-   * and 2.74 MB gzipped, and the user's own complaint about the opening was
-   * that it waited on exactly that download. Quadrupling it would undo every
-   * loading fix made this week.
+   * A previous version split this: the best-known 11,000 as full ranking data
+   * and the rest as a name-and-poster index for search only. That kept the
+   * download small and was the wrong trade — the whole point of a big catalog
+   * is that the deck and Discover draw from it, and a title that can only be
+   * searched for is a title the app will never suggest to you.
    *
-   * So the catalog is split by fame. `catalog.json` keeps the most-recognised
-   * CORE_SIZE titles and stays roughly the size that shipped before, which
-   * means the first card arrives no later than it does today. Everything
-   * deeper goes to `catalog-tail.json`, which the browser fetches once the
-   * opening is over and appends. The deck is fully usable from the core alone.
-   *
-   * Sorted by vote count rather than popularity for the split itself:
-   * popularity is a trending metric and would put last month's releases in the
-   * core ahead of films everyone has seen.
+   * So the split is gone. Everything ships with its keywords, cast, director
+   * and co-watch links, because those are what the ranking reads.
    */
   mkdirSync(dirname(OUT), { recursive: true });
-  /**
-   * 11,000, chosen by measurement rather than by feel.
-   *
-   * The core exists to keep the opening download where it already is. The
-   * catalog that shipped before this was 2.74 MB gzipped, and the new titles
-   * make each core row *bigger* rather than smaller — co-watch links land at
-   * 86% inside the catalog now against roughly half before, so a famous title
-   * carries far more neighbour ids. Gzipped, measured on the real build:
-   *
-   *     core  9,000   2.19 MB
-   *     core 11,000   2.69 MB   <- ships, just under what shipped before
-   *     core 14,000   3.46 MB   <- the first attempt, +26% on the opening
-   */
-  const CORE_SIZE = Number(process.env.CORE_SIZE ?? 11000);
-  const byFame = [...titles].sort((a, b) => b.voteCount - a.voteCount);
-  const core = byFame.slice(0, CORE_SIZE);
-  const tail = byFame.slice(CORE_SIZE);
-
-  const json = JSON.stringify(encodeCatalog(core));
+  const json = JSON.stringify(encodeCatalog(titles));
   writeFileSync(OUT, json);
-  let tailJson = "";
-  const TAIL_OUT = OUT.replace(/\.json$/, "-tail.json");
-  if (tail.length > 0) {
-    tailJson = JSON.stringify(encodeCatalog(tail));
-    writeFileSync(TAIL_OUT, tailJson);
-  }
 
   const movies = titles.filter((t) => t.type === "movie").length;
   console.log(
     `\n✅ ${titles.length} titles (${movies} movies, ${titles.length - movies} tv)` +
-      `\n   core ${core.length} · ${(json.length / 1024 / 1024).toFixed(2)} MB → ${OUT}` +
-      (tail.length
-        ? `\n   tail ${tail.length} · ${(tailJson.length / 1024 / 1024).toFixed(2)} MB → ${TAIL_OUT}`
-        : "") +
+      `\n   ${(json.length / 1024 / 1024).toFixed(2)} MB → ${OUT}` +
       `\n   ${Math.round((Date.now() - started) / 60000)} min elapsed`
   );
 }

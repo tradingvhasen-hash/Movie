@@ -1,10 +1,5 @@
 import { SAMPLE_TITLES } from "@/lib/data/sample-titles";
 import { decodeCatalog, decodeRange, type EncodedCatalog } from "@/lib/data/catalog-codec";
-import {
-  decodeSearchIndex,
-  type IndexedTitle,
-  type SearchIndex,
-} from "@/lib/data/search-index";
 import { buildRarityIndex, buildRarityIndexIdle } from "@/lib/engine/facets";
 import { featurize } from "@/lib/engine/features";
 import type { CandidateItem } from "@/lib/engine/recommend";
@@ -139,64 +134,6 @@ async function attachOverviews(titles: Title[]): Promise<void> {
 }
 
 /**
- * THE DEEP CATALOG, AS SOMETHING TO SEARCH RATHER THAN SOMETHING TO RANK.
- *
- * The version of this that shipped an hour ago fetched all 40,922 deep titles
- * as full ranking data and merged them into the pool. On the reporter's phone
- * — 4G, iOS Safari — the app never opened. The arithmetic, which I did not do
- * before shipping it:
- *
- *     main thread    catalog + tail + overviews    12.8 MB gzipped
- *     worker         catalog + tail (its own)      11.5 MB gzipped
- *                                                  ~24 MB, against 6.76 before
- *
- * And worse than the bytes: 51,922 `Title` objects built twice over, once per
- * thread. That is hundreds of megabytes of JS objects, and iOS kills a tab
- * long before it gets there — which is why the symptom was a skeleton that
- * never resolved rather than a slow load.
- *
- * Trimming fields does not save it. Measured: stripping keywords, cast,
- * director and co-watch links from the deep titles takes 8.85 MB to 6.77 MB.
- * The weight is the ROW COUNT, so the only way out is to ship less per row —
- * which means asking a smaller question of these titles.
- *
- * Ranking one needs its keywords, its cast, its neighbours. FINDING one needs
- * a name, a year, a kind, and a poster to recognise it by. That subset is
- * 1.44 MB gzipped for all 40,922, and posters are 0.85 MB of it — kept,
- * because recognising a title is the entire point of searching for it.
- *
- * So these titles are searchable and loggable, and the deck ranks from the
- * 11,000 best-known. The harvest ruler independently says that is the right
- * pool anyway: diluting it with 37,000 obscure titles measured 321.6 harvested
- * falling to 196.9.
- *
- * Held in its own map, deliberately OUTSIDE `items`. Nothing here touches the
- * ranking pool, so there is no `build()` call and no rarity index rebuilt over
- * 52,000 titles.
- */
-let indexed: IndexedTitle[] = [];
-let indexLoaded = false;
-
-export function getSearchIndex(): IndexedTitle[] {
-  return indexed;
-}
-
-async function attachIndex(): Promise<void> {
-  if (indexLoaded || lean) return;
-  indexLoaded = true;
-  try {
-    const res = await fetch(assetUrl("/catalog-index.json"), { cache: "force-cache" });
-    if (!res.ok) return;
-    const data = (await res.json()) as SearchIndex;
-    if (!data?.i?.length) return;
-    indexed = decodeSearchIndex(data);
-    void import("./search").then((m) => m.warmSearchIndex());
-  } catch {
-    /* the core catalog is complete and searchable on its own */
-  }
-}
-
-/**
  * ONE DOWNLOAD FOR TWO THREADS.
  *
  * The worker calls `loadCatalog()` itself, which means every cold visit
@@ -274,7 +211,6 @@ export function loadCatalog(): Promise<CandidateItem[]> {
          * get to compete with the first thing the user ever sees.
          */
         whenIdle(() => {
-          void attachIndex();
           void attachOverviews(titles);
           /**
            * Prepare the search text while nothing else is happening.

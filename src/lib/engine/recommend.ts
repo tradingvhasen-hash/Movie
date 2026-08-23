@@ -385,7 +385,28 @@ const TIER_PER_UNSEEN = num("TIER_PER_UNSEEN", 30);
  * the reason rather than as a proof, and a second calibration round is the
  * thing that would confirm it.
  */
-const TIER_MAX = num("TIER_MAX", 6000);
+/**
+ * THE REASON 37,000 TITLES CHANGED NOTHING.
+ *
+ * This is a hard cap on how many candidates the deck will ever consider. At
+ * 6,000 it meant that growing the catalog from 15,083 to 51,922 was invisible
+ * to the engine: every title ranked below 6,000th was never a candidate, never
+ * scored, never shown. The user guessed this before it was found — "maybe you
+ * are just adding it, but you're not applying the algorithm to it" — and he
+ * was right. It is the whole explanation for a bigger catalog measuring flat.
+ *
+ * The old sweep that set 6,000 is still in the table below and its logic held
+ * FOR THE CATALOG IT WAS RUN ON: past a point, widening admitted obscure
+ * titles and handed the ranking work it could not do. That catalog was built
+ * by a global vote-count sweep, so "rank 20,000" meant genuinely unknown.
+ *
+ * It does not mean that any more. The catalog is now the top N of each
+ * language separately, so a title at rank 40,000 overall can be the fourth
+ * most-watched Turkish series ever made. Widening the cap now admits titles
+ * that are famous somewhere rather than famous nowhere, which is a different
+ * trade from the one that table measured.
+ */
+const TIER_MAX = num("TIER_MAX", 60000);
 /**
  * The floor, and the reason it is the only part of this that ever ran.
  *

@@ -1,5 +1,4 @@
-import { getLocalCatalog, getSearchIndex } from "./catalog";
-import type { IndexedTitle } from "./data/search-index";
+import { getLocalCatalog } from "./catalog";
 import type { Title } from "./types";
 
 /**
@@ -127,59 +126,6 @@ export function warmSearchIndex() {
   schedule();
 }
 
-/* ────────────────────────────────────────────────────────────────────────
-   THE DEEP CATALOG, SEARCHED BUT NOT RANKED.
-
-   40,922 titles ship as a light index — name, year, kind, poster, genres —
-   because shipping them as ranking data broke the app outright on a phone.
-   See `attachIndex` in catalog.ts for that measurement.
-
-   They are searched here and nowhere else. The deck never sees them, so the
-   ranking pool stays at the 11,000 best-known, which is where the harvest
-   ruler says recommendations should come from anyway.
-
-   A found title is widened into a `Title` so every caller — the library, the
-   list builder, Together — keeps working unchanged. The fields the index does
-   not carry come back empty, and that is honest: `voteCount` 0 puts these
-   below every core match in the fame sort, which is the right order when
-   somebody types "batman" and means the famous one.
-   ──────────────────────────────────────────────────────────────────────── */
-
-function widen(t: IndexedTitle): Title {
-  return {
-    id: t.id,
-    tmdbId: t.tmdbId,
-    type: t.type,
-    title: t.title,
-    overview: { en: "", ar: "" },
-    year: t.year,
-    genres: t.genres,
-    keywords: [],
-    people: { cast: [] },
-    originalLanguage: "",
-    rating: 0,
-    voteCount: 0,
-    popularity: 0,
-    posterPath: t.posterPath,
-  };
-}
-
-let deepHay: string[] = [];
-let deepBuiltFor = 0;
-
-function buildDeep(): void {
-  const idx = getSearchIndex();
-  if (idx.length === deepBuiltFor) return;
-  deepBuiltFor = idx.length;
-  deepHay = new Array<string>(idx.length);
-  for (let i = 0; i < idx.length; i++) {
-    const t = idx[i];
-    deepHay[i] = `${normalise(t.title.en)} ${normalise(t.title.ar)} ${normalise(
-      t.title.original ?? ""
-    )}`;
-  }
-}
-
 export interface SearchOptions {
   limit?: number;
   /** ids to leave out — already in a list, already picked, already logged */
@@ -221,29 +167,5 @@ export function searchCatalog(query: string, opts: SearchOptions = {}): Title[] 
   if (starts.length >= limit) return starts.slice(0, limit);
   contains.sort(byFame);
 
-  const core = [...starts, ...contains];
-  if (core.length >= limit) return core.slice(0, limit);
-
-  /**
-   * Only now the deep index, and only to fill what the core could not.
-   *
-   * Deliberately second: a person typing "batman" wants the films everyone
-   * knows, not an obscure one that happens to match. The deep half is what
-   * makes "I watched this and cannot find it" answerable, which is a different
-   * moment from the one above, and it costs nothing until the core runs dry.
-   */
-  buildDeep();
-  const idx = getSearchIndex();
-  const deepStarts: Title[] = [];
-  const deepContains: Title[] = [];
-  const already = new Set(core.map((t) => t.id));
-  for (let i = 0; i < idx.length; i++) {
-    const at = deepHay[i].indexOf(q);
-    if (at < 0) continue;
-    const t = idx[i];
-    if (already.has(t.id) || skip?.(t.id)) continue;
-    (at === 0 || deepHay[i].charCodeAt(at - 1) === 32 ? deepStarts : deepContains).push(widen(t));
-    if (deepStarts.length + core.length >= limit * 2) break;
-  }
-  return [...core, ...deepStarts, ...deepContains].slice(0, limit);
+  return [...starts, ...contains].slice(0, limit);
 }

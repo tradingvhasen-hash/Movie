@@ -78,6 +78,16 @@ export interface TasteProfile {
 
   /** titles the user has actually watched */
   seenCount: number;
+  /**
+   * How many cards in a row the viewer has answered "haven't seen".
+   *
+   * A count is not a streak, and the difference is what this exists for. The
+   * totals say what a whole session looked like; this says what the LAST few
+   * cards looked like, which is the only thing that can tell the deck it is
+   * currently in the wrong place. Reset by any answer that means "I know this
+   * one" — liked, disliked, or watched-no-opinion.
+   */
+  unseenStreak: number;
   /** titles swiped away as unwatched */
   unseenCount: number;
 
@@ -138,6 +148,7 @@ export function emptyProfile(): TasteProfile {
     totalSwipes: 0,
     seenCount: 0,
     unseenCount: 0,
+    unseenStreak: 0,
     seenFacets: emptyFacets(),
   };
 }
@@ -177,6 +188,7 @@ export function normalizeProfile(p: Partial<TasteProfile> | undefined): TastePro
     recent: Array.isArray(p.recent) ? p.recent : [],
     seenCount: p.seenCount ?? 0,
     unseenCount: p.unseenCount ?? 0,
+    unseenStreak: p.unseenStreak ?? 0,
   };
 }
 
@@ -233,8 +245,11 @@ export function applySwipe(
 
   if (action === "not_seen") {
     next.unseenCount = profile.unseenCount + 1;
+    next.unseenStreak = profile.unseenStreak + 1;
     return next;
   }
+  /* any answer meaning "I know this one" ends the run */
+  next.unseenStreak = 0;
 
   /**
    * A grid tap: watched, no verdict.

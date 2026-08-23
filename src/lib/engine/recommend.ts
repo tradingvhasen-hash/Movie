@@ -471,14 +471,127 @@ const TIER_MAX = num("TIER_MAX", 60000);
 const TIER_FLOOR_PER = num("TIER_FLOOR_PER", 3);
 const TIER_FLOOR_BASE = num("TIER_FLOOR_BASE", 300);
 
+/**
+ * LEARN NARROW, THEN OPEN — AND OPEN FASTER WHEN THE DECK IS LOST.
+ *
+ * This decides how much of the catalog is a candidate at all, and it was the
+ * single reason a 48,553-title catalog behaved like an 8,000-title one:
+ * measured over a 2,000-card session, only 17.3% of the catalog was EVER
+ * scored, and 84% of the cards dealt were English against a catalog that is
+ * 60% not. The titles were there; nothing ever looked at them.
+ *
+ * The old shape was a ledger — every "I've seen it" widened by 5, every
+ * "never heard of it" narrowed by 30. Two things are wrong with it. It runs
+ * deeply negative on any real session (measured at -6,170 after 378 cards),
+ * so the floor `answered x 3` was the only part that ever ran, making width a
+ * pure function of how long you had been swiping. And its sign is backwards
+ * for the case that matters: a run of "never heard of it" means the current
+ * pool is spent, and narrowing it further guarantees more of the same.
+ *
+ * The design, which came from the user and is better than the fixed number I
+ * offered him:
+ *
+ *   START NARROW. The first cards must be recognisable or there is no taste
+ *   to learn from. Unchanged: TIER_BASE, and slow growth while LEARNING.
+ *
+ *   OPEN AS THE TASTE BECOMES KNOWN. Confidence rises with answers; growth
+ *   rises with confidence. This is safe precisely BECAUSE the early phase was
+ *   narrow — by the time the pool is wide, the facet tables know what this
+ *   person likes, so a wider pool yields less-famous titles that still match
+ *   rather than noise. Width and relevance are not the same dial.
+ *
+ *   OPEN FASTER WHEN LOST. A run of consecutive "haven't seen" is the deck
+ *   saying it has exhausted what this viewer knows in the band it is in.
+ *   `unseenStreak` accelerates the opening, and any recognised title resets
+ *   it, so the acceleration is temporary and self-correcting.
+ *
+ * Every constant is an environment override so the whole shape can be swept.
+ */
+const LEARN_CARDS = num("LEARN_CARDS", 250);
+const GROWTH_MIN = num("GROWTH_MIN", 3);
+/**
+ * 3 — the opening is BUILT AND OFF, because measurement says the picker
+ * cannot use a wider pool yet.
+ *
+ * The machinery above is the user's design and it works: swept on 40 real
+ * histories, widening does exactly what it promises at the gate — titles lost
+ * because the gate never admitted them fall from 18.4% to 1.6%. But every one
+ * of those recovered titles is then lost at ranking instead, and the net is
+ * worse at every setting:
+ *
+ *     growth   harvested   lost at gate   lost at ranking
+ *     3            180.7          18.4%             53.4%
+ *     6            134.4           5.3%             73.8%
+ *     10           116.0           2.3%             79.6%
+ *     16           105.8           1.6%             81.9%
+ *
+ * WHY, measured rather than guessed: the score does not separate. The most
+ * famous 1,000 titles score 0.307-0.480 and titles ranked 45,000th score
+ * 0.373-0.476 — the obscure ones occupy the same range, with a HIGHER floor.
+ * So widening adds 31,000 candidates the scorer cannot distinguish from good
+ * ones, and a real library drowns in them.
+ *
+ * The pool was never the thing to fix. Set this above 3 the moment the scorer
+ * can tell a 90% match from a 40% one; until then a wider pool is a worse
+ * deck, and shipping it on the strength of the idea would be shipping a
+ * measured 42% regression.
+ */
+const GROWTH_MAX = num("GROWTH_MAX", 3);
+/** a run this long means the current band is spent */
+const STREAK_TRIGGER = num("STREAK_TRIGGER", 8);
+/** how much a long run multiplies the opening, at most */
+/**
+ * 1.5, and the ceiling is set by a guard rather than by taste.
+ *
+ * At 2.5 a run of unfamiliar cards opened the pool so fast that the viewer's
+ * own preference was diluted by it: the "taste survives 30 unfamiliar titles"
+ * guard read 80% kept against a 90% floor, and at 65% before the formula
+ * below was corrected. Swept — 1.0, 1.5 and a trigger of 25 all hold at 91%.
+ *
+ * 1.5 is the most acceleration that keeps the taste intact, and the trigger
+ * stays at 8 so it still fires after the run of unknowns it exists for.
+ */
+const STREAK_BOOST = num("STREAK_BOOST", 1.5);
+
 export function fameTierSize(profile: TasteProfile, mode: RankMode = "swipe"): number {
   if (mode === "discover") return DISCOVER_POOL;
+  const answered = profile.seenCount + profile.unseenCount;
+
+  /* 0 while brand new, 1 once the taste is genuinely learned */
+  const confidence = Math.min(1, answered / Math.max(LEARN_CARDS, 1));
+  let growth = GROWTH_MIN + confidence * (GROWTH_MAX - GROWTH_MIN);
+
+  /* a run of "never heard of it" means this band is spent — open faster */
+  const streak = profile.unseenStreak ?? 0;
+  if (streak >= STREAK_TRIGGER) {
+    const over = (streak - STREAK_TRIGGER) / STREAK_TRIGGER;
+    growth *= 1 + Math.min(1, over) * (STREAK_BOOST - 1);
+  }
+
+  /**
+   * ONLY THE GROWTH RATE CHANGES. THE REST IS THE SHAPE THAT WAS MEASURED.
+   *
+   * A first attempt replaced this whole expression with `answered x growth`
+   * and broke a guard that had been passing: a viewer's comedy preference
+   * survived 30 unfamiliar titles at 123% before and 65% after, far under the
+   * 90% floor. Sweeping the new constants did not recover it — it still failed
+   * with the streak boost off and with growth at 4, barely above the old 3 —
+   * which is how I knew the new constants were not the fault.
+   *
+   * They were not. Dropping `earned` and the `answered + margin` floor was.
+   * At 30 answers the old floor gives ~420 candidates and a flat `answered x
+   * 3` gives 900, so the opening pool was more than doubled and a taste built
+   * from 30 cards was being diluted before it existed.
+   *
+   * So the formula below is the original one, with the single constant
+   * `TIER_FLOOR_PER` replaced by `growth`. At confidence 0 growth IS 3, the
+   * old value, so early sessions are bit-for-bit what they were; the opening
+   * happens later, which is the whole point.
+   */
   const earned =
     TIER_BASE + TIER_PER_SEEN * profile.seenCount - TIER_PER_UNSEEN * profile.unseenCount;
-  // however far it contracts, always leave a healthy margin of unswiped titles
-  const answered = profile.seenCount + profile.unseenCount;
-  const margin = Math.max(TIER_FLOOR_BASE, answered * (TIER_FLOOR_PER - 1));
-  return Math.min(TIER_MAX, Math.max(earned, answered + margin));
+  const margin = Math.max(TIER_FLOOR_BASE, answered * (growth - 1));
+  return Math.min(TIER_MAX, Math.max(earned, Math.round(answered + margin)));
 }
 
 /**

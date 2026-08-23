@@ -1,5 +1,10 @@
 import { SAMPLE_TITLES } from "@/lib/data/sample-titles";
 import { decodeCatalog, decodeRange, type EncodedCatalog } from "@/lib/data/catalog-codec";
+import {
+  decodeSearchIndex,
+  type IndexedTitle,
+  type SearchIndex,
+} from "@/lib/data/search-index";
 import { buildRarityIndex, buildRarityIndexIdle } from "@/lib/engine/facets";
 import { featurize } from "@/lib/engine/features";
 import type { CandidateItem } from "@/lib/engine/recommend";
@@ -33,6 +38,13 @@ let lean = false;
 export function setLeanMode() {
   lean = true;
 }
+
+/**
+ * The encoded file exactly as it came off the wire, kept so it can be handed
+ * to the worker instead of the worker fetching its own copy. See
+ * `installEncodedCatalog`.
+ */
+let encoded: EncodedCatalog | null = null;
 
 let items: CandidateItem[] | null = null;
 let byId = new Map<string, CandidateItem>();
@@ -127,55 +139,87 @@ async function attachOverviews(titles: Title[]): Promise<void> {
 }
 
 /**
- * THE DEEP HALF OF THE CATALOG, FETCHED AFTER THE OPENING IS OVER.
+ * THE DEEP CATALOG, AS SOMETHING TO SEARCH RATHER THAN SOMETHING TO RANK.
  *
- * `catalog.json` holds the most-recognised titles and is the same size it has
- * always been, so the first card arrives exactly as fast as before. Everything
- * deeper lives in `catalog-tail.json` and lands here — measured at 437 bytes a
- * title, a 50,000-title catalog in one file would be 20.9 MB raw and ~9.9 MB
- * gzipped, against 2.74 MB for the catalog that shipped before. Quadrupling
- * the opening download would undo every loading fix made this week.
+ * The version of this that shipped an hour ago fetched all 40,922 deep titles
+ * as full ranking data and merged them into the pool. On the reporter's phone
+ * — 4G, iOS Safari — the app never opened. The arithmetic, which I did not do
+ * before shipping it:
  *
- * Three things have to be redone once the tail is in, and all three are the
- * reason this waits for idle rather than racing the first card:
+ *     main thread    catalog + tail + overviews    12.8 MB gzipped
+ *     worker         catalog + tail (its own)      11.5 MB gzipped
+ *                                                  ~24 MB, against 6.76 before
  *
- *   - the id map, or nothing new is findable
- *   - the rarity index, which is derived from the whole corpus
- *   - the search index, which was warmed over the core alone
+ * And worse than the bytes: 51,922 `Title` objects built twice over, once per
+ * thread. That is hundreds of megabytes of JS objects, and iOS kills a tab
+ * long before it gets there — which is why the symptom was a skeleton that
+ * never resolved rather than a slow load.
  *
- * A failure here is silent by design. The core is a complete, working catalog;
- * a viewer whose tail request fails gets the product as it shipped last week
- * rather than an error.
+ * Trimming fields does not save it. Measured: stripping keywords, cast,
+ * director and co-watch links from the deep titles takes 8.85 MB to 6.77 MB.
+ * The weight is the ROW COUNT, so the only way out is to ship less per row —
+ * which means asking a smaller question of these titles.
+ *
+ * Ranking one needs its keywords, its cast, its neighbours. FINDING one needs
+ * a name, a year, a kind, and a poster to recognise it by. That subset is
+ * 1.44 MB gzipped for all 40,922, and posters are 0.85 MB of it — kept,
+ * because recognising a title is the entire point of searching for it.
+ *
+ * So these titles are searchable and loggable, and the deck ranks from the
+ * 11,000 best-known. The harvest ruler independently says that is the right
+ * pool anyway: diluting it with 37,000 obscure titles measured 321.6 harvested
+ * falling to 196.9.
+ *
+ * Held in its own map, deliberately OUTSIDE `items`. Nothing here touches the
+ * ranking pool, so there is no `build()` call and no rarity index rebuilt over
+ * 52,000 titles.
  */
-let tailLoaded = false;
-async function attachTail(): Promise<void> {
-  if (tailLoaded) return;
-  tailLoaded = true;
-  try {
-    const res = await fetch(assetUrl("/catalog-tail.json"), { cache: "force-cache" });
-    if (!res.ok) return;
-    const data = (await res.json()) as EncodedCatalog;
-    if (!data?.t?.length) return;
-    const extra = await decodeSpread(data);
-    if (extra.length === 0) return;
+let indexed: IndexedTitle[] = [];
+let indexLoaded = false;
 
-    const merged = [...(items ?? []).map((c) => c.title), ...extra];
-    build(merged);
-    /**
-     * The worker takes the tail too, and skips only what a ranker never reads.
-     *
-     * Lean mode exists to keep plot summaries and the search index off the
-     * worker thread. It must NOT keep the tail off: the worker is the thing
-     * that ranks, so a worker holding only the core would make every new title
-     * invisible to the deck and the whole expansion pointless.
-     */
-    if (!lean) {
-      void attachOverviews(extra);
-      void import("./search").then((m) => m.warmSearchIndex());
-    }
+export function getSearchIndex(): IndexedTitle[] {
+  return indexed;
+}
+
+async function attachIndex(): Promise<void> {
+  if (indexLoaded || lean) return;
+  indexLoaded = true;
+  try {
+    const res = await fetch(assetUrl("/catalog-index.json"), { cache: "force-cache" });
+    if (!res.ok) return;
+    const data = (await res.json()) as SearchIndex;
+    if (!data?.i?.length) return;
+    indexed = decodeSearchIndex(data);
+    void import("./search").then((m) => m.warmSearchIndex());
   } catch {
-    /* the core catalog is complete on its own */
+    /* the core catalog is complete and searchable on its own */
   }
+}
+
+/**
+ * ONE DOWNLOAD FOR TWO THREADS.
+ *
+ * The worker calls `loadCatalog()` itself, which means every cold visit
+ * fetched `catalog.json` twice — once per thread, 2.7 MB gzipped each. This
+ * predates the catalog expansion and was pure waste the whole time: the main
+ * thread has already parsed the exact bytes the worker is about to ask for.
+ *
+ * So the main thread hands its copy over by `postMessage` and the worker
+ * installs it here. Structured-cloning the encoded form is cheap — it is
+ * plain arrays and strings, not the 11,000 decoded objects.
+ *
+ * If the message never arrives the worker still calls `loadCatalog()` and
+ * fetches as before, so the handoff is an optimisation and never a dependency.
+ */
+export function installEncodedCatalog(data: EncodedCatalog): void {
+  if (loadPromise) return;
+  encoded = data;
+  loadPromise = Promise.resolve(build(decodeCatalog(data)));
+}
+
+/** the raw file, for handing to the worker; null until the fetch lands */
+export function getEncodedCatalog(): EncodedCatalog | null {
+  return encoded;
 }
 
 /** Fetches and installs the full catalog. Safe to call repeatedly. */
@@ -187,6 +231,7 @@ export function loadCatalog(): Promise<CandidateItem[]> {
       if (!res.ok) throw new Error(`catalog ${res.status}`);
       const data = (await res.json()) as EncodedCatalog;
       if (!data?.t?.length) throw new Error("empty catalog");
+      encoded = data;
       const titles = lean || typeof window === "undefined"
         ? decodeCatalog(data)
         : await decodeSpread(data);
@@ -216,7 +261,6 @@ export function loadCatalog(): Promise<CandidateItem[]> {
        * is invisible to ranking. On the main thread the same fetch waits for
        * idle, behind the first card.
        */
-      if (lean) void attachTail();
       if (!lean) {
         /**
          * Everything below is wanted eventually and needed by nobody now, so
@@ -230,7 +274,7 @@ export function loadCatalog(): Promise<CandidateItem[]> {
          * get to compete with the first thing the user ever sees.
          */
         whenIdle(() => {
-          void attachTail();
+          void attachIndex();
           void attachOverviews(titles);
           /**
            * Prepare the search text while nothing else is happening.

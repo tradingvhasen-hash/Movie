@@ -16,7 +16,13 @@
  * existed — slowly, but correctly. A performance optimisation that can break
  * the product when it fails is not an optimisation.
  */
-import { getLocalCatalog, getLocalItem, vectorOf } from "@/lib/catalog";
+import {
+  getEncodedCatalog,
+  getLocalCatalog,
+  getLocalItem,
+  loadCatalog,
+  vectorOf,
+} from "@/lib/catalog";
 import type { RankReply, RankRequest } from "./rank-worker";
 import type { TasteProfile } from "./taste";
 import type { Title } from "@/lib/types";
@@ -129,9 +135,30 @@ async function runHere(q: RankQuery): Promise<RankResult> {
   };
 }
 
+/**
+ * Hand the worker the catalog the main thread already has, once.
+ *
+ * Awaiting `loadCatalog()` costs nothing anybody was not already paying: the
+ * screen cannot render a card without it either. What it buys is the worker
+ * skipping its own fetch of the same 2.7 MB.
+ */
+let handoff: Promise<void> | null = null;
+function sendCatalog(w: Worker): Promise<void> {
+  handoff ??= loadCatalog()
+    .then(() => {
+      const data = getEncodedCatalog();
+      if (data) w.postMessage({ kind: "catalog", data });
+    })
+    .catch(() => {
+      /* the worker falls back to fetching its own copy */
+    });
+  return handoff;
+}
+
 export function rank(q: RankQuery): Promise<RankResult> {
   const w = getWorker();
   if (!w) return runHere(q);
+  void sendCatalog(w);
 
   const id = nextId++;
   const req: RankRequest = {

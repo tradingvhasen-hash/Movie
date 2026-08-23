@@ -384,6 +384,7 @@ async function fetchTitle(type: TitleType, id: number): Promise<Title | null> {
       type === "movie" ? d.release_date : d.first_air_date;
     const year = Number(released?.slice(0, 4));
     const lang: string = d.original_language ?? "en";
+    const originalName: string = String(d.original_title ?? d.original_name ?? "").trim();
     const floor =
       type === "tv"
         ? Math.round((LANG_FLOORS[lang] ?? DEFAULT_FLOOR) * 0.4)
@@ -431,7 +432,23 @@ async function fetchTitle(type: TitleType, id: number): Promise<Title | null> {
       id: `${type}-${id}`,
       type,
       tmdbId: id,
-      title: { en: titleEn, ar: ar?.title || ar?.name || titleEn },
+      /**
+       * The name in its own script, captured here rather than by a second pass.
+       *
+       * `scripts/add-original-titles.ts` exists because searching الفيل الأزرق
+       * found nothing while "The Blue Elephant" found it. That script patches
+       * the catalog afterwards, so a rebuild silently drops the field again —
+       * which is exactly what happened on the 51,922-title build, undoing the
+       * fix for every Arabic, Hindi, Japanese and Turkish title at once.
+       *
+       * `original_title` is already in this response. Taking it here costs no
+       * requests and cannot be lost by rebuilding.
+       */
+      title: {
+        en: titleEn,
+        ar: ar?.title || ar?.name || titleEn,
+        original: originalName && originalName !== titleEn ? originalName : undefined,
+      },
       // Arabic overviews are omitted: the UI is English-only right now and
       // they cost ~30% of the payload every visitor downloads. Arabic
       // titles stay (cheap, and useful for search).

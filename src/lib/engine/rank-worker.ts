@@ -37,7 +37,14 @@
  * function on the main thread if a worker cannot be created. A browser without
  * workers gets the old behaviour rather than no behaviour.
  */
-import { getLocalItem, loadCatalog, setLeanMode, vectorOf } from "@/lib/catalog";
+import {
+  getLocalItem,
+  installEncodedCatalog,
+  loadCatalog,
+  setLeanMode,
+  vectorOf,
+} from "@/lib/catalog";
+import type { EncodedCatalog } from "@/lib/data/catalog-codec";
 import { recommend } from "./recommend";
 import type { TasteProfile } from "./taste";
 import type { Title } from "@/lib/types";
@@ -82,8 +89,24 @@ function titlesFor(ids: string[]): Title[] {
   return out;
 }
 
-self.onmessage = async (event: MessageEvent<RankRequest>) => {
-  const req = event.data;
+/** the main thread's copy of catalog.json, so this thread need not fetch one */
+export interface CatalogMessage {
+  kind: "catalog";
+  data: EncodedCatalog;
+}
+
+self.onmessage = async (event: MessageEvent<RankRequest | CatalogMessage>) => {
+  /**
+   * The catalog arrives as a message before any ranking is asked for, which
+   * saves this thread a second 2.7 MB download of a file the main thread has
+   * already fetched. It is not required: `loadCatalog()` below still fetches
+   * if this never comes.
+   */
+  if ((event.data as CatalogMessage).kind === "catalog") {
+    installEncodedCatalog((event.data as CatalogMessage).data);
+    return;
+  }
+  const req = event.data as RankRequest;
   try {
     ready ??= loadCatalog();
     const pool = await ready;

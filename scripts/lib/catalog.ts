@@ -16,27 +16,28 @@
  * the ruler withholding an input the thing under test consumes. So there is
  * one loader, it reads both files, and nothing has to remember to.
  *
- * CORE_ONLY=1 grades the core alone, which is what a viewer sees for the first
- * few seconds. That is a real question — just not the default one.
  */
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { decodeCatalog, type EncodedCatalog } from "../../src/lib/data/catalog-codec";
 import type { Title } from "../../src/lib/types";
 
 const CORE = "public/catalog.json";
-const TAIL = "public/catalog-tail.json";
+/**
+ * The deep half no longer ships as ranking data — it is a search index now,
+ * carrying no keywords, cast or co-watch links, so there is nothing here for
+ * an instrument that grades ranking to read. See `attachIndex` in
+ * `src/lib/catalog.ts` for why it was cut down.
+ *
+ * This loader stays because the lesson that created it stands: when the
+ * shipped shape changes, every ruler must change with it or they all silently
+ * grade something the browser never sees.
+ */
 
 let cached: Title[] | null = null;
 
 /** every title that ships, core plus tail, in fame order */
 export function loadFullCatalog(): Title[] {
   if (cached) return cached;
-  const core = decodeCatalog(JSON.parse(readFileSync(CORE, "utf8")) as EncodedCatalog);
-  if (process.env.CORE_ONLY === "1" || !existsSync(TAIL)) {
-    cached = core;
-  } else {
-    const tail = decodeCatalog(JSON.parse(readFileSync(TAIL, "utf8")) as EncodedCatalog);
-    cached = [...core, ...tail];
-  }
+  cached = decodeCatalog(JSON.parse(readFileSync(CORE, "utf8")) as EncodedCatalog);
   return cached;
 }

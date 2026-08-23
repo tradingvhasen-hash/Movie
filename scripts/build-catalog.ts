@@ -35,9 +35,27 @@ const OUT = process.env.CATALOG_OUT ?? "public/catalog.json";
  * catalog where every entry is genuinely recognizable. Series get a lower
  * bar because TV accumulates far fewer votes than film.
  */
+/**
+ * A JUNK FILTER, NOT A FAME FILTER — THE QUOTA IS THE FAME FILTER.
+ *
+ * This was 25 votes for film and 10 for series, which made sense when ids came
+ * from one global sweep and the floor was the only thing keeping unknown
+ * titles out. Under per-language quotas it does the opposite: English has far
+ * more than 20,000 titles above 25 votes so the floor never binds there, while
+ * Arabic runs out and the quota goes unfilled. Measured on the first quota
+ * build — **Arabic collapsed from 538 titles to 246** while its quota asked
+ * for 1,600, because a high floor truncates exactly the languages the quotas
+ * exist to protect.
+ *
+ * The quota already guarantees quality: taking the top 1,600 Arabic titles by
+ * vote count IS "the best-known Arabic titles", whatever their absolute
+ * numbers happen to be against an English scale. So the floor drops to the
+ * level where it only removes records with essentially no audience signal at
+ * all, and the quota decides everything above that.
+ */
 const MIN_VOTES: Record<TitleType, number> = {
-  movie: Number(process.env.MIN_VOTES_MOVIE ?? 25),
-  tv: Number(process.env.MIN_VOTES_TV ?? 10),
+  movie: Number(process.env.MIN_VOTES_MOVIE ?? 3),
+  tv: Number(process.env.MIN_VOTES_TV ?? 2),
 };
 
 /**

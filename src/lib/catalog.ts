@@ -126,6 +126,58 @@ async function attachOverviews(titles: Title[]): Promise<void> {
   }
 }
 
+/**
+ * THE DEEP HALF OF THE CATALOG, FETCHED AFTER THE OPENING IS OVER.
+ *
+ * `catalog.json` holds the most-recognised titles and is the same size it has
+ * always been, so the first card arrives exactly as fast as before. Everything
+ * deeper lives in `catalog-tail.json` and lands here — measured at 437 bytes a
+ * title, a 50,000-title catalog in one file would be 20.9 MB raw and ~9.9 MB
+ * gzipped, against 2.74 MB for the catalog that shipped before. Quadrupling
+ * the opening download would undo every loading fix made this week.
+ *
+ * Three things have to be redone once the tail is in, and all three are the
+ * reason this waits for idle rather than racing the first card:
+ *
+ *   - the id map, or nothing new is findable
+ *   - the rarity index, which is derived from the whole corpus
+ *   - the search index, which was warmed over the core alone
+ *
+ * A failure here is silent by design. The core is a complete, working catalog;
+ * a viewer whose tail request fails gets the product as it shipped last week
+ * rather than an error.
+ */
+let tailLoaded = false;
+async function attachTail(): Promise<void> {
+  if (tailLoaded) return;
+  tailLoaded = true;
+  try {
+    const res = await fetch(assetUrl("/catalog-tail.json"), { cache: "force-cache" });
+    if (!res.ok) return;
+    const data = (await res.json()) as EncodedCatalog;
+    if (!data?.t?.length) return;
+    const extra = await decodeSpread(data);
+    if (extra.length === 0) return;
+
+    const merged = [...(items ?? []).map((c) => c.title), ...extra];
+    build(merged);
+    /**
+     * The worker takes the tail too, and skips only what a ranker never reads.
+     *
+     * Lean mode exists to keep plot summaries and the search index off the
+     * worker thread. It must NOT keep the tail off: the worker is the thing
+     * that ranks, so a worker holding only the core would make every new title
+     * invisible to the deck and the whole expansion pointless.
+     */
+    if (!lean) {
+      void attachOverviews(extra);
+      void import("./search").then((m) => m.warmSearchIndex());
+    }
+  } catch {
+    /* the core catalog is complete on its own */
+  }
+}
+
 /** Fetches and installs the full catalog. Safe to call repeatedly. */
 export function loadCatalog(): Promise<CandidateItem[]> {
   if (loadPromise) return loadPromise;
@@ -156,6 +208,15 @@ export function loadCatalog(): Promise<CandidateItem[]> {
        * ever earns a non-zero weight, it gets shipped and loaded then.
        */
       const ready = build(titles);
+      /**
+       * The worker takes the tail straight away; the main thread waits.
+       *
+       * Nothing else runs on the worker, so there is no animation to protect
+       * and no reason to defer — and until it lands, every title past the core
+       * is invisible to ranking. On the main thread the same fetch waits for
+       * idle, behind the first card.
+       */
+      if (lean) void attachTail();
       if (!lean) {
         /**
          * Everything below is wanted eventually and needed by nobody now, so
@@ -169,6 +230,7 @@ export function loadCatalog(): Promise<CandidateItem[]> {
          * get to compete with the first thing the user ever sees.
          */
         whenIdle(() => {
+          void attachTail();
           void attachOverviews(titles);
           /**
            * Prepare the search text while nothing else is happening.

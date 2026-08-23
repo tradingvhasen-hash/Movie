@@ -23,7 +23,7 @@ if (!API_KEY) {
 }
 
 const args = process.argv.slice(2);
-const TARGET = Number(args[args.indexOf("--count") + 1]) || 5000;
+const TARGET = Number(args[args.indexOf("--count") + 1]) || Number(process.env.TARGET ?? 50000);
 /* served as a static asset so it is cached separately from the JS bundle
    and parsed by the browser's native JSON parser */
 const OUT = process.env.CATALOG_OUT ?? "public/catalog.json";
@@ -35,7 +35,10 @@ const OUT = process.env.CATALOG_OUT ?? "public/catalog.json";
  * catalog where every entry is genuinely recognizable. Series get a lower
  * bar because TV accumulates far fewer votes than film.
  */
-const MIN_VOTES: Record<TitleType, number> = { movie: 1000, tv: 400 };
+const MIN_VOTES: Record<TitleType, number> = {
+  movie: Number(process.env.MIN_VOTES_MOVIE ?? 25),
+  tv: Number(process.env.MIN_VOTES_TV ?? 10),
+};
 
 /**
  * Fame floors per original language — because a vote count is an English
@@ -89,38 +92,51 @@ const MIN_VOTES: Record<TitleType, number> = { movie: 1000, tv: 400 };
  * Every ranking change made in two days is worth less than this one number.
  */
 const LANG_FLOORS: Record<string, number> = {
-  en: 500,
-  ja: 300,
-  ko: 200,
-  es: 200,
-  fr: 200,
-  it: 150,
-  de: 150,
-  zh: 150,
-  pt: 100,
-  ru: 100,
-  hi: 50,
-  tr: 40,
-  th: 40,
-  sv: 40,
-  da: 40,
-  no: 40,
-  nl: 40,
-  pl: 40,
-  id: 30,
-  fa: 25,
-  ar: 20,
-  ta: 20,
-  te: 20,
-  ml: 20,
-  kn: 20,
-  ur: 20,
-  he: 20,
+  en: 25,
+  ja: 15,
+  ko: 12,
+  es: 12,
+  fr: 12,
+  it: 10,
+  de: 10,
+  zh: 10,
+  pt: 8,
+  ru: 8,
+  hi: 6,
+  tr: 5,
+  th: 5,
+  sv: 5,
+  da: 5,
+  no: 5,
+  nl: 5,
+  pl: 5,
+  id: 4,
+  fa: 4,
+  ar: 3,
+  ta: 3,
+  te: 3,
+  ml: 3,
+  kn: 3,
+  ur: 3,
+  he: 3,
+  bn: 3,
+  vi: 3,
+  fi: 4,
+  cs: 4,
+  el: 4,
+  hu: 4,
+  ro: 4,
+  uk: 4,
+  ms: 3,
+  tl: 3,
+  pa: 3,
+  mr: 3,
 };
+
 /** how many titles to take per non-English language, best-known first */
-const PER_LANG = Number(process.env.PER_LANG ?? 400);
+const PER_LANG = Number(process.env.PER_LANG ?? 2500);
 /** languages with no entry above are still allowed in, just not sought out */
-const DEFAULT_FLOOR = 150;
+const DEFAULT_FLOOR = Number(process.env.DEFAULT_FLOOR ?? 8);
 const TODAY = new Date().toISOString().slice(0, 10);
 
 /**
@@ -212,17 +228,58 @@ async function collectIds(type: TitleType, want: number): Promise<number[]> {
   const dateField = type === "movie" ? "primary_release_date" : "first_air_date";
   const floor = MIN_VOTES[type];
 
-  for (let page = 1; page <= 500 && ids.size < want; page++) {
-    const data = await tmdb(`/discover/${type}`, {
-      page: String(page),
-      sort_by: "vote_count.desc",
-      "vote_count.gte": String(floor),
-      [`${dateField}.lte`]: TODAY,
-    });
-    const results = data.results ?? [];
-    for (const r of results) ids.add(r.id);
-    if (results.length === 0 || page >= (data.total_pages ?? 1)) break;
-    if (page % 25 === 0) console.log(`  ${type}/discover page ${page}: ${ids.size} ids`);
+  /**
+   * A DESCENDING VOTE CURSOR, BECAUSE TMDB STOPS AT PAGE 500.
+   *
+   * `/discover` will not serve past page 500 whatever `total_pages` claims, so
+   * one sorted query can only ever yield 10,000 ids. That was invisible while
+   * the target was 15,000 — the language passes and the curated lists topped
+   * it up — and it becomes the binding constraint the moment the catalog is
+   * asked to be five times bigger.
+   *
+   * The fix is to page until the wall, then move the window: take the lowest
+   * vote count on the last page and re-query with `vote_count.lte` just below
+   * it. Each sweep is a fresh 10,000-title budget over a lower band, and the
+   * ordering stays "most-voted first" across the whole walk.
+   *
+   * `lte` is inclusive and ties are common down in the tail, so the cursor
+   * steps to `low` rather than `low - 1` and the `ids` Set absorbs the
+   * overlap. Stepping below it would skip every title sharing that count.
+   */
+  let ceiling = Number.POSITIVE_INFINITY;
+  let sweeps = 0;
+  while (ids.size < want && sweeps < 40) {
+    sweeps++;
+    const before = ids.size;
+    let low = ceiling;
+    let pages = 0;
+    for (let page = 1; page <= 500 && ids.size < want; page++) {
+      const params: Record<string, string> = {
+        page: String(page),
+        sort_by: "vote_count.desc",
+        "vote_count.gte": String(floor),
+        [`${dateField}.lte`]: TODAY,
+      };
+      if (Number.isFinite(ceiling)) params["vote_count.lte"] = String(ceiling);
+      const data = await tmdb(`/discover/${type}`, params);
+      const results = data.results ?? [];
+      for (const r of results) {
+        ids.add(r.id);
+        const v = r.vote_count ?? 0;
+        if (v < low) low = v;
+      }
+      pages = page;
+      if (results.length === 0 || page >= (data.total_pages ?? 1)) break;
+    }
+    const gained = ids.size - before;
+    console.log(
+      `  ${type}/sweep ${sweeps}: ${pages} pages, +${gained} → ${ids.size} ids` +
+        (Number.isFinite(ceiling) ? ` (votes ≤ ${ceiling})` : "") +
+        ` · next ceiling ${low}`
+    );
+    // no new ids, or the window collapsed onto the floor: the corpus is spent
+    if (gained === 0 || !Number.isFinite(low) || low <= floor) break;
+    ceiling = low;
   }
   console.log(`  ${type}: ${ids.size} ids (floor ${floor} votes)`);
 
@@ -253,7 +310,7 @@ async function collectIds(type: TitleType, want: number): Promise<number[]> {
     if (lang === "en") continue;
     const floorFor = type === "tv" ? Math.round(langFloor * 0.4) : langFloor;
     let added = 0;
-    for (let page = 1; page <= 20 && added < PER_LANG; page++) {
+    for (let page = 1; page <= 500 && added < PER_LANG; page++) {
       const data = await tmdb(`/discover/${type}`, {
         page: String(page),
         sort_by: "vote_count.desc",
@@ -425,8 +482,17 @@ async function main() {
   const started = Date.now();
   // TMDB simply has more well-rated films than series, so the split follows
   // what's actually available above the fame floor
-  const movieWant = Math.round(TARGET * 0.78 * 1.12);
-  const tvWant = Math.round(TARGET * 0.22 * 1.12);
+  /**
+   * More television than before, because it was asked for by name.
+   *
+   * The split was 78/22 on the reasoning that TMDB simply has more well-rated
+   * films than series above the old fame floor. That was true at 1,000 votes.
+   * At 25 it is not: series, talk shows, sketch and late-night all clear it,
+   * and those are exactly the ways of watching the catalog was blind to.
+   */
+  const tvShare = Number(process.env.TV_SHARE ?? 0.32);
+  const movieWant = Math.round(TARGET * (1 - tvShare) * 1.12);
+  const tvWant = Math.round(TARGET * tvShare * 1.12);
   console.log(`Collecting ids (target ${TARGET}: ${movieWant} movie / ${tvWant} tv)…`);
   const movieIds = await collectIds("movie", movieWant);
   const tvIds = await collectIds("tv", tvWant);
@@ -468,14 +534,47 @@ async function main() {
       `are in our catalog), ${orphans} titles with none`
   );
 
+  /**
+   * TWO FILES, BECAUSE ONE OF FIFTY THOUSAND TITLES CANNOT BE DOWNLOADED.
+   *
+   * Measured on a real build: 437 bytes a title, so 50,000 is 20.9 MB raw and
+   * about 9.9 MB gzipped. The catalog that shipped before this was 5.8 MB raw
+   * and 2.74 MB gzipped, and the user's own complaint about the opening was
+   * that it waited on exactly that download. Quadrupling it would undo every
+   * loading fix made this week.
+   *
+   * So the catalog is split by fame. `catalog.json` keeps the most-recognised
+   * CORE_SIZE titles and stays roughly the size that shipped before, which
+   * means the first card arrives no later than it does today. Everything
+   * deeper goes to `catalog-tail.json`, which the browser fetches once the
+   * opening is over and appends. The deck is fully usable from the core alone.
+   *
+   * Sorted by vote count rather than popularity for the split itself:
+   * popularity is a trending metric and would put last month's releases in the
+   * core ahead of films everyone has seen.
+   */
   mkdirSync(dirname(OUT), { recursive: true });
-  const json = JSON.stringify(encodeCatalog(titles));
+  const CORE_SIZE = Number(process.env.CORE_SIZE ?? 14000);
+  const byFame = [...titles].sort((a, b) => b.voteCount - a.voteCount);
+  const core = byFame.slice(0, CORE_SIZE);
+  const tail = byFame.slice(CORE_SIZE);
+
+  const json = JSON.stringify(encodeCatalog(core));
   writeFileSync(OUT, json);
+  let tailJson = "";
+  const TAIL_OUT = OUT.replace(/\.json$/, "-tail.json");
+  if (tail.length > 0) {
+    tailJson = JSON.stringify(encodeCatalog(tail));
+    writeFileSync(TAIL_OUT, tailJson);
+  }
 
   const movies = titles.filter((t) => t.type === "movie").length;
   console.log(
     `\n✅ ${titles.length} titles (${movies} movies, ${titles.length - movies} tv)` +
-      `\n   ${(json.length / 1024 / 1024).toFixed(2)} MB → ${OUT}` +
+      `\n   core ${core.length} · ${(json.length / 1024 / 1024).toFixed(2)} MB → ${OUT}` +
+      (tail.length
+        ? `\n   tail ${tail.length} · ${(tailJson.length / 1024 / 1024).toFixed(2)} MB → ${TAIL_OUT}`
+        : "") +
       `\n   ${Math.round((Date.now() - started) / 60000)} min elapsed`
   );
 }

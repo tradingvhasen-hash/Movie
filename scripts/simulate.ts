@@ -15,10 +15,9 @@ import { recommend, fameTierSize, type CandidateItem } from "../src/lib/engine/r
 import { applySwipe, emptyProfile, type TasteProfile } from "../src/lib/engine/taste";
 import { buildRarityIndex, titleTokens } from "../src/lib/engine/facets";
 import type { SwipeAction, Title } from "../src/lib/types";
+import { loadFullCatalog } from "./lib/catalog";
 
-const catalog = decodeCatalog(
-  JSON.parse(readFileSync("public/catalog.json", "utf8")) as EncodedCatalog
-);
+const catalog = loadFullCatalog();
 const pool: CandidateItem[] = catalog.map((title) => ({ title }));
 buildRarityIndex(catalog);
 

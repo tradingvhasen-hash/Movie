@@ -596,7 +596,20 @@ async function main() {
    * core ahead of films everyone has seen.
    */
   mkdirSync(dirname(OUT), { recursive: true });
-  const CORE_SIZE = Number(process.env.CORE_SIZE ?? 14000);
+  /**
+   * 11,000, chosen by measurement rather than by feel.
+   *
+   * The core exists to keep the opening download where it already is. The
+   * catalog that shipped before this was 2.74 MB gzipped, and the new titles
+   * make each core row *bigger* rather than smaller — co-watch links land at
+   * 86% inside the catalog now against roughly half before, so a famous title
+   * carries far more neighbour ids. Gzipped, measured on the real build:
+   *
+   *     core  9,000   2.19 MB
+   *     core 11,000   2.69 MB   <- ships, just under what shipped before
+   *     core 14,000   3.46 MB   <- the first attempt, +26% on the opening
+   */
+  const CORE_SIZE = Number(process.env.CORE_SIZE ?? 11000);
   const byFame = [...titles].sort((a, b) => b.voteCount - a.voteCount);
   const core = byFame.slice(0, CORE_SIZE);
   const tail = byFame.slice(CORE_SIZE);

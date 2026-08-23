@@ -42,14 +42,13 @@ import { buildRarityIndex, titleTokens } from "../src/lib/engine/facets";
 import { fameGate, fameTierSize, recommend, type CandidateItem } from "../src/lib/engine/recommend";
 import { applySwipe, emptyProfile, watchLikelihood } from "../src/lib/engine/taste";
 import type { SwipeAction, Title } from "../src/lib/types";
+import { loadFullCatalog } from "./lib/catalog";
 
 const AT = Number(process.env.AT ?? 900);
 const USERS = Number(process.env.USERS ?? 40);
 const OPENING = 12;
 
-const catalog = decodeCatalog(
-  JSON.parse(readFileSync("public/catalog.json", "utf8")) as EncodedCatalog
-);
+const catalog = loadFullCatalog();
 buildRarityIndex(catalog);
 const pool: CandidateItem[] = catalog.map((title) => ({ title }));
 const byId = new Map(catalog.map((t) => [t.id, t]));

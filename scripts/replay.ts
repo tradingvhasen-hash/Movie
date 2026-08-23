@@ -36,6 +36,7 @@ import { buildRarityIndex } from "../src/lib/engine/facets";
 import { recommend, type CandidateItem } from "../src/lib/engine/recommend";
 import { applySwipe, emptyProfile } from "../src/lib/engine/taste";
 import type { SwipeAction, Title } from "../src/lib/types";
+import { loadFullCatalog } from "./lib/catalog";
 
 const files = process.argv.slice(2);
 const exports_ = files.length
@@ -49,9 +50,7 @@ const exports_ = files.length
       ".cache/user-swipes-v3.json",
     ];
 
-const catalog = decodeCatalog(
-  JSON.parse(readFileSync("public/catalog.json", "utf8")) as EncodedCatalog
-);
+const catalog = loadFullCatalog();
 // the browser attaches this in catalog.ts; instruments must see the same prior
 try {
   const reach = JSON.parse(readFileSync(".cache/reach.json", "utf8")) as Record<string, number>;

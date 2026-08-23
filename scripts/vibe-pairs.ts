@@ -49,6 +49,7 @@ import { recommend, type CandidateItem } from "../src/lib/engine/recommend";
 import { applySwipe, emptyProfile } from "../src/lib/engine/taste";
 import { buildRarityIndex } from "../src/lib/engine/facets";
 import type { Title } from "../src/lib/types";
+import { loadFullCatalog } from "./lib/catalog";
 
 /** [A, B, hard?] — hard means the pair crosses a genre line */
 type Pair = [string, string, boolean];
@@ -109,9 +110,7 @@ const PAIRS: Pair[] = [
   ["Forrest Gump", "The Curious Case of Benjamin Button", false],
 ];
 
-const catalog = decodeCatalog(
-  JSON.parse(readFileSync("public/catalog.json", "utf8")) as EncodedCatalog
-);
+const catalog = loadFullCatalog();
 
 /** same overlay hooks as the other rulers, so arms are comparable */
 if (process.env.NO_COWATCH) for (const t of catalog) t.related = [];

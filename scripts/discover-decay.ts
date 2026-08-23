@@ -36,6 +36,7 @@ import { buildRarityIndex } from "../src/lib/engine/facets";
 import { recommend, type CandidateItem } from "../src/lib/engine/recommend";
 import { applySwipe, emptyProfile } from "../src/lib/engine/taste";
 import type { Title } from "../src/lib/types";
+import { loadFullCatalog } from "./lib/catalog";
 
 const USERS = Number(process.env.USERS ?? 120);
 const PAGE = Number(process.env.PAGE ?? 25);
@@ -43,9 +44,7 @@ const PAGES = Number(process.env.PAGES ?? 20);
 const MIN_LIBRARY = Number(process.env.MIN_LIBRARY ?? 60);
 const MODE = (process.env.MODE as "swipe" | "discover") ?? "discover";
 
-let catalog = decodeCatalog(
-  JSON.parse(readFileSync("public/catalog.json", "utf8")) as EncodedCatalog
-);
+let catalog = loadFullCatalog();
 /* MovieLens has no television, so a TV title is a slot that can never be a
    hit — the same correction human-test makes for the same reason */
 catalog = catalog.filter((t) => t.type === "movie");

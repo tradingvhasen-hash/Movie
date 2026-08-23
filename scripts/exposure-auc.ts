@@ -40,10 +40,9 @@ import { buildRarityIndex, titleTokens } from "../src/lib/engine/facets";
 import { featurize } from "../src/lib/engine/features";
 import { applySwipe, emptyProfile, watchLikelihood, seenTrust } from "../src/lib/engine/taste";
 import type { SwipeAction, Title } from "../src/lib/types";
+import { loadFullCatalog } from "./lib/catalog";
 
-const catalog = decodeCatalog(
-  JSON.parse(readFileSync("public/catalog.json", "utf8")) as EncodedCatalog
-);
+const catalog = loadFullCatalog();
 buildRarityIndex(catalog);
 const byId = new Map(catalog.map((t) => [t.id, t]));
 

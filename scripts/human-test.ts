@@ -49,6 +49,7 @@ import { recommend, type CandidateItem } from "../src/lib/engine/recommend";
 import { applySwipe, emptyProfile } from "../src/lib/engine/taste";
 import { buildRarityIndex } from "../src/lib/engine/facets";
 import type { Title } from "../src/lib/types";
+import { loadFullCatalog } from "./lib/catalog";
 
 const CACHE = ".cache/ml-latest-small";
 const URL = "https://files.grouplens.org/datasets/movielens/ml-latest-small.zip";
@@ -66,9 +67,7 @@ const dir = ensureData();
 const rows = (f: string) =>
   readFileSync(`${dir}/${f}`, "utf8").replace(/\r/g, "").trim().split("\n").slice(1);
 
-let catalog = decodeCatalog(
-  JSON.parse(readFileSync("public/catalog.json", "utf8")) as EncodedCatalog
-);
+let catalog = loadFullCatalog();
 if (process.env.NO_COWATCH) for (const t of catalog) t.related = [];
 
 /**

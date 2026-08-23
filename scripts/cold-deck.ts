@@ -53,10 +53,9 @@ import {
 import { applySwipe, emptyProfile } from "../src/lib/engine/taste";
 import { buildRarityIndex } from "../src/lib/engine/facets";
 import type { Title } from "../src/lib/types";
+import { loadFullCatalog } from "./lib/catalog";
 
-const catalog = decodeCatalog(
-  JSON.parse(readFileSync("public/catalog.json", "utf8")) as EncodedCatalog
-);
+const catalog = loadFullCatalog();
 const pool: CandidateItem[] = catalog.map((title) => ({ title }));
 buildRarityIndex(catalog);
 

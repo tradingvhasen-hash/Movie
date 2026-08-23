@@ -24,13 +24,12 @@
 import { readFileSync, existsSync } from "node:fs";
 import { decodeCatalog, type EncodedCatalog } from "../src/lib/data/catalog-codec";
 import type { SwipeAction } from "../src/lib/types";
+import { loadFullCatalog } from "./lib/catalog";
 
 type Cal = { id: string; seen: boolean; voteCount: number; lang: string; type: string; year: number };
 type Row = { id: string; a: SwipeAction; at: number };
 
-const catalog = decodeCatalog(
-  JSON.parse(readFileSync("public/catalog.json", "utf8")) as EncodedCatalog
-);
+const catalog = loadFullCatalog();
 const byId = new Map(catalog.map((t) => [t.id, t]));
 const ranked = [...catalog].sort((a, b) => b.voteCount - a.voteCount);
 const fameRank = new Map(ranked.map((t, i) => [t.id, i + 1]));

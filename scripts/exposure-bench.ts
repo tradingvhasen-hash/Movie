@@ -51,14 +51,13 @@ import { featurize } from "../src/lib/engine/features";
 import { applySwipe, emptyProfile, watchLikelihood } from "../src/lib/engine/taste";
 import { walkBonus, type CandidateItem } from "../src/lib/engine/recommend";
 import type { Title } from "../src/lib/types";
+import { loadFullCatalog } from "./lib/catalog";
 
 const USERS = Number(process.env.USERS ?? 200);
 const NEG = Number(process.env.NEG ?? 2000);
 const SEED = Number(process.env.SEED ?? 7);
 
-const catalog = decodeCatalog(
-  JSON.parse(readFileSync("public/catalog.json", "utf8")) as EncodedCatalog
-);
+const catalog = loadFullCatalog();
 buildRarityIndex(catalog);
 const byId = new Map(catalog.map((t) => [t.id, t]));
 

@@ -1299,7 +1299,21 @@ const CO_WATCH_MAX =
  * checks — including both co-watch guards and the tunnel-vision guard the
  * original 0.8 existed to protect.
  */
-const CO_WATCH_DECK_SCALE = 3.2;
+/**
+ * 0.6, down from 3.2, because the graph got three times denser.
+ *
+ * Not a taste decision — a recalibration forced by the data. The catalog went
+ * from 15,083 titles to 51,922 and the co-watch graph from 281,842 links to
+ * 488,935 at 99% coverage. The same weight over a denser graph pulls far
+ * harder into whatever neighbourhood the viewer is already in, and
+ * `simulate`'s exploration guard caught exactly that: 785 swipes to reach four
+ * named targets against 353 with the signal off, 2.22x against a 1.15x limit.
+ *
+ * Swept on that guard: 3.2 / 2.0 / 1.2 all fail, 0.6 reads 1.13x. The weight
+ * that was right for a sparse graph is wrong for a dense one, and the guard is
+ * the thing that knows the difference.
+ */
+const CO_WATCH_DECK_SCALE = 0.6;
 
 /**
  * Discover's share of the graph signal.

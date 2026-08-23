@@ -23,12 +23,11 @@
 import { readFileSync, existsSync } from "node:fs";
 import { decodeCatalog, type EncodedCatalog } from "../src/lib/data/catalog-codec";
 import type { SwipeAction, Title } from "../src/lib/types";
+import { loadFullCatalog } from "./lib/catalog";
 
 type Row = { id: string; a: SwipeAction; at: number };
 
-const catalog = decodeCatalog(
-  JSON.parse(readFileSync("public/catalog.json", "utf8")) as EncodedCatalog
-);
+const catalog = loadFullCatalog();
 const byId = new Map(catalog.map((t) => [t.id, t]));
 
 /**

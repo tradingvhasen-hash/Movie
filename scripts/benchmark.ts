@@ -111,6 +111,7 @@ import { recommend, type CandidateItem } from "../src/lib/engine/recommend";
 import { applySwipe, emptyProfile } from "../src/lib/engine/taste";
 import { buildRarityIndex } from "../src/lib/engine/facets";
 import type { Title } from "../src/lib/types";
+import { loadFullCatalog } from "./lib/catalog";
 
 /* ── the taste panel ───────────────────────────────────────────────────────
    Six viewers, spread across difficulty and — more importantly — across the
@@ -243,9 +244,7 @@ const SOULS: Map<string, number[]> | undefined = process.env.SOULS
   ? new Map(Object.entries(JSON.parse(readFileSync(process.env.SOULS, "utf8"))))
   : undefined;
 
-const catalog = decodeCatalog(
-  JSON.parse(readFileSync("public/catalog.json", "utf8")) as EncodedCatalog
-);
+const catalog = loadFullCatalog();
 
 /**
  * Experimental: swap or augment the catalog's co-watch edges with

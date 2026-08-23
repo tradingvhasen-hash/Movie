@@ -75,6 +75,7 @@ import {
 } from "../src/lib/engine/recommend";
 import { applySwipe, emptyProfile } from "../src/lib/engine/taste";
 import type { SwipeAction, Title } from "../src/lib/types";
+import { loadFullCatalog } from "./lib/catalog";
 
 const CARDS = Number(process.env.CARDS ?? 500);
 /**
@@ -123,9 +124,24 @@ const LIMIT = Number(process.env.USERS ?? 60);
 /** how many of their favourites the opening grid collects, as the app does */
 const OPENING = 4;
 
-const catalog = decodeCatalog(
-  JSON.parse(readFileSync("public/catalog.json", "utf8")) as EncodedCatalog
-);
+/**
+ * MOVIES ONLY, BECAUSE MOVIELENS HAS NO TELEVISION.
+ *
+ * `human-test` has always made this correction and this file never did. It did
+ * not matter much while the catalog was 20% series; it matters a great deal at
+ * 29%, because every TV card dealt to a MovieLens history is a slot that
+ * cannot be a hit however good the ranking is.
+ *
+ * Measured: with series left in, the 51,922-title catalog reads 171.6 of 564.9
+ * harvested against 321.6 of 533.4 on the old 15,083-title one — a halving
+ * that looks like the bigger catalog wrecking the engine and is mostly the
+ * ruler grading it on cards it made unwinnable. The comparison is only honest
+ * between catalogs if the same correction is applied to both.
+ *
+ * This is a limitation of the oracle, not of the product. Real people watch
+ * series; MovieLens simply cannot say so.
+ */
+const catalog = loadFullCatalog().filter((t) => t.type === "movie");
 // the browser attaches this in catalog.ts; instruments must see the same prior
 try {
   const reach = JSON.parse(readFileSync(".cache/reach.json", "utf8")) as Record<string, number>;

@@ -246,14 +246,25 @@ async function collectIds(type: TitleType, want: number): Promise<number[]> {
    * steps to `low` rather than `low - 1` and the `ids` Set absorbs the
    * overlap. Stepping below it would skip every title sharing that count.
    */
+  /**
+   * The global sweep stops short so the language passes have somewhere to go.
+   *
+   * `sort_by=vote_count.desc` over the whole corpus is an English ranking, so
+   * left to run to the target it fills every slot before a single Arabic or
+   * Tamil title appears — and the per-language budget below then computes to
+   * nothing. Reserving the share up front is the only ordering that works.
+   */
+  const LANG_SHARE = Number(process.env.LANG_SHARE ?? 0.35);
+  const globalWant = Math.round(want * (1 - LANG_SHARE));
+
   let ceiling = Number.POSITIVE_INFINITY;
   let sweeps = 0;
-  while (ids.size < want && sweeps < 40) {
+  while (ids.size < globalWant && sweeps < 40) {
     sweeps++;
     const before = ids.size;
     let low = ceiling;
     let pages = 0;
-    for (let page = 1; page <= 500 && ids.size < want; page++) {
+    for (let page = 1; page <= 500 && ids.size < globalWant; page++) {
       const params: Record<string, string> = {
         page: String(page),
         sort_by: "vote_count.desc",
@@ -285,7 +296,7 @@ async function collectIds(type: TitleType, want: number): Promise<number[]> {
 
   // top_rated adds acclaimed titles the vote ordering can bury
   for (const list of ["top_rated", "popular"]) {
-    for (let page = 1; page <= 25 && ids.size < want; page++) {
+    for (let page = 1; page <= 25 && ids.size < globalWant; page++) {
       const data = await tmdb(`/${type}/${list}`, { page: String(page) });
       for (const r of data.results ?? []) {
         if ((r.vote_count ?? 0) >= floor) ids.add(r.id);
@@ -306,11 +317,30 @@ async function collectIds(type: TitleType, want: number): Promise<number[]> {
    * inside the audience that would recognise them.
    */
   const before = ids.size;
+  /**
+   * THE LANGUAGE PASSES GET A BUDGET, NOT A BLANK CHEQUE.
+   *
+   * `PER_LANG` is a per-language cap and nothing enforced a total, so with 38
+   * languages at 2,500 the passes collected 41,105 ids on top of an already
+   * satisfied 38,087 — more than double the target, and every extra id is a
+   * TMDB request at 25/s and ~447 bytes in a file the browser downloads.
+   * Left alone this build would have run 80 minutes to produce a catalog
+   * twice the size that was asked for.
+   *
+   * So the remaining room is split evenly across the languages that have not
+   * been reached yet. Evenly rather than by corpus size on purpose: dividing
+   * by how much TMDB holds would hand nearly all of it back to the big
+   * European languages, which is the bias these passes exist to correct.
+   */
+  const langNames = Object.keys(LANG_FLOORS).filter((l) => l !== "en");
+  const room = Math.max(0, want - ids.size);
+  const perLang = Math.max(50, Math.min(PER_LANG, Math.floor(room / langNames.length)));
+  console.log(`  ${type}: ${room} ids of room left → ${perLang} per language`);
   for (const [lang, langFloor] of Object.entries(LANG_FLOORS)) {
     if (lang === "en") continue;
     const floorFor = type === "tv" ? Math.round(langFloor * 0.4) : langFloor;
     let added = 0;
-    for (let page = 1; page <= 500 && added < PER_LANG; page++) {
+    for (let page = 1; page <= 500 && added < perLang; page++) {
       const data = await tmdb(`/discover/${type}`, {
         page: String(page),
         sort_by: "vote_count.desc",
@@ -320,7 +350,7 @@ async function collectIds(type: TitleType, want: number): Promise<number[]> {
       });
       const results = data.results ?? [];
       for (const r of results) {
-        if (added >= PER_LANG) break;
+        if (added >= perLang) break;
         if (!ids.has(r.id)) {
           ids.add(r.id);
           added++;
@@ -504,7 +534,19 @@ async function main() {
   ];
 
   let done = 0;
-  const results = await pool(jobs, 8, async ([type, id]) => {
+  /**
+   * Workers, not the rate limit, were the bottleneck.
+   *
+   * `LIMIT` allows 25 requests a second, but each detail call carries
+   * `append_to_response=keywords,credits,translations,recommendations` and
+   * takes the better part of a second to come back. Eight workers therefore
+   * cap out near 9/s however generous the limiter is — measured on the real
+   * 53,540-title run, which projected 100 minutes of fetching from that rate.
+   * Enough workers to saturate the limiter makes the limiter the thing that
+   * governs, which is what it is for.
+   */
+  const WORKERS = Number(process.env.WORKERS ?? 24);
+  const results = await pool(jobs, WORKERS, async ([type, id]) => {
     const t = await fetchTitle(type, id);
     if (++done % 250 === 0) {
       const rate = done / ((Date.now() - started) / 1000);

@@ -553,13 +553,54 @@ const STREAK_TRIGGER = num("STREAK_TRIGGER", 8);
  */
 const STREAK_BOOST = num("STREAK_BOOST", 1.5);
 
+/**
+ * How far the viewer has asked the deck to reach, set in Settings.
+ *
+ * The environment overrides above are for sweeps in Node; a browser has no
+ * `process.env`, so the shipped app needs a runtime path to the same dial.
+ * `useDeck` pushes the setting here whenever it changes, and this module
+ * keeps the last value — the ranking runs on a worker with no access to the
+ * store, so it arrives by message like everything else it needs.
+ *
+ * The multipliers are the swept points: 3 is what ships and measures best on
+ * MovieLens, 8 puts roughly 40% of the catalog in reach, 20 puts 87%.
+ */
+const REACH_GROWTH: Record<string, number> = {
+  narrow: 3,
+  medium: 8,
+  /**
+   * "Everything" means everything, from the first card.
+   *
+   * A first version made this a growth multiplier of 20, and growth is
+   * multiplied by how many cards the viewer has answered — so at card 40 the
+   * pool was still ~340 titles and the setting appeared to do almost nothing.
+   * Checked in a browser: 15 of the first 31 cards were identical to "narrow",
+   * and The Tonight Show, at rank 10,877, would need roughly a thousand swipes
+   * before it became reachable. Nobody would ever see it, which is the
+   * complaint this setting exists to answer.
+   *
+   * Infinity is not a special case invented here — it is exactly what Discover
+   * already uses, and Discover ranks the whole catalog on every load.
+   */
+  wide: Number.POSITIVE_INFINITY,
+};
+let reachGrowth = REACH_GROWTH.narrow;
+
+export function setReach(reach: "narrow" | "medium" | "wide"): void {
+  reachGrowth = REACH_GROWTH[reach] ?? REACH_GROWTH.narrow;
+}
+
 export function fameTierSize(profile: TasteProfile, mode: RankMode = "swipe"): number {
   if (mode === "discover") return DISCOVER_POOL;
   const answered = profile.seenCount + profile.unseenCount;
 
   /* 0 while brand new, 1 once the taste is genuinely learned */
   const confidence = Math.min(1, answered / Math.max(LEARN_CARDS, 1));
-  let growth = GROWTH_MIN + confidence * (GROWTH_MAX - GROWTH_MIN);
+  /* "everything" skips the tier entirely, as Discover does */
+  if (!Number.isFinite(reachGrowth)) return TIER_MAX;
+  /* the sweep override wins when set, so Node measurements are unaffected */
+  const ceiling = Math.max(GROWTH_MAX, reachGrowth);
+  let growth = GROWTH_MIN + confidence * (ceiling - GROWTH_MIN);
 
   /* a run of "never heard of it" means this band is spent — open faster */
   const streak = profile.unseenStreak ?? 0;

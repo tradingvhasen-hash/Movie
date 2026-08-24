@@ -45,7 +45,7 @@ import {
   vectorOf,
 } from "@/lib/catalog";
 import type { EncodedCatalog } from "@/lib/data/catalog-codec";
-import { recommend } from "./recommend";
+import { recommend, setReach } from "./recommend";
 import type { TasteProfile } from "./taste";
 import type { Title } from "@/lib/types";
 
@@ -61,6 +61,8 @@ export interface RankRequest {
   /** titles answered 👁 — they join the likes as co-watch seeds */
   seenIds?: string[];
   homeLanguages?: string[];
+  /** how deep into the catalog this viewer has asked the deck to reach */
+  reach?: "narrow" | "medium" | "wide";
   /** discover wants the numbers it displays; the deck only needs an order */
   withReasons?: boolean;
 }
@@ -108,6 +110,8 @@ self.onmessage = async (event: MessageEvent<RankRequest | CatalogMessage>) => {
   }
   const req = event.data as RankRequest;
   try {
+    /* the store lives on the main thread; the dial arrives with the request */
+    if (req.reach) setReach(req.reach);
     ready ??= loadCatalog();
     const pool = await ready;
 

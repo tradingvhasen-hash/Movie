@@ -146,6 +146,29 @@ export type Settings = {
   screenFeedback: boolean;
   /** a short buzz when a verdict lands, where the device supports one */
   haptics: boolean;
+  /**
+   * HOW DEEP INTO THE CATALOG THE DECK IS ALLOWED TO REACH.
+   *
+   * A setting rather than a constant because the evidence genuinely does not
+   * settle it, and saying so is more honest than picking for everyone.
+   *
+   * Measured on 40 real watch histories, widening the pool trades one loss for
+   * another and comes out behind: titles missed because the deck never
+   * considered them fall from 18.4% to 0%, titles considered but never dealt
+   * rise from 53.4% to 84.9%, and the count of a person's library recovered
+   * halves from 180.7 to 96.8.
+   *
+   * BUT THOSE HISTORIES CANNOT SEE THE CASE THIS EXISTS FOR. They are
+   * MovieLens: American, English, and already inside the famous few thousand,
+   * so a wider net can only add noise for them. For a viewer whose titles are
+   * Arabic, Turkish or Indian the same widening is the only way they appear at
+   * all — The Tonight Show ranks 10,877 by vote count, Key & Peele 14,600, the
+   * Egyptian Blue Elephant 23,979, and at "narrow" not one of them can ever be
+   * dealt.
+   *
+   * So the number stays with the person it affects.
+   */
+  reach: "narrow" | "medium" | "wide";
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -153,6 +176,8 @@ export const DEFAULT_SETTINGS: Settings = {
   swipeUp: "not_seen",
   screenFeedback: true,
   haptics: true,
+  /* the measured-best default; the other two are there to be tried */
+  reach: "narrow",
 };
 
 interface DhawqState {

@@ -76,6 +76,34 @@ export default function SettingsPage() {
         />
       </Group>
 
+      {/* ── how far the deck reaches ── */}
+      <Group title="How far the deck reaches">
+        <ChoiceRow
+          icon={<span className="text-[color:var(--color-like)]"><EyeIcon size={18} /></span>}
+          label="Only what's famous"
+          on={settings.reach === "narrow"}
+          onSelect={() => tap("reach", "narrow")}
+        />
+        <ChoiceRow
+          icon={<span className="text-[color:var(--color-skip)]"><ArrowUpIcon size={18} /></span>}
+          label="Go deeper"
+          on={settings.reach === "medium"}
+          onSelect={() => tap("reach", "medium")}
+        />
+        <ChoiceRow
+          icon={<span className="text-[color:var(--color-skip)]"><ArrowUpIcon size={18} /></span>}
+          label="Everything"
+          on={settings.reach === "wide"}
+          onSelect={() => tap("reach", "wide")}
+        />
+        <p className="px-4 pb-3 pt-1 text-[13px] leading-snug text-muted">
+          Famous titles are the safe choice and the one that measured best. The
+          deeper settings are the only way titles like The Tonight Show or Arabic
+          and Turkish films can reach the deck at all — they sit past 10,000th by
+          popularity. Expect more you have never heard of.
+        </p>
+      </Group>
+
       {/* ── gestures ── */}
       <Group title="Swipe up means">
         <ChoiceRow

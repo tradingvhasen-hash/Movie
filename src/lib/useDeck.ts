@@ -190,6 +190,15 @@ async function computeLocalBatch(): Promise<Title[]> {
     dislikedIds,
     seenIds,
     homeLanguages: homeLanguages(),
+    /**
+     * The reach dial, read fresh on every batch.
+     *
+     * It has to travel with the request rather than being set once: the
+     * ranking runs on a worker that cannot see the store, and the whole point
+     * of making this a setting is that changing it takes effect on the next
+     * card rather than on the next visit.
+     */
+    reach: state.settings.reach,
   });
   return titles;
 }

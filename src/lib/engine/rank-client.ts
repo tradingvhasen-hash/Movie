@@ -38,6 +38,8 @@ export interface RankQuery {
   /** titles answered 👁 — they join the likes as co-watch seeds */
   seenIds?: string[];
   homeLanguages?: string[];
+  /** how deep into the catalog the viewer has asked the deck to reach */
+  reach?: "narrow" | "medium" | "wide";
   withReasons?: boolean;
 }
 
@@ -107,7 +109,10 @@ export function warmRanker() {
  * runs, imports it directly on its own thread as it always did.
  */
 async function runHere(q: RankQuery): Promise<RankResult> {
-  const { recommend } = await import("./recommend");
+  const { recommend, setReach } = await import("./recommend");
+  /* the worker is told per request; the fallback has to be told too, or the
+     two paths would disagree about how far the deck may reach */
+  if (q.reach) setReach(q.reach);
   const titlesFor = (ids: string[]) => {
     const out: Title[] = [];
     for (const id of ids) {
@@ -184,6 +189,7 @@ function rankViaWorker(w: Worker, q: RankQuery): Promise<RankResult> {
     likedIds: q.likedIds,
     dislikedIds: q.dislikedIds,
     homeLanguages: q.homeLanguages,
+    reach: q.reach,
     withReasons: q.withReasons,
   };
 

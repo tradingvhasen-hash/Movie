@@ -249,6 +249,19 @@ for (const [uid, history] of users) {
             dislikedTitles: disliked,
             seenTitles: SEED_SEEN ? neutral : [],
             mode: "swipe",
+            /**
+             * PURE=1 runs the user's design through the shipped engine.
+             *
+             * His proposal is "compare my library against all 48,553 and deal
+             * the best match" — no fame short-list, no exploration probes, no
+             * diversity spreading. Those are separate mechanisms and each can
+             * be switched off, so the design can be measured against the
+             * shipped pipeline on identical histories rather than argued about.
+             *
+             * Pair it with a gate wide enough to hold everything:
+             *   PURE=1 GROWTH_MAX=400 TIER_MAX=60000 npx tsx scripts/harvest.ts
+             */
+            ...(process.env.PURE === "1" ? { exploreRatio: 0 } : {}),
           }).map((r) => r.title);
     if (batch.length === 0) {
       ranOut++;

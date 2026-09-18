@@ -4,6 +4,7 @@ import { getTranslations } from "next-intl/server";
 import "./globals.css";
 import AppShell from "@/components/AppShell";
 import LocaleProvider from "@/components/LocaleProvider";
+import ServiceWorker from "@/components/ServiceWorker";
 
 const plexArabic = IBM_Plex_Sans_Arabic({
   variable: "--font-plex-arabic",
@@ -62,6 +63,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <LocaleProvider>
           <AppShell>{children}</AppShell>
         </LocaleProvider>
+        <ServiceWorker />
       </body>
     </html>
   );

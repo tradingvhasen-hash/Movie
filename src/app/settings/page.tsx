@@ -13,6 +13,7 @@ import { FADE_UP, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
 import { haptic } from "@/lib/haptics";
 import { useDhawq } from "@/lib/store";
 import { useT } from "@/lib/i18n";
+import DataPanel from "@/components/DataPanel";
 
 /**
  * SETTINGS — the place the fifth button went.
@@ -187,6 +188,10 @@ export default function SettingsPage() {
           last
         />
       </Group>
+
+      <motion.div variants={FADE_UP}>
+        <DataPanel />
+      </motion.div>
     </motion.div>
   );
 }

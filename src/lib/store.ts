@@ -225,6 +225,15 @@ interface DhawqState {
   undo: () => string | null;
   removeSwipe: (titleId: string) => void;
   resetAll: () => void;
+  /**
+   * Recompute the taste profile from the stored answers.
+   *
+   * The same replay the v3->v4 migration does, exposed as an action because a
+   * restored backup needs it: a backup carries the answers, not the profile,
+   * so that a library saved under an older engine comes back interpreted by
+   * the current one rather than carrying a fingerprint no live code produces.
+   */
+  rebuildProfile: () => void;
   setOnboardingSeen: () => void;
 
   setPublicProfile: (p: { name: string; bio: string; avatarUrl: string }) => void;
@@ -420,6 +429,21 @@ export const useDhawq = create<DhawqState>()(
           };
         });
       },
+
+      rebuildProfile: () =>
+        set((s) => {
+          let profile = emptyProfile();
+          for (const id of s.swipeOrder) {
+            const sw = s.swipes[id];
+            const title = sw?.title ?? getLocalTitle(id);
+            if (sw && title) profile = applySwipe(profile, title, vectorOf(title), sw.action);
+          }
+          for (const id of s.passed) {
+            const title = getLocalTitle(id);
+            if (title) profile = applySwipe(profile, title, vectorOf(title), "not_seen");
+          }
+          return { profile };
+        }),
 
       resetAll: () =>
         set({

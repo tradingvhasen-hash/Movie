@@ -1,3 +1,17 @@
+> # ⚠️ ARCHIVED — DO NOT READ AS THE CURRENT STATE
+>
+> Written when the catalog held **12,826–15,083 titles**. It has held **48,553**
+> since 23 August 2026, and every figure below expressed as a share of the
+> catalog therefore describes a catalog that no longer exists.
+>
+> Kept because the reasoning and the measurements were real at the time, and
+> because deleting the record of how a decision was reached is how the same
+> wrong turn gets taken twice.
+>
+> **For what is true now: `CURRENT.md` (generated) and `docs/`.**
+
+---
+
 # Where this stands
 
 **https://dhawq.onrender.com** — verified serving the newest build.

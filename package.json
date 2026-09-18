@@ -27,7 +27,8 @@
     "sync": "tsx scripts/sync-guard.ts",
     "canaries": "tsx scripts/reach-canaries.ts",
     "lost": "tsx scripts/lost-titles.ts",
-    "regions": "tsx scripts/build-regions.ts"
+    "regions": "tsx scripts/build-regions.ts",
+    "current": "tsx scripts/build-current.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.2",

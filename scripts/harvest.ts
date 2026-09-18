@@ -154,6 +154,11 @@ try {
   /* measured without it, same as a browser that failed to fetch it */
 }
 installCatalogRegions();
+
+/* for the caveat printed with every result — read, not typed */
+const FULL_CATALOG = loadFullCatalog();
+const FULL_SIZE = FULL_CATALOG.length;
+const TV_BLIND = FULL_CATALOG.filter((t) => t.type === "tv").length;
 buildRarityIndex(catalog);
 const pool: CandidateItem[] = catalog.map((title) => ({ title }));
 const byId = new Map(catalog.map((t) => [t.id, t]));
@@ -353,5 +358,21 @@ console.log(
     `   ·  LOST AT RANKING  ${pct(totalCeiling - totalShown, totalHistory)}\n` +
     (ranOut ? `  ${ranOut} of ${n} ran out of cards before ${CARDS}\n` : "") +
     `\n  Retrieval loss is a gate problem and no ranking can touch it.\n` +
-    `  Ranking loss is ours: the title was there and we did not deal it.\n`
+    `  Ranking loss is ours: the title was there and we did not deal it.\n` +
+    /**
+     * THE CAVEAT TRAVELS WITH THE NUMBER.
+     *
+     * It was written in a comment at the top of this file, which is the one
+     * place nobody reads when quoting the result. Every figure above describes
+     * FILMS ONLY — MovieLens has no television, and the catalog is 29% series —
+     * and describes an American, English, mainstream population that cannot
+     * contain the viewer this catalog was rebuilt for.
+     *
+     * So it prints. A number that can be copied without its limits will be.
+     */
+    `\n  ── what these numbers cannot see ──\n` +
+    `  MovieLens has no television: ${TV_BLIND.toLocaleString()} of ${FULL_SIZE.toLocaleString()} catalog titles\n` +
+    `  (${((100 * TV_BLIND) / FULL_SIZE).toFixed(0)}%) are invisible to this ruler. Its people are American,\n` +
+    `  English and mainstream, so "wider does not help" says nothing about\n` +
+    `  an Arabic, Turkish or Indian library.\n`
 );

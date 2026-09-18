@@ -69,6 +69,7 @@ import { buildRarityIndex } from "../src/lib/engine/facets";
 import {
   fameGate,
   fameTierSize,
+  resetExposureDebt,
   recommend,
   watchedGrid,
   type CandidateItem,
@@ -196,6 +197,9 @@ for (const [uid, history] of users) {
   const seen = new Map<string, number>();
   for (const [id, rating] of history) if (byId.has(id)) seen.set(id, rating);
   totalHistory += seen.size;
+
+  /* module-scope session state: one person must not inherit another's debt */
+  resetExposureDebt();
 
   let profile = emptyProfile();
   const shown = new Set<string>();

@@ -37,6 +37,7 @@ import { loadFullCatalog } from "./lib/catalog";
 import {
   fameGate,
   fameTierSize,
+  resetExposureDebt,
   recommend,
   watchedGrid,
   type CandidateItem,
@@ -58,10 +59,13 @@ buildRarityIndex(catalog);
 const byId = new Map(catalog.map((t) => [t.id, t]));
 const pool: CandidateItem[] = catalog.map((title) => ({ title }));
 
-const vecCache = new Map<string, number[]>();
+const vecCache = new Map<string, Float32Array>();
 const vf = (t: Title) => {
   let v = vecCache.get(t.id);
-  if (!v) vecCache.set(t.id, (v = featurize(t)));
+  if (!v) {
+    v = featurize(t);
+    vecCache.set(t.id, v);
+  }
   return v;
 };
 
@@ -93,6 +97,9 @@ const rows: Row[] = [];
 for (const [, history] of users) {
   const seen = new Map<string, number>();
   for (const [id, rating] of history) if (byId.has(id)) seen.set(id, rating);
+
+  /* module-scope session state: one person must not inherit another's debt */
+  resetExposureDebt();
 
   let profile = emptyProfile();
   const shown = new Set<string>();

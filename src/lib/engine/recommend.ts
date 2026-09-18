@@ -2253,6 +2253,53 @@ export function recommend(
     }
   }
 
+  /* ── stage 3c: pay the exposure debt ──
+     Swipe only. Discover is a list a person reads top-down and re-opens at
+     will; nothing starves there, and inserting a waited-long title into a
+     ranked recommendation list is just an off-topic suggestion. */
+  if (mode !== "discover" && DEBT_EVERY > 0) {
+    const inBatch = new Set(picked.map((p) => p.c.title.id));
+
+    /**
+     * Debt is charged against the window, not the batch. A candidate that came
+     * near the top and was passed over has been deferred; one that placed
+     * 4,000th was simply not good enough, and counting that as a grievance
+     * would make the oldest title the most owed rather than the most deserving.
+     */
+    const window = scored.slice(0, Math.min(scored.length, count * DEBT_WINDOW));
+    for (const s of window) {
+      if (inBatch.has(s.c.title.id)) {
+        debt.delete(s.c.title.id);
+      } else {
+        debt.set(s.c.title.id, (debt.get(s.c.title.id) ?? 0) + 1);
+      }
+    }
+
+    /* how many reserved cards this batch earns, carrying the remainder across
+       batches so 1-in-7 holds over a session rather than per call */
+    debtClock += picked.length;
+    const owedSlots = Math.floor(debtClock / DEBT_EVERY);
+    if (owedSlots > 0) {
+      debtClock -= owedSlots * DEBT_EVERY;
+
+      const byScore = new Map(scored.map((s) => [s.c.title.id, s]));
+      const creditors = [...debt.entries()]
+        .filter(([id, d]) => d >= DEBT_MIN && !inBatch.has(id) && !excludeIds.has(id))
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, owedSlots);
+
+      for (const [id] of creditors) {
+        const entry = byScore.get(id);
+        if (!entry) continue;
+        debt.delete(id);
+        /* replaces the weakest ordinary pick rather than lengthening the
+           batch: the caller asked for `count` cards and gets `count` cards */
+        if (picked.length >= count) picked.pop();
+        picked.push(entry);
+      }
+    }
+  }
+
   const out = picked.map(({ c, score, facet }) => {
     const hit = coWatch?.get(c.title.id);
     return {
@@ -2476,6 +2523,125 @@ export function frontierVotes(watched: Title[], exclude: Set<string>): Map<strin
  * knob.
  */
 const FRONTIER_LIFT = num("FRONTIER_LIFT", 1);
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * EXPOSURE DEBT — so a good candidate cannot starve behind better ones.
+ *
+ * `scripts/lost-titles.ts` measured what "LOST AT RANKING 54%" is actually
+ * made of, on 40 real histories. The decisive line was not about taste:
+ *
+ *     the gate first admitted it in block 0      47.4% never dealt
+ *     the gate first admitted it in block 1      71.1% never dealt
+ *     the gate first admitted it in blocks 2-5   82-84% never dealt
+ *
+ * A title that becomes reachable partway through a session is almost never
+ * shown. The gate widens, admits it, and the ranking never gets to it —
+ * because every batch re-ranks the whole pool from scratch and the same
+ * strong candidates win every time. A title that placed 61st out of 60 slots
+ * places 61st again on the next batch, and the next, forever. It is not being
+ * rejected; it is being permanently deferred.
+ *
+ * That is starvation, and it has a standard answer. CPU schedulers hit it in
+ * the 1970s: a process that is always *nearly* the best never runs at all.
+ * The fix is aging — a job's priority rises with how long it has been passed
+ * over, so being repeatedly-almost-chosen eventually becomes being chosen.
+ *
+ * WHY NOT A RANDOM SLOT. It also cures starvation, by dealing garbage. The
+ * whole point is that these are titles the engine itself keeps scoring
+ * highly; a random draw ignores that and spends the same card on noise.
+ *
+ * WHY NOT JUST A BIGGER FINALIST POOL. The pool is not the constraint. A
+ * title that loses the re-rank at pool size 60 loses it at 5,000 too, for the
+ * same reason, forever. This is an exposure guarantee, not a retrieval one.
+ *
+ * WHY NOT FOLD DEBT INTO THE SCORE. Adding a debt term to `score` would let
+ * accumulated debt eventually outweigh evidence, and then the deck deals a
+ * title because it is old rather than because it is likely. Debt buys a
+ * *reserved slot* instead: the ordinary ranking is untouched, and a fixed
+ * small share of cards is spent on whoever has waited longest. The ranking
+ * decides what is good; the reservation decides that good things get a turn.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * MEASURED, AND IT DOES NOT WORK. OFF BY DEFAULT. READ THIS BEFORE RE-TRYING.
+ *
+ * The reasoning above is sound and the mechanism is correctly built. It simply
+ * does not move anything, on any setting, and the reason is worth more than
+ * the mechanism was.
+ *
+ * Paired on the same 40 histories, same roster, same seed:
+ *
+ *     setting                     harvest   lost at ranking   blocks 2-5 lost
+ *     off                           193.5        35.0%           82-84%
+ *     1-in-7, window 40             195.4        35.1%           84-87%
+ *     1-in-5, window 500, min 2     ~193         35.0%           —
+ *
+ * +1.0% on harvest is inside the noise, and the number it was built to fix —
+ * 82-84% of late-admitted titles never dealt — did not move at all. Widening
+ * the window tenfold and nearly doubling the reserved slots changed nothing
+ * either, which rules out "the parameters were wrong".
+ *
+ * WHY IT FAILS, WHICH IS THE USEFUL PART. Aging cures starvation among
+ * candidates that keep *nearly* winning. These titles are not nearly winning.
+ * The lost set sits at median fame rank 1,160 against 494 for the found set,
+ * and the gate admits roughly 3,000 candidates while a session deals 500
+ * cards. The lost titles are not at positions 61-100 of the ranking waiting
+ * for a turn; they are at positions 500-3,000, and no amount of fairness
+ * fits 3,000 candidates into 500 cards.
+ *
+ * So the deferred-good-candidate model is the wrong model. The deck is not
+ * failing to be fair with its cards — it is spending roughly 305 of its 500
+ * cards on titles the person has not watched, and the way to find more is to
+ * waste fewer, not to redistribute the same waste. That is the region model:
+ * dig where the person's history is dense, cool down where it is not.
+ *
+ * Kept rather than deleted because this is the most natural fix to propose for
+ * "considered and never dealt" — an outside review proposed exactly it, with
+ * exactly this reasoning — and the next person will propose it again. It is
+ * one environment variable away from being re-measured, and the finding above
+ * is why that is unlikely to be worth the run.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * How near the top a candidate must come before being passed over counts as a
+ * debt. Without this every one of 48,553 titles accrues debt on every batch
+ * and the highest-debt title is simply the oldest, which is noise with a
+ * counter attached. `4 ×` the batch is roughly "was on the first page".
+ */
+const DEBT_WINDOW = num("DEBT_WINDOW", 4);
+
+/** one reserved card in this many. 0 — the default — switches it off. */
+const DEBT_EVERY = num("DEBT_EVERY", 0);
+
+/** debt below this is not worth a card — it has barely waited */
+const DEBT_MIN = num("DEBT_MIN", 3);
+
+const debt = new Map<string, number>();
+/** cards dealt since the last reserved slot, so the 1-in-N is across batches */
+let debtClock = 0;
+
+/**
+ * Forget everything. Session state living at module scope is correct for a
+ * browser — one person, one tab, one session — and wrong for a ruler, which
+ * runs sixty people through the same module and would otherwise let one
+ * person's debt decide another person's cards. Every instrument calls this
+ * between users; `useDeck` calls it on reset.
+ */
+export function resetExposureDebt(): void {
+  debt.clear();
+  debtClock = 0;
+}
+
+/** for instruments: how many titles are currently owed a card, and by how much */
+export function exposureDebtStats(): { owed: number; max: number } {
+  let max = 0;
+  let owed = 0;
+  for (const d of debt.values()) {
+    if (d >= DEBT_MIN) owed++;
+    if (d > max) max = d;
+  }
+  return { owed, max };
+}
 
 export function watchedGrid(
   pool: CandidateItem[],

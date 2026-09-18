@@ -79,7 +79,10 @@ const SWIPES = Number(process.env.SWIPES || 44);
 /** the card exit flies for ~620ms; anything less reads a card mid-flight */
 const SETTLE = 950;
 
-const launch = process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {};
+/* the browser this environment already has. A Playwright installed fresh
+   demands whatever build it was pinned to and refuses to start without it,
+   which has nothing to do with what these guards actually check. */
+const launch = { executablePath: process.env.CHROMIUM ?? "/opt/pw-browsers/chromium" };
 /* pointing BASE at the deployed site only works if the browser goes through
    whatever proxy the shell is already using */
 const proxy = process.env.HTTPS_PROXY || process.env.HTTP_PROXY;

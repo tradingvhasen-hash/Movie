@@ -28,7 +28,8 @@
     "canaries": "tsx scripts/reach-canaries.ts",
     "lost": "tsx scripts/lost-titles.ts",
     "regions": "tsx scripts/build-regions.ts",
-    "current": "tsx scripts/build-current.ts"
+    "current": "tsx scripts/build-current.ts",
+    "starter": "tsx scripts/build-starter.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.2",

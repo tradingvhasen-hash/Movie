@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getLocalItem, loadCatalog } from "@/lib/catalog";
 import { rank, warmRanker } from "@/lib/engine/rank-client";
 import { SENTINEL_EVERY, drawSentinel, recordSentinel } from "@/lib/sentinel";
+import { STARTER_PACK } from "@/lib/data/starter-pack";
 import { COLD_START_TARGET, isCalibrating } from "@/lib/engine/taste";
 import { useDhawq } from "@/lib/store";
 import { isSupabaseConfigured } from "@/lib/supabase/configured";
@@ -374,6 +375,42 @@ export function useDeck() {
      * so it simply runs, and a cloud batch installs over the top of it if one
      * ever actually arrives.
      */
+    /**
+     * A REAL CARD BEFORE ANYTHING IS RANKED OR FETCHED.
+     *
+     * Everything below this is asynchronous: `computeLocalBatch` goes through
+     * the worker, and the worker is handed the catalog and *awaited* before the
+     * first ranking — deliberately, because the version that did not await it
+     * lost the race and fetched its own copy, doubling a 13.8 MB download and
+     * breaking a real phone. So the first ranked batch cannot exist before
+     * `catalog.json` has arrived and been decoded. On a slow connection that is
+     * a long time to look at nothing.
+     *
+     * `STARTER_PACK` is 24 real titles with real posters, already in the
+     * JavaScript bundle. They are dealt in the order the generator chose —
+     * films and series interleaved, capped per language and per genre — with no
+     * ranking at all, because ranking 24 titles nobody has taught anything
+     * about would only reorder them by fame, which is the order they are
+     * already in.
+     *
+     * It does not mark the deck `filled`: that flag means "a ranking against
+     * the real catalog came back", and claiming it here would resurrect the
+     * "Reset all cards" message appearing three seconds into a loading visit.
+     * These cards are something to answer, not a statement that the deck is
+     * complete.
+     *
+     * Answers given to them are ordinary answers — real catalog ids, real
+     * verdicts — so nothing is thrown away when the full catalog takes over.
+     */
+    {
+      const done = answeredIds();
+      const opening = STARTER_PACK.filter((t) => !done.has(t.id));
+      if (opening.length > 0 && queueRef.current.length === 0) {
+        setQueue(opening);
+        queueRef.current = opening;
+      }
+    }
+
     void computeLocalBatch().then(install);
     if (isSupabaseConfigured()) {
       void fetchRemoteBatch(BATCH).then((remote) => {

@@ -1,4 +1,5 @@
 import { SAMPLE_TITLES } from "@/lib/data/sample-titles";
+import { STARTER_PACK } from "@/lib/data/starter-pack";
 import { decodeCatalog, decodeRange, type EncodedCatalog } from "@/lib/data/catalog-codec";
 import { buildRarityIndex, buildRarityIndexIdle } from "@/lib/engine/facets";
 import { featurize } from "@/lib/engine/features";
@@ -68,9 +69,24 @@ function build(titles: Title[]): CandidateItem[] {
   return built;
 }
 
-/** sample set — available synchronously, used until the catalog arrives */
+/**
+ * What the deck draws from before `catalog.json` exists.
+ *
+ * This used to be `SAMPLE_TITLES`, which is a genuine fallback but deliberately
+ * carries no poster paths — it predates the TMDB catalog and renders as
+ * generated art. So the first thing a new visitor saw was not the product, it
+ * was the placeholder for the product, for as long as 13.8 MB takes to arrive.
+ *
+ * `STARTER_PACK` is 24 real titles with real posters, 8 KB, bundled into the
+ * JavaScript: no fetch, no decode, no ranking. The card is there when the page
+ * is, and the full catalog takes over behind it.
+ *
+ * SAMPLE_TITLES stays as the layer beneath, for the build where the starter
+ * pack has not been generated. Two fallbacks is one more than strictly needed
+ * and costs nothing; being wrong about which one is present costs a blank deck.
+ */
 function fallback(): CandidateItem[] {
-  if (!items) build(SAMPLE_TITLES);
+  if (!items) build(STARTER_PACK.length > 0 ? STARTER_PACK : SAMPLE_TITLES);
   return items!;
 }
 

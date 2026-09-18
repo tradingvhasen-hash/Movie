@@ -108,12 +108,30 @@ page.on("pageerror", (e) => errors.push(String(e)));
 
 const started = Date.now();
 let firstCard = null;
+let firstInteractive = null;
 let atPaint = 0;
 try {
   await page.goto(BASE, { waitUntil: "commit", timeout: DEADLINE });
   /* a new visitor lands on the calibration grid; a returning one on the deck.
      Either counts as "the app opened" — a skeleton counts as neither, which is
      exactly what the reporter was looking at. */
+  /**
+   * TWO MOMENTS, BECAUSE THEY STOPPED BEING THE SAME ONE.
+   *
+   * This used to wait for the catalog-backed deck and call that "the app
+   * opened", which was right when nothing could be dealt before the catalog
+   * arrived. A bundled starter pack now puts a real, answerable card on screen
+   * in a fraction of a second, so reporting only the later moment understates
+   * what a person experiences by two orders of magnitude — and reporting only
+   * the earlier one would hide that 12 MB is still being pulled.
+   *
+   * So both are measured. The first is what the person feels. The second is
+   * what the connection pays.
+   */
+  await page.waitForSelector('button[aria-label], button[aria-pressed], .swipe-stage h2', {
+    timeout: DEADLINE,
+  });
+  firstInteractive = Date.now() - started;
   await page.waitForSelector("button[aria-pressed], .swipe-stage h2", { timeout: DEADLINE });
   firstCard = Date.now() - started;
   atPaint = [...bytes.values()].reduce((a, b) => a + b, 0);
@@ -139,7 +157,10 @@ for (const [url, n] of rows.slice(0, 10)) {
 console.log(`\n    ${(atPaint / 1048576).toFixed(2).padStart(6)} MB  by first paint`);
 console.log(`    ${(total / 1048576).toFixed(2).padStart(6)} MB  TOTAL, once the idle fetches settle`);
 console.log(
-  `    ${firstCard === null ? "  never" : (firstCard / 1000).toFixed(1).padStart(6) + "s"}  to first paint of real content`
+  `    ${firstInteractive === null ? "  never" : (firstInteractive / 1000).toFixed(2).padStart(6) + "s"}  to a card a person can answer`
+);
+console.log(
+  `    ${firstCard === null ? "  never" : (firstCard / 1000).toFixed(1).padStart(6) + "s"}  to the catalog-backed deck`
 );
 if (errors.length) console.log(`\n  page errors: ${errors.slice(0, 3).join(" · ")}`);
 

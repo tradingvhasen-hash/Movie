@@ -33,7 +33,7 @@
  * the population it dissects is the population that produced the 54%.
  */
 import { readFileSync } from "node:fs";
-import { loadFullCatalog } from "./lib/catalog";
+import { loadFullCatalog, installCatalogRegions } from "./lib/catalog";
 import {
   fameGate,
   fameTierSize,
@@ -55,6 +55,7 @@ const GRID = Number(process.env.GRID ?? 40);
 const OPENING = Number(process.env.OPENING ?? 8);
 
 const catalog = loadFullCatalog();
+installCatalogRegions();
 buildRarityIndex(catalog);
 const byId = new Map(catalog.map((t) => [t.id, t]));
 const pool: CandidateItem[] = catalog.map((title) => ({ title }));

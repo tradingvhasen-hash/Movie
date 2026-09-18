@@ -76,7 +76,7 @@ import {
 } from "../src/lib/engine/recommend";
 import { applySwipe, emptyProfile } from "../src/lib/engine/taste";
 import type { SwipeAction, Title } from "../src/lib/types";
-import { loadFullCatalog } from "./lib/catalog";
+import { loadFullCatalog, installCatalogRegions } from "./lib/catalog";
 
 const CARDS = Number(process.env.CARDS ?? 500);
 /**
@@ -153,6 +153,7 @@ try {
 } catch {
   /* measured without it, same as a browser that failed to fetch it */
 }
+installCatalogRegions();
 buildRarityIndex(catalog);
 const pool: CandidateItem[] = catalog.map((title) => ({ title }));
 const byId = new Map(catalog.map((t) => [t.id, t]));

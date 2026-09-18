@@ -43,6 +43,34 @@ export const FACET_KINDS = [
    * to, and the peak — if they have one — is placed by their own swipes.
    */
   "fame",
+  /**
+   * WHICH NEIGHBOURHOOD OF THE CATALOG A TITLE SITS IN.
+   *
+   * `scripts/build-regions.ts` cuts all 48,553 titles into 72 regions by label
+   * propagation over the co-watch graph — groups of works the same people
+   * watch. They are legible rather than statistical: the largest are
+   * blockbuster/superhero, cult crime favourites, prestige drama, romance,
+   * horror, prestige television.
+   *
+   * It is a facet rather than a parallel mechanism because the machinery for
+   * "learn which values of X this person answers yes to" already exists here,
+   * complete with shrinkage, rarity weighting and pruning, and already feeds
+   * `watchLikelihood`. A second system alongside it would have been the same
+   * idea with its own bugs.
+   *
+   * It exists because of what `lost-titles.ts` measured: the deck spends
+   * roughly 305 of its 500 cards on titles the person never watched, and no
+   * reordering of the same cards recovers that — exposure debt was built and
+   * measured and moved nothing. To waste fewer cards the engine needs somewhere
+   * to aim, and a global ranking has no concept of "here": it re-sorts all
+   * 48,553 on every batch with no memory that the last eleven cards from one
+   * part of the catalog were all misses.
+   *
+   * Genres cannot serve: they describe what happens in a film, not who watches
+   * it, and 25% of the co-watch edges in this catalog join titles sharing at
+   * most one keyword, genre, actor or director.
+   */
+  "region",
 ] as const;
 
 export type FacetKind = (typeof FACET_KINDS)[number];
@@ -96,6 +124,13 @@ const DEFAULT_WEIGHTS: FacetWeights = {
    * exists to break. The exposure tables read it at 1.6; taste reads nothing.
    */
   fame: 0,
+  /**
+   * Zero for taste, for the same reason fame is zero: a region is defined by
+   * who watches together, so learning "I like region 3" partly relabels the
+   * gate's own history rather than the person's taste. The exposure tables
+   * read it at full strength below — that is the question it answers.
+   */
+  region: 0,
 };
 
 /** learning rate for facet importance; deliberately slow and bounded */
@@ -115,6 +150,8 @@ const MAX_TOKENS: Record<FacetKind, number> = {
   language: 48,
   // eight bands, and there will never be more
   fame: 8,
+  // 72 today; headroom for a finer partition without a migration
+  region: 128,
 };
 
 export function emptyFacets(): FacetTables {
@@ -126,6 +163,7 @@ export function emptyFacets(): FacetTables {
     era: {},
     language: {},
     fame: {},
+    region: {},
   };
 }
 
@@ -164,6 +202,26 @@ export function fameBand(voteCount: number): string {
   return "f7";
 }
 
+/**
+ * Title id -> region token. Empty until a region map is installed, and an
+ * empty token list is a facet that contributes nothing — so every caller that
+ * has not installed regions behaves exactly as it did before they existed.
+ */
+let regions: Map<string, string> | null = null;
+
+export function installRegions(byTitleId: Map<string, number>): void {
+  regions = new Map();
+  for (const [id, r] of byTitleId) regions.set(id, `r${r}`);
+  /* tokens are cached per title, and any cached before this point carries an
+     empty region list. Clearing is cheaper than being subtly wrong. */
+  tokenCache.clear();
+}
+
+function regionOf(id: string): string[] {
+  const r = regions?.get(id);
+  return r ? [r] : [];
+}
+
 export function titleTokens(title: Title): TitleTokens {
   const hit = tokenCache.get(title.id);
   if (hit) return hit;
@@ -177,6 +235,7 @@ export function titleTokens(title: Title): TitleTokens {
     era: [decade],
     language: [norm(title.originalLanguage)],
     fame: [fameBand(title.voteCount)],
+    region: regionOf(title.id),
   };
   tokenCache.set(title.id, tokens);
   return tokens;
@@ -217,6 +276,7 @@ const rarity: Record<FacetKind, Record<string, number>> = {
   era: {},
   language: {},
   fame: {},
+  region: {},
 };
 let rarityReady = false;
 
@@ -239,6 +299,7 @@ export function buildRarityIndex(titles: Title[]): void {
     era: new Map(),
     language: new Map(),
     fame: new Map(),
+    region: new Map(),
   };
 
   for (const title of titles) {
@@ -315,6 +376,7 @@ function emptyDf(): Record<FacetKind, Map<string, number>> {
     era: new Map(),
     language: new Map(),
     fame: new Map(),
+    region: new Map(),
   };
 }
 
@@ -629,6 +691,7 @@ const SKIP_SCALE: Record<FacetKind, number> = {
   era: 1,
   language: 1,
   fame: 1,
+  region: 1,
 };
 
 /**
@@ -848,6 +911,40 @@ export const SEEN_WEIGHTS: FacetWeights = {
   language: seenEnv("language", 0.8),
   // the strongest single predictor on the only unbiased sample we have
   fame: seenEnv("fame", 1.6),
+  /**
+   * MEASURED AT FOUR SETTINGS AND IT DOES NOT HELP. OFF. READ BEFORE RETRYING.
+   *
+   * Paired on 40 real histories, same roster, same seed, harvest of 500 cards:
+   *
+   *     region weight 0 (off)          198.8    34.3% lost at ranking
+   *     72 regions,  weight 1.5        196.1    35.0%
+   *     72 regions,  weight 0.6        196.9    34.5%
+   *     127 regions, weight 1.5        194.9    35.0%
+   *
+   * Every setting is slightly worse than off, and a finer partition is worse
+   * than a coarse one. The likely reason is that a region is a blunt instrument
+   * in a *scoring* term: the largest holds 18% of the catalog, so learning "you
+   * watch here" lifts 8,796 titles by the same amount — a large constant with
+   * little power to separate one candidate from another, which is the exact
+   * failure the rarity weighting exists to prevent and only partly does.
+   *
+   * THE CAVEAT, AND IT IS THE SAME ONE AS ALWAYS. These histories are
+   * MovieLens: American, English, mainstream films, already inside the famous
+   * few thousand. A viewer whose history clusters in a corner the global
+   * ranking never visits is exactly who a region model should rescue, and this
+   * ruler is structurally incapable of containing such a person. So this
+   * result says "regions do not help a mainstream viewer" and cannot say more.
+   *
+   * WHAT THE REGIONS ARE STILL FOR. They are built, shipped and correct — see
+   * `scripts/build-regions.ts`, and the sample it prints is legible rather than
+   * statistical. What failed is using them as a score adjustment, which is a
+   * weight-shaped fix, and weight-shaped fixes have now failed six times on
+   * this problem. Every fix that has ever worked changed the QUESTION: the
+   * 40-poster grid, the import, the frontier. The region's real use is to
+   * decide *when to ask differently* — fire a grid when a region turns out
+   * dense — and that is not this term.
+   */
+  region: seenEnv("region", 0),
 };
 
 const round3 = (x: number) => Math.round(x * 1000) / 1000;
@@ -1140,6 +1237,14 @@ function labelFor(title: Title, kind: FacetKind, token: string): string {
     era: [`${Math.floor(title.year / 10) * 10}s`],
     language: [title.originalLanguage.toUpperCase()],
     fame: [`${title.voteCount.toLocaleString()} votes`],
+    /**
+     * Never shown. A region is an integer with no name a person would
+     * recognise — "r14" explains nothing — and `explainMatch` only reads
+     * tables with a non-zero TASTE weight, which region deliberately has not.
+     * Empty here means the fallback returns the raw token if it is ever
+     * reached, rather than the lookup throwing.
+     */
+    region: [],
   };
   return pools[kind].find((v) => norm(v) === token) ?? token;
 }

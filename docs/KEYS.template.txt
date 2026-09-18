@@ -1,0 +1,127 @@
+================================================================
+ DHAWQ — MY KEYS
+ Fill this in yourself. Save the filled copy to your phone.
+ DO NOT save the filled copy back into the project folder.
+ The repository is PUBLIC — anything pushed here is world-readable.
+================================================================
+
+Filled in on: ____________________
+
+
+----------------------------------------------------------------
+1. GitHub
+----------------------------------------------------------------
+Login email ......... ____________________
+Password ............ ____________________
+2FA backup codes .... ____________________
+   Where: github.com -> Settings -> Password and authentication
+Personal access token (only if you push from a terminal):
+   Where: github.com/settings/tokens
+   Token ............ ____________________
+   (Tokens are shown ONCE at creation. If you did not save it,
+    make a new one and delete the old.)
+
+
+----------------------------------------------------------------
+2. Render
+----------------------------------------------------------------
+Login method ........ [ ] GitHub login   [ ] email+password
+Email ............... ____________________
+Password ............ ____________________
+   Where: dashboard.render.com -> Account Settings
+
+
+----------------------------------------------------------------
+3. TMDB  ***REAL SECRET***
+----------------------------------------------------------------
+Login email ......... ____________________
+Password ............ ____________________
+API Key (v3 auth) ... ____________________
+   Exact click-path:
+     1. themoviedb.org, log in
+     2. click your avatar, top right
+     3. Settings
+     4. API  (left-hand menu)
+     5. copy the field labelled "API Key (v3 auth)"
+   Used by: scripts/build-catalog.ts, extend-catalog.ts,
+            add-original-titles.ts, refetch-overviews.ts, seed.ts
+   Passed as: TMDB_API_KEY=...
+
+
+----------------------------------------------------------------
+4. Supabase
+----------------------------------------------------------------
+Login email ......... ____________________
+Password ............ ____________________
+Project ref ......... otgniwtpnxnyiqtrctqg      <-- already known
+Project URL ......... https://otgniwtpnxnyiqtrctqg.supabase.co
+   Dashboard: supabase.com/dashboard/project/otgniwtpnxnyiqtrctqg
+
+   Click-path for the keys below:
+     Project Settings -> API
+
+anon / public key ... ____________________
+   NOT a secret. Already inside every visitor's browser.
+   Goes in NEXT_PUBLIC_SUPABASE_ANON_KEY.
+
+service_role key .... ____________________
+   *** THE DANGEROUS ONE ***
+   Full read/write on the database, bypasses every security rule.
+   Never put it in the repo. Never put it on Render.
+   Never prefix it with NEXT_PUBLIC_.
+   Only ever typed on your own machine, for scripts/seed.ts.
+
+Database password ... ____________________
+   Where: Project Settings -> Database -> Connection string
+
+
+----------------------------------------------------------------
+5. Anthropic API console  ***REAL SECRET***
+----------------------------------------------------------------
+Login email ......... ____________________
+API key ............. ____________________
+   Where: console.anthropic.com -> API Keys
+   Shown ONCE at creation. If lost: create new, delete old.
+   Only needed to re-run scripts/trial-enrich.ts or the
+   llm-*.py experiments. The website never uses it.
+
+
+----------------------------------------------------------------
+6. Claude (claude.ai)
+----------------------------------------------------------------
+Login email ......... ____________________
+Password ............ ____________________
+
+
+================================================================
+ HOW TO USE THESE WHEN REBUILDING THE CATALOG
+================================================================
+
+Create a file called  .env.local  in the project root
+(it is git-ignored — see .gitignore, the line ".env*"):
+
+    TMDB_API_KEY=<paste here>
+    NEXT_PUBLIC_SUPABASE_URL=https://otgniwtpnxnyiqtrctqg.supabase.co
+    NEXT_PUBLIC_SUPABASE_ANON_KEY=<paste here>
+    SUPABASE_URL=https://otgniwtpnxnyiqtrctqg.supabase.co
+    SUPABASE_SERVICE_ROLE_KEY=<paste here>
+
+Or pass one inline, which leaves nothing on disk at all:
+
+    TMDB_API_KEY=xxxx npm run catalog
+
+================================================================
+ IF A KEY EVER LEAKS
+================================================================
+TMDB       : Settings -> API -> regenerate. Old key dies instantly.
+Supabase   : Project Settings -> API -> "Reset service role key".
+             Then check Logs for anything you did not do.
+Anthropic  : console.anthropic.com -> API Keys -> delete, create new.
+             Check Usage for spend you did not make.
+GitHub     : github.com/settings/tokens -> revoke.
+
+Deleting a leaked value out of a file is NOT enough — git keeps
+every old version forever, and on a public repo it was already
+copied by scanning bots within minutes. Always rotate the key
+itself, never just edit the file.
+================================================================

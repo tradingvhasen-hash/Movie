@@ -99,13 +99,13 @@ export default function SharedList({
       className="px-5 pb-32 pt-8"
     >
       {/* the name, plainly — this page is the first and possibly only screen
-          of Seenit a stranger will ever look at */}
+          of ذَوق a stranger will ever look at */}
       <motion.div variants={FADE_UP} className="flex justify-center">
         <Link
           href="/"
           className="text-lg font-bold tracking-[-0.03em] text-ink transition-opacity hover:opacity-70"
         >
-          Seenit
+          ذَوق
         </Link>
       </motion.div>
 

@@ -425,7 +425,7 @@ export default function SwipeDeck() {
         animate="show"
         className="relative z-10 mb-2 flex w-full shrink-0 items-center justify-between"
       >
-        <h1 className="text-[26px] font-bold tracking-[-0.03em]">Seenit</h1>
+        <h1 className="text-[26px] font-bold tracking-[-0.03em]">ذَوق</h1>
         {/*
           THE FASTER ROUTE, OFFERED WHERE THE SLOW ONE IS FELT.
 

@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 export const metadata = {
-  title: "Privacy & Terms · Seenit",
+  title: "Privacy & Terms",
 };
 
 /**
@@ -28,7 +28,7 @@ export default function LegalPage() {
         href="/profile"
         className="inline-flex items-center gap-1 text-sm font-semibold text-ink-faint transition-colors hover:text-ink"
       >
-        <span aria-hidden>&lsaquo;</span> Seenit
+        <span aria-hidden>&lsaquo;</span> ذَوق
       </Link>
 
       <h1 className="mt-8 text-3xl font-bold tracking-tight">Privacy &amp; Terms</h1>
@@ -40,7 +40,7 @@ export default function LegalPage() {
           a copy is stored on Supabase so the same library reaches your other
           devices. That copy holds title identifiers, the answer you gave, and
           the time you gave it — not your viewing history from anywhere else,
-          because Seenit has no access to any streaming account.
+          because ذَوق has no access to any streaming account.
         </p>
         <p>
           If you never sign in, nothing leaves the device. Clearing your browser
@@ -51,9 +51,9 @@ export default function LegalPage() {
 
       <Section title="Signing in">
         <p>
-          Sign-in is Google only. Seenit receives your name, email address and
+          Sign-in is Google only. ذَوق receives your name, email address and
           profile picture from Google and stores them to label your account and
-          your shared lists. Seenit never sees your Google password.
+          your shared lists. ذَوق never sees your Google password.
         </p>
         <p>
           Google only is a deliberate choice, not a limitation: email sign-up
@@ -102,7 +102,7 @@ export default function LegalPage() {
 
       <Section title="The rules">
         <p>
-          Use Seenit for your own viewing history. Do not attempt to scrape it,
+          Use ذَوق for your own viewing history. Do not attempt to scrape it,
           break it, or use a shared list to distribute anything unlawful. The
           service is offered as it is, without warranty; it may change, and it
           may be unavailable.

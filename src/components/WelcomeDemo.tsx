@@ -250,7 +250,7 @@ export default function WelcomeDemo({ onDone }: { onDone: () => void }) {
             animate={{ backgroundPositionX: "0%" }}
             transition={{ duration: 1.1, delay: 0.28, ease: [0.4, 0, 0.2, 1] }}
           >
-            Seenit
+            ذَوق
           </motion.h1>
         </motion.div>
       </motion.div>
@@ -279,7 +279,7 @@ export default function WelcomeDemo({ onDone }: { onDone: () => void }) {
         animate={{ opacity: stage === "demo" ? 1 : 0 }}
         transition={{ duration: 0.45, ease: EASE_OUT }}
       >
-        Seenit
+        ذَوق
       </motion.h1>
 
       <div className="relative z-10 min-h-0 w-full flex-1">

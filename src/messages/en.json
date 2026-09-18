@@ -1,6 +1,6 @@
 {
   "app": {
-    "name": "Seenit",
+    "name": "ذَوق · Dhawq",
     "tagline": "Everything you have ever watched",
     "language": "العربية"
   },
@@ -78,7 +78,7 @@
     "libraryOf": "{name}'s library",
     "listBy": "A list by {name}",
     "notFound": "This page doesn't exist or isn't public",
-    "poweredBy": "Made with Seenit"
+    "poweredBy": "Made with ذَوق"
   },
   "auth": {
     "email": "Email",

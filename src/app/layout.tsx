@@ -24,7 +24,22 @@ export async function generateMetadata(): Promise<Metadata> {
     title: { default: `${t("name")} — ${t("tagline")}`, template: `%s · ${t("name")}` },
     description: t("tagline"),
     manifest: `${BASE_PATH}/manifest.webmanifest`,
-    icons: { icon: `${BASE_PATH}/icon.svg` },
+    /**
+     * Five entries where there was one. The SVG is still first because a
+     * browser that takes it gets the sharpest result at every size; the PNGs
+     * exist because iOS ignores SVG for a home-screen icon entirely, and
+     * `apple-touch-icon` is the fixed name it looks for. See
+     * `scripts/build-icons.mjs` for why the raster art is drawn differently.
+     */
+    icons: {
+      icon: [
+        { url: `${BASE_PATH}/icon.svg`, type: "image/svg+xml" },
+        { url: `${BASE_PATH}/favicon-32.png`, sizes: "32x32", type: "image/png" },
+        { url: `${BASE_PATH}/icon-192.png`, sizes: "192x192", type: "image/png" },
+        { url: `${BASE_PATH}/icon-512.png`, sizes: "512x512", type: "image/png" },
+      ],
+      apple: `${BASE_PATH}/apple-touch-icon.png`,
+    },
   };
 }
 

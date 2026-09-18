@@ -13,7 +13,7 @@ import { genreLabel } from "@/lib/genres";
 import { EASE_OUT, FADE_UP, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
 import { haptic } from "@/lib/haptics";
 import { useDhawq } from "@/lib/store";
-import { locale } from "@/lib/i18n";
+import { useLocale } from "@/lib/i18n";
 import type { Title } from "@/lib/types";
 
 /** five a side, which is more people than fit on a sofa */
@@ -58,6 +58,7 @@ const MAX_SLOTS = 10;
  * profile; the temporary one is created, used and dropped inside a `useMemo`.
  */
 export default function TogetherPage() {
+  const locale = useLocale();
   const [ready, setReady] = useState(false);
   const [slots, setSlots] = useState<(Title | null)[]>([null, null]);
   const [editing, setEditing] = useState<number | null>(null);

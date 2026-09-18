@@ -21,7 +21,7 @@ import { getLocalTitle, loadCatalog } from "@/lib/catalog";
 import { EASE_OUT, FADE_UP, QUICK, SECTION, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
 import { haptic } from "@/lib/haptics";
 import { useDhawq } from "@/lib/store";
-import { locale, t } from "@/lib/i18n";
+import { useLocale, useT } from "@/lib/i18n";
 import { genreLabel } from "@/lib/genres";
 import type { Swipe, SwipeAction, Title } from "@/lib/types";
 
@@ -65,6 +65,8 @@ type Tab = "watched" | "lists";
  * of this page would make every other tab a smaller target for no gain.
  */
 export default function LibraryPage() {
+  const locale = useLocale();
+  const t = useT();
   const swipes = useDhawq((s) => s.swipes);
   const removeSwipe = useDhawq((s) => s.removeSwipe);
   const doSwipe = useDhawq((s) => s.swipe);
@@ -514,6 +516,8 @@ export default function LibraryPage() {
  * more; the value never leaves it until the typing stops.
  */
 function SearchField({ onSettled }: { onSettled: (v: string) => void }) {
+  const locale = useLocale();
+  const t = useT();
   const [value, setValue] = useState("");
 
   useEffect(() => {
@@ -565,6 +569,8 @@ function LogRow({
   title: Title;
   onLog: (action: SwipeAction) => void;
 }) {
+  const locale = useLocale();
+  const t = useT();
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -608,6 +614,8 @@ function LogButton({
   onPress: () => void;
   children: React.ReactNode;
 }) {
+  const locale = useLocale();
+  const t = useT();
   return (
     <motion.button
       type="button"
@@ -666,6 +674,8 @@ function LibraryTile({
   onSelect: () => void;
   onRemove: () => void;
 }) {
+  const locale = useLocale();
+  const t = useT();
   const title = getLocalTitle(swipe.titleId) ?? swipe.title;
   if (!title) return null;
 

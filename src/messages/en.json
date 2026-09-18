@@ -99,5 +99,9 @@
     "close": "Close",
     "confirm": "Confirm",
     "loading": "Loading…"
+  },
+  "settings": {
+    "language": "Language",
+    "languageAuto": "Match my device"
   }
 }

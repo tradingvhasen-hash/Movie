@@ -12,6 +12,7 @@ import {
 import { FADE_UP, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
 import { haptic } from "@/lib/haptics";
 import { useDhawq } from "@/lib/store";
+import { useT } from "@/lib/i18n";
 
 /**
  * SETTINGS — the place the fifth button went.
@@ -33,6 +34,7 @@ import { useDhawq } from "@/lib/store";
  * already answered is a second place for the answer to be wrong.
  */
 export default function SettingsPage() {
+  const t = useT();
   const settings = useDhawq((s) => s.settings);
   const setSettings = useDhawq((s) => s.setSettings);
 
@@ -73,6 +75,33 @@ export default function SettingsPage() {
           hint="Watched it, no strong feeling"
           on={settings.showSeenButton}
           onChange={(v) => tap("showSeenButton", v)}
+        />
+      </Group>
+
+      {/* ── language ──
+          First, and above the deck settings, because it changes every other
+          word on this screen. "Auto" reads the device on every load, which is
+          right for most people; the explicit choices exist because a phone set
+          to English is routinely owned by somebody who would rather read
+          Arabic, and on a bilingual audience that is a large minority. */}
+      <Group title={t("settings.language")}>
+        <ChoiceRow
+          icon={<span className="text-[color:var(--color-ink-dim)]">⌘</span>}
+          label={t("settings.languageAuto")}
+          on={settings.locale === "auto"}
+          onSelect={() => tap("locale", "auto")}
+        />
+        <ChoiceRow
+          icon={<span className="text-[color:var(--color-ink-dim)]">ع</span>}
+          label="العربية"
+          on={settings.locale === "ar"}
+          onSelect={() => tap("locale", "ar")}
+        />
+        <ChoiceRow
+          icon={<span className="text-[color:var(--color-ink-dim)]">A</span>}
+          label="English"
+          on={settings.locale === "en"}
+          onSelect={() => tap("locale", "en")}
         />
       </Group>
 

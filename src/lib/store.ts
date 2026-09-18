@@ -169,6 +169,14 @@ export type Settings = {
    * So the number stays with the person it affects.
    */
   reach: "narrow" | "medium" | "wide";
+  /**
+   * Interface language. "auto" reads the device on every load, which is right
+   * for the common case — a phone set to Arabic belongs to someone who wants
+   * Arabic — while an explicit choice is remembered for anyone whose device
+   * language and reading preference differ, which on a bilingual audience is
+   * a large minority rather than an edge case.
+   */
+  locale: "auto" | "ar" | "en";
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -178,6 +186,7 @@ export const DEFAULT_SETTINGS: Settings = {
   haptics: true,
   /* the measured-best default; the other two are there to be tried */
   reach: "narrow",
+  locale: "auto",
 };
 
 interface DhawqState {

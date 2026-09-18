@@ -71,7 +71,8 @@
     "addItems": "أضف أعمالاً من مكتبتك",
     "public": "عامة",
     "private": "خاصة",
-    "copied": "تم نسخ الرابط!"
+    "copied": "تم نسخ الرابط!",
+    "emptyTitle": "لا توجد قوائم بعد"
   },
   "share": {
     "libraryOf": "مكتبة {name}",
@@ -98,5 +99,9 @@
     "close": "إغلاق",
     "confirm": "تأكيد",
     "loading": "جارٍ التحميل…"
+  },
+  "settings": {
+    "language": "اللغة",
+    "languageAuto": "حسب إعدادات جهازي"
   }
 }

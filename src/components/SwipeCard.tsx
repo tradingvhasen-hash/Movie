@@ -13,7 +13,7 @@ import PosterArt from "./PosterArt";
 import { StarIcon } from "./ui/Icons";
 import { genreLabel } from "@/lib/genres";
 import { EASE_OUT, SPRING_SETTLE } from "@/lib/motion";
-import { locale, t } from "@/lib/i18n";
+import { useLocale, useT } from "@/lib/i18n";
 import type { SwipeAction, Title } from "@/lib/types";
 
 export const SWIPE_X_THRESHOLD = 100;
@@ -68,6 +68,8 @@ export default function SwipeCard({
   x: sharedX,
   y: sharedY,
 }: SwipeCardProps) {
+  const locale = useLocale();
+  const t = useT();
   const [flipped, setFlipped] = useState(false);
   /**
    * THE BACK OF THE CARD DOES NOT EXIST UNTIL SOMEBODY ASKS FOR IT.
@@ -569,7 +571,7 @@ export default function SwipeCard({
               </span>
             </div>
             <h2 className="text-xl font-bold leading-tight text-white [text-shadow:0_1px_3px_rgb(0_0_0/0.55)]">
-              {title.title[locale]}
+              <span dir="auto">{title.title[locale]}</span>
             </h2>
             <div className="mt-1 flex flex-wrap gap-x-2.5">
               {title.genres.slice(0, 3).map((g) => (
@@ -659,7 +661,7 @@ export default function SwipeCard({
               </div>
               <div className="min-w-0 flex-1">
                 <h2 className="text-[19px] font-bold leading-tight tracking-tight">
-                  {title.title[locale]}
+                  <span dir="auto">{title.title[locale]}</span>
                 </h2>
                 <div className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[11px] font-semibold text-white/60">
                   <span>{title.year}</span>
@@ -687,7 +689,7 @@ export default function SwipeCard({
             {/* the one scrolling surface inside the stage — see globals.css */}
             <div className="card-back-scroll mt-5 min-h-0 flex-1 overflow-y-auto">
               <p className="text-[14px] leading-relaxed text-white/85">
-                {title.overview[locale] || "…"}
+                <span dir="auto">{title.overview[locale] || "…"}</span>
               </p>
             </div>
 

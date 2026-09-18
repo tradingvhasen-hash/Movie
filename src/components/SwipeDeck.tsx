@@ -20,10 +20,11 @@ import {
 } from "./ui/Icons";
 import { FADE_UP, SECTION, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
 import { haptic } from "@/lib/haptics";
-import { t } from "@/lib/i18n";
+import { useT } from "@/lib/i18n";
 import type { SwipeAction } from "@/lib/types";
 
 export default function SwipeDeck() {
+  const t = useT();
   const { queue, hydrated, filled, swipeTop, undo, canUndo, refill } = useDeck();
   /**
    * Someone who came in through the grid has already answered thirty

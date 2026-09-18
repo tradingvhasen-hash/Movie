@@ -16,7 +16,7 @@ import { genreLabel } from "@/lib/genres";
 import { EASE_OUT, FADE_UP, SECTION, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
 import { haptic } from "@/lib/haptics";
 import { useDhawq } from "@/lib/store";
-import { locale, t } from "@/lib/i18n";
+import { useLocale, useT } from "@/lib/i18n";
 import type { Recommendation, SwipeAction } from "@/lib/types";
 
 /**
@@ -48,6 +48,8 @@ import type { Recommendation, SwipeAction } from "@/lib/types";
  * argument that it was not a fluke.
  */
 export default function DiscoverPage() {
+  const locale = useLocale();
+  const t = useT();
   const swipes = useDhawq((s) => s.swipes);
   const profile = useDhawq((s) => s.profile);
   const seed = useDhawq((s) => s.seed);
@@ -416,6 +418,8 @@ export default function DiscoverPage() {
 }
 
 function WhyLine({ rec }: { rec: Recommendation }) {
+  const locale = useLocale();
+  const t = useT();
   const because = rec.becauseOf ? getLocalTitle(rec.becauseOf) : null;
   const why = rec.reasons.map((r) => r.label).join(" · ");
   if (!why && !because) return null;

@@ -9,7 +9,7 @@ import { useDhawq } from "@/lib/store";
 import { useAccount } from "@/lib/supabase/useAccount";
 import { publishList } from "@/lib/supabase/lists";
 import { FADE_UP, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
-import { t } from "@/lib/i18n";
+import { useT } from "@/lib/i18n";
 import {
   CheckIcon,
   ChevronLeftIcon,
@@ -52,6 +52,7 @@ import {
  * rather than as a wall in front of the screen.
  */
 export default function ListsView() {
+  const t = useT();
   const lists = useDhawq((s) => s.lists);
   const createList = useDhawq((s) => s.createList);
   const deleteList = useDhawq((s) => s.deleteList);

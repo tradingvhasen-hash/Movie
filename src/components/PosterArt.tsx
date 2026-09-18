@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { ClapperIcon, TvIcon } from "./ui/Icons";
-import { locale } from "@/lib/i18n";
+import { useLocale } from "@/lib/i18n";
 import type { Title } from "@/lib/types";
 
 /**
@@ -37,6 +37,7 @@ export default function PosterArt({
   className?: string;
   sizes?: string;
 }) {
+  const locale = useLocale();
   const src = title.posterPath
     ? `https://image.tmdb.org/t/p/w500${title.posterPath}`
     : null;
@@ -76,7 +77,7 @@ export default function PosterArt({
         <TypeIcon size={50} strokeWidth={1.4} className="text-white/40" />
         <div className="mt-5 px-6 text-center">
           <div className="text-2xl font-bold leading-snug text-white [text-shadow:0_2px_6px_rgb(0_0_0/0.4)]">
-            {title.title[locale]}
+            <span dir="auto">{title.title[locale]}</span>
           </div>
           <div className="mt-2 text-sm font-medium tracking-[0.25em] text-white/70">
             {title.year}

@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import PosterArt from "./PosterArt";
 import { StarIcon } from "./ui/Icons";
 import { POP_IN, QUICK, SPRING_SOFT, TILE } from "@/lib/motion";
-import { locale } from "@/lib/i18n";
+import { useLocale } from "@/lib/i18n";
 import type { Title } from "@/lib/types";
 
 /**
@@ -45,6 +45,7 @@ export default function TitleTile({
   overlay?: React.ReactNode;
   onClick?: () => void;
 }) {
+  const locale = useLocale();
   return (
     <motion.div
       variants={TILE}
@@ -84,7 +85,7 @@ export default function TitleTile({
 
       <div className="px-3 pb-3 pt-2.5">
         <div className="truncate text-[13.5px] font-semibold tracking-tight">
-          {title.title[locale]}
+          <span dir="auto">{title.title[locale]}</span>
         </div>
         <div className="mt-1 flex items-center gap-1 text-xs text-ink-faint">
           {title.year}

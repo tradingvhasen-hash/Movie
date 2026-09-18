@@ -23,7 +23,8 @@
     "harvest": "tsx scripts/harvest.ts",
     "calibrate": "tsx scripts/calibrate.ts",
     "extend": "tsx scripts/extend-catalog.ts",
-    "split": "tsx scripts/split-overviews.ts"
+    "split": "tsx scripts/split-overviews.ts",
+    "sync": "tsx scripts/sync-guard.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.2",

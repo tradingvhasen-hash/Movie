@@ -14,6 +14,8 @@ import { haptic } from "@/lib/haptics";
 import { useDhawq } from "@/lib/store";
 import { useT } from "@/lib/i18n";
 import DataPanel from "@/components/DataPanel";
+import { useEffect, useState } from "react";
+import { getLocalCatalog } from "@/lib/catalog";
 
 /**
  * SETTINGS — the place the fifth button went.
@@ -36,6 +38,19 @@ import DataPanel from "@/components/DataPanel";
  */
 export default function SettingsPage() {
   const t = useT();
+  /**
+   * The real number, read from the catalog the browser actually holds, not a
+   * figure typed into a sentence. A hard-coded count is wrong the first time
+   * the catalog is rebuilt and nobody notices — this project has already had
+   * documents quoting 15,083 titles against a catalog of 48,553.
+   *
+   * After mount, because the catalog is installed client-side and a server
+   * render has nothing to count.
+   */
+  const [catalogSize, setCatalogSize] = useState(0);
+  useEffect(() => {
+    setCatalogSize(getLocalCatalog().length);
+  }, []);
   const settings = useDhawq((s) => s.settings);
   const setSettings = useDhawq((s) => s.setSettings);
 
@@ -122,7 +137,9 @@ export default function SettingsPage() {
         />
         <ChoiceRow
           icon={<span className="text-[color:var(--color-skip)]"><ArrowUpIcon size={18} /></span>}
-          label="Everything"
+          label={
+            catalogSize > 0 ? `Everything — ${catalogSize.toLocaleString()} titles` : "Everything"
+          }
           on={settings.reach === "wide"}
           onSelect={() => tap("reach", "wide")}
         />

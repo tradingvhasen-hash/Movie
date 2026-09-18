@@ -24,7 +24,10 @@
     "calibrate": "tsx scripts/calibrate.ts",
     "extend": "tsx scripts/extend-catalog.ts",
     "split": "tsx scripts/split-overviews.ts",
-    "sync": "tsx scripts/sync-guard.ts"
+    "sync": "tsx scripts/sync-guard.ts",
+    "canaries": "tsx scripts/reach-canaries.ts",
+    "lost": "tsx scripts/lost-titles.ts",
+    "regions": "tsx scripts/build-regions.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.2",

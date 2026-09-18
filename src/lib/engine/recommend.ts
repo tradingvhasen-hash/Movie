@@ -629,8 +629,32 @@ export function fameTierSize(profile: TasteProfile, mode: RankMode = "swipe"): n
    * old value, so early sessions are bit-for-bit what they were; the opening
    * happens later, which is the whole point.
    */
+  /**
+   * "GO DEEPER" HAS TO BE DEEPER ON THE FIRST CARD, NOT THE HUNDREDTH.
+   *
+   * `growth` only separates the settings as `confidence` rises, and confidence
+   * is zero for a new viewer — so narrow and "go deeper" both opened at exactly
+   * 900 candidates and stayed identical for the first stretch of a session.
+   * `scripts/reach-canaries.ts` caught it on its first run: 900 < 900 < 48,553.
+   *
+   * That is the same failure "everything" already had once, when it shipped as
+   * a growth multiplier of 20 and left the pool at ~340 titles by card 40. A
+   * person flips the setting, swipes, sees no difference, and concludes the
+   * control is decorative — which, until the confidence term caught up, it was.
+   *
+   * So the opening floor scales with the chosen reach. Narrow is unchanged to
+   * the integer (3/3 = 1), which matters: the long comment above records that
+   * loosening the early pool broke a taste-dilution guard, and that guard is
+   * about the DEFAULT. Somebody who has explicitly asked to go deeper is asking
+   * for exactly the dilution it protects against.
+   */
+  const reachScale = Number.isFinite(reachGrowth)
+    ? Math.max(1, reachGrowth / GROWTH_MIN)
+    : 1;
   const earned =
-    TIER_BASE + TIER_PER_SEEN * profile.seenCount - TIER_PER_UNSEEN * profile.unseenCount;
+    TIER_BASE * reachScale +
+    TIER_PER_SEEN * profile.seenCount -
+    TIER_PER_UNSEEN * profile.unseenCount;
   const margin = Math.max(TIER_FLOOR_BASE, answered * (growth - 1));
   return Math.min(TIER_MAX, Math.max(earned, Math.round(answered + margin)));
 }

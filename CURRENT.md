@@ -4,7 +4,7 @@
 > Rebuild with `npm run current`. Anything a computer can check lives here so
 > that it cannot quietly go stale; anything it cannot check lives in `docs/`.
 >
-> Generated 2026-09-18 from commit `34b9dfb`.
+> Generated 2026-09-18 from commit `4960709`.
 
 ## The product
 
@@ -15,7 +15,7 @@
 | Live site | https://dhawq.onrender.com |
 | Repository | https://github.com/tradingvhasen-hash/Movie |
 | Branch | `claude/movie-swipe-app-0bvkc8` |
-| Commits | 166 |
+| Commits | 172 |
 
 ## The catalog
 

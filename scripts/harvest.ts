@@ -155,6 +155,40 @@ try {
 }
 installCatalogRegions();
 
+/**
+ * ONE NUMBER WAS NEVER ENOUGH.
+ *
+ * "29.8% of a real history" averages over everything and therefore describes
+ * nobody. The whole reason the catalog was rebuilt is that different
+ * populations behave differently, and an average is exactly the shape that
+ * hides it. So the harvest is also reported by fame band and by era — the two
+ * axes MovieLens can actually speak to.
+ *
+ * It cannot speak to language or to television: its people are English and it
+ * has no series at all. Those rows need real volunteers importing real
+ * histories, which is a recruiting problem rather than a coding one, and the
+ * caveat printed below says so rather than leaving a gap that looks like a
+ * result.
+ */
+const segments = new Map<string, { shown: number; hit: number }>();
+const fameBandOf = (t: Title) => {
+  const v = t.voteCount;
+  if (v >= 12000) return "fame · household name";
+  if (v >= 5000) return "fame · well known";
+  if (v >= 2000) return "fame · known";
+  if (v >= 800) return "fame · niche";
+  return "fame · obscure";
+};
+const eraOf = (t: Title) =>
+  t.year >= 2020 ? "era · 2020s" : t.year >= 2010 ? "era · 2010s" : t.year >= 2000 ? "era · 2000s" : "era · pre-2000";
+
+const bump = (key: string, hit: boolean) => {
+  const s = segments.get(key) ?? { shown: 0, hit: 0 };
+  s.shown++;
+  if (hit) s.hit++;
+  segments.set(key, s);
+};
+
 /* for the caveat printed with every result — read, not typed */
 const FULL_CATALOG = loadFullCatalog();
 const FULL_SIZE = FULL_CATALOG.length;
@@ -307,6 +341,9 @@ for (const [uid, history] of users) {
         harvested[Math.floor(cards / BLOCK)]++;
         found++;
       }
+      /* every dealt card is a trial; a rating means the person had watched it */
+      bump(fameBandOf(title), rating !== undefined);
+      bump(eraOf(title), rating !== undefined);
       if (action === "liked") liked.push(title);
       else if (action === "disliked") disliked.push(title);
       else if (action === "seen") neutral.push(title);
@@ -370,6 +407,19 @@ console.log(
      *
      * So it prints. A number that can be copied without its limits will be.
      */
+    `\n  ── where the cards actually landed ──\n` +
+    [...segments.entries()]
+      .filter(([, v]) => v.shown >= 50)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(
+        ([k, v]) =>
+          `  ${k.padEnd(26)}${((100 * v.hit) / v.shown).toFixed(1).padStart(6)}% were watched   ` +
+          `(${v.shown.toLocaleString()} cards)`
+      )
+      .join("\n") +
+    `\n\n  (the 2020s row is a property of the dataset, not of the deck:\n` +
+    `   MovieLens ratings thin out after 2023, so recent titles are barely\n` +
+    `   in these histories to be found.)\n` +
     `\n  ── what these numbers cannot see ──\n` +
     `  MovieLens has no television: ${TV_BLIND.toLocaleString()} of ${FULL_SIZE.toLocaleString()} catalog titles\n` +
     `  (${((100 * TV_BLIND) / FULL_SIZE).toFixed(0)}%) are invisible to this ruler. Its people are American,\n` +

@@ -266,3 +266,72 @@ And the **collapse** is still the collapse. Every real improvement to date came
 from **changing the question asked** (grid, import, frontier), never from
 retuning the answer. That is the strongest available hint about where to look
 next, and 1.3 is the first attempt to look at it directly.
+
+---
+
+# PART 6 — WHAT WAS ACTUALLY DONE (18 September 2026)
+
+Executed in one session, in the order below. Rollback point:
+branch `v2-before-rebuild`, commit `efe5b12`.
+
+## Shipped and verified
+
+| # | Problem | What happened |
+|---|---|---|
+| 15 | White screen | `error.tsx` + `global-error.tsx`, panel over a live app, error id + build stamp |
+| 9 | Two names | One source, `src/lib/brand.ts`. Seenit is gone |
+| 17 | Icons | 192 / 512 / maskable / apple-touch / favicon, generated in pure shapes |
+| 22 | `/lab` public | 404 in production, alive in dev and behind `ENABLE_LAB=1` |
+| **18** | **Sync** | **Was broken, not untested.** Download read only `user_taste`. Fixed; 9-check guard |
+| 11 | No account deletion | Server-side, caller's own token for rows, `service_role` never in a bundle |
+| 13 | Hidden backup | CSV + JSON in Settings, with restore |
+| 14 | Local-only data | Stated plainly in Settings with the count |
+| 8 | No Arabic | `ar.json` existed and was never loaded. Now live; 6 browser checks |
+| 21 | "Everything" unverified | Canary contract. Caught that **"Go deeper" was identical to narrow** |
+| 20 | Stale sample | Sentinel cards — 1 in 40, stratified, probability and catalog size stored |
+| 23 | Stale docs | `CURRENT.md` generated; `docs/decisions`, `docs/experiments`, `docs/archive` |
+| 19 | TV blindness | Printed with every harvest result; harvest now segmented by fame and era |
+| 5 | Slow first card | Starter pack — **a real card at 0.27s with the catalog blocked** |
+| 7 | First tap lost | **No longer reproduces.** Buttons at 0.31s, first tap recorded |
+| 16 | No offline | Service worker; verified serving with the network off |
+
+## Measured and deliberately not shipped
+
+| # | Idea | Result |
+|---|---|---|
+| 2 | Exposure debt | Three settings, no effect. 193.5 → 195.4, inside noise |
+| 1 | Regions as a score term | Four settings, all slightly worse. 198.8 → 194.9 |
+
+Both are kept, switched off, with the measurement written beside them — the
+project's standing practice for `TARGET_SEEN` and the `souls` hook. The regions
+themselves are built and correct; what failed was using them as a weight.
+
+## Not done, and why
+
+| # | Item | Blocker |
+|---|---|---|
+| 5 | Catalog off the browser | **12.44 MB is still the real problem.** ~2 days, needs its own session |
+| 14 | Event log + IndexedDB | Largest single change; touches the store every screen reads |
+| 6 | Static PWA split | Moves `/api`, `/l`, `/u`. Consequential, and cheaper once E3 is decided |
+| 4 | Vibe graph | Harness built and dry-run. Needs `ANTHROPIC_API_KEY` (~$1.19) |
+| 4b | Model-written edges at scale | Same key. ~$3 |
+| 19 | Trakt benchmark | Needs volunteers and consent, not code |
+| 10, 12 | Domain, OAuth branding | Deferred to launch by the owner |
+
+## The finding that matters most
+
+**Six weight-shaped fixes have now failed on the collapse** — four before this
+session, plus exposure debt and regions. Every fix that has ever moved the
+number changed *the question asked*: the 40-poster grid (2,490/hour against the
+deck's 1,121), the import (100% match), the frontier (+42%).
+
+`scripts/lost-titles.ts` says why. The lost titles sit at median fame rank
+1,160 against 494 for the found ones, the gate admits ~3,000 candidates, and a
+session deals 500 cards. They are not narrowly missing out — there is no
+ordering of 500 cards that reaches them. The deck spends roughly 305 of its 500
+cards on titles the person never watched, and the way to find more is to waste
+fewer, not to redistribute the same waste.
+
+The next engine attempt should be the **Burst grid**: fire a 40-poster grid the
+moment a region turns out dense. It is the only untried idea that changes the
+question rather than the weights, and the regions it needs are already built.

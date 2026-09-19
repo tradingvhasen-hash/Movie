@@ -784,8 +784,48 @@ const LANG_DOOR_MASS = 2;
  * scale — and because the next viewer may be someone who does watch in the
  * language they read. Turning it on again needs their calibration sample, not
  * an argument.
- */const HOME_LANG_STRENGTH = Number(
-  (typeof process !== "undefined" && process.env?.HOME_LANG) || 0
+ */
+
+/**
+ * THE DOOR WAS BUILT, WIRED, DOCUMENTED — AND LEFT SHUT.
+ *
+ * This defaulted to 0, which meant `languageDoor` returned a map full of
+ * entries worth nothing. Every consequence of having a door followed; none of
+ * the benefit did. Specifically, `door.size > 0` is the switch that turns on
+ * personalised re-ordering of the gate window, and `room = keep * strength` is
+ * what puts the viewer's own language into that window. At strength 0 the
+ * switch flips and the room is zero, so a new Arabic reader got the
+ * re-ordering *and* nothing to re-order.
+ *
+ * Measured on a fresh viewer whose browser asks for Arabic, first 60 cards, at
+ * the DEFAULT "narrow" setting:
+ *
+ *     HOME_LANG = 0 (as shipped)    0 Arabic, 0 non-English — English only
+ *     HOME_LANG = 0.05              5 Arabic
+ *     HOME_LANG = 0.15              6 Arabic
+ *
+ * Worse than that: the same viewer with no language preference at all saw 11
+ * non-English titles. So declaring that you read Arabic made the deck *more*
+ * English than saying nothing, which is the precise opposite of the intent
+ * written above this line.
+ *
+ * WHY 0.05 AND NOT MORE. It is five percent of the gate, and the whole
+ * argument for the door is that these titles become *candidates* that
+ * `watchLikelihood` then ranks — not that they are injected. 0.15 buys one
+ * extra Arabic title in sixty and costs three times the room. The earlier
+ * version of this idea that forced language into the deck cost 16% of harvest;
+ * this one hands the decision back to the exposure model.
+ *
+ * WHY THE HARVEST RULER CANNOT SEE THIS AT ALL. `harvest.ts` does not pass
+ * `homeLanguages` — and could not usefully, because MovieLens users are
+ * English speakers and the door deliberately skips English. The number is
+ * identical to the decimal with this at 0 and at 0.05, which is the signature
+ * of a feature that never ran rather than one that did not help. It is the
+ * same blindness recorded everywhere else in this file: the only ruler
+ * available cannot contain the person this was built for.
+ */
+const HOME_LANG_STRENGTH = Number(
+  (typeof process !== "undefined" && process.env?.HOME_LANG) || 0.05
 );
 
 function languageDoor(

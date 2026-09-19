@@ -30,7 +30,8 @@
     "regions": "tsx scripts/build-regions.ts",
     "current": "tsx scripts/build-current.ts",
     "starter": "tsx scripts/build-starter.ts",
-    "vibe:judge": "tsx scripts/vibe-judge.ts"
+    "vibe:judge": "tsx scripts/vibe-judge.ts",
+    "lang": "tsx scripts/home-language-guard.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.2",

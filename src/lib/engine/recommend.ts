@@ -2192,6 +2192,40 @@ export function recommend(
      * height. Off by default until the goal ruler says otherwise; the whole
      * point of having it is that the argument is testable rather than
      * persuasive.
+     *
+     * ─────────────────────────────────────────────────────────────────────
+     * MEASURED AT LAST, AND THE GOAL RULER SAYS NO. IT STAYS OFF.
+     *
+     * 40 real histories, 500 cards each, same roster and seed:
+     *
+     *     TARGET_SEEN   harvest   lost at ranking
+     *     0.4             116.8        46.5%
+     *     0.5             133.4        44.2%
+     *     0.7             192.1        35.6%
+     *     off (height)    198.1        34.7%
+     *
+     * Monotonic: the nearer the ranking is to plain height, the more of a
+     * person's library it finds. At 0.5 — the setting the argument was built
+     * around — a third of the harvest is gone.
+     *
+     * WHAT THE ARGUMENT GOT RIGHT, AND WHY IT LOSES ANYWAY. It is true that a
+     * card whose answer is predictable teaches little, and true that the
+     * opening blocks spend many cards confirming. Active learning optimises
+     * information about the MODEL. This product's stated goal is not a
+     * well-calibrated model — it is *how many of the things you have watched
+     * did we get out of you*, and a card you have not seen harvests nothing
+     * however much it teaches. Asking the maximally uncertain question buys
+     * knowledge with the currency the goal is denominated in.
+     *
+     * So the idea is not wrong about information. It is optimising a different
+     * quantity from the one the product is scored on, and the gap between
+     * those two is 65 titles a session.
+     *
+     * Two independent reviewers proposed this, and the project's own plan
+     * called it "the most promising untried idea in the engine". It was. It
+     * has now been tried. Keeping the constant costs nothing and the table
+     * above is why re-running the sweep is not worth an afternoon.
+     * ─────────────────────────────────────────────────────────────────────
      */
     const recognitionTerm =
       TARGET_SEEN > 0 ? 1 - Math.abs(known - TARGET_SEEN) * 2 : known;

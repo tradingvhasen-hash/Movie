@@ -24,3 +24,6 @@ root. This directory is for results somebody will want to find on purpose.
 | 2026-09-18 | 48,553 | Exposure debt: no effect at three settings (193.5 → 195.4, inside noise) | `recommend.ts` DEBT_*, commit 57d4157 |
 | 2026-09-18 | 48,553 | Co-watch regions as a scoring term: worse at four settings (198.8 → 194.9) | `facets.ts` SEEN_WEIGHTS.region, commit 421ace5 |
 | 2026-09-18 | 48,553 | "Go deeper" was identical to "narrow" for a new viewer (900 = 900) | `scripts/reach-canaries.ts`, commit 34b9dfb |
+| 2026-09-19 | 48,553 | `TARGET_SEEN` (active learning) refuted: monotonically worse, 198.1 → 133.4 at 0.5 | `recommend.ts`, this commit |
+| 2026-09-19 | 48,553 | Tail at card 900 is NOT information-free: fame 0.757, shipped 0.757, **degree+fame 0.788** AUC against a 4.9% base rate | `scripts/tail-signal.ts` |
+| 2026-09-19 | 48,553 | Language door was shut (`HOME_LANG_STRENGTH = 0`): 0 Arabic in 60 cards for an Arabic browser; 5 at 0.05 | `scripts/home-language-guard.ts` |

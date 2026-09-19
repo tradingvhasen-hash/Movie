@@ -2097,6 +2097,22 @@ export function recommend(
    *
    * The gate stands alone.
    */
+  /**
+   * Built once per batch, not per candidate: one pass over the confirmed
+   * titles and then a lookup. `excludeIds` already holds everything answered,
+   * so a neighbour they have been asked about cannot come back.
+   *
+   * Every confirmed title counts, including dislikes — the frontier answers
+   * "have you watched it", and a film someone disliked is a film they watched.
+   */
+  const frontier =
+    DECK_FRONTIER > 0 && mode !== "discover"
+      ? frontierVotes(
+          [...(opts.likedTitles ?? []), ...(opts.seenTitles ?? []), ...(opts.dislikedTitles ?? [])],
+          excludeIds
+        )
+      : null;
+
   const homeSet = opts.homeLanguages?.length ? new Set(opts.homeLanguages) : null;
   const langIndex = homeSet ? languageFame(pool) : null;
   /**
@@ -2237,6 +2253,7 @@ export function recommend(
       coWatchScale * coWatchTerm(coWatch?.get(c.title.id)?.score ?? 0) -
       CO_WATCH_AVERSION * coWatchTerm(aversion?.get(c.title.id)?.score ?? 0) +
       confidence * W_SOUL * soulSim(c.title.id) +
+      DECK_FRONTIER * (frontier?.get(c.title.id) ?? 0) +
       (opts.coOccurrenceBonus?.get(c.title.id) ?? 0);
 
     scored.push({ c, score, facet: fs.total });
@@ -2621,6 +2638,65 @@ export function frontierVotes(watched: Title[], exclude: Set<string>): Map<strin
  * knob.
  */
 const FRONTIER_LIFT = num("FRONTIER_LIFT", 1);
+
+/**
+ * THE FRONTIER, IN THE DECK. It has only ever been in the grid.
+ *
+ * `frontierVotes` counts, for each candidate, how many titles the viewer has
+ * ALREADY CONFIRMED watching sit next to it in the co-watch graph. In
+ * `watchedGrid` it is decisive — a neighbour is watched 48.7% of the time
+ * against a 3.5% base rate — and turning it on there was worth +42% harvested.
+ *
+ * `recommend`, which is the swipe deck, has never used it.
+ *
+ * `scripts/tail-signal.ts` is what surfaced that. At card 900, against a 4.9%
+ * base rate, it ranks the available signals:
+ *
+ *     fame (vote count)          0.757
+ *     watchLikelihood (ships)    0.757
+ *     frontier + fame            0.788      <- best, and not in the deck
+ *
+ * Note this is NOT global co-watch degree, which this engine has tried twice
+ * and rejected twice. Global degree asks "is this title well connected";
+ * frontier asks "is this title connected to THIS PERSON'S confirmed titles".
+ * The first is a property of the catalog and the second is a property of the
+ * viewer, and the table above measures the second.
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * MEASURED. IT IS WORSE AT EVERY WEIGHT — AND THAT RESULT IS THE POINT.
+ *
+ *     DECK_FRONTIER   harvest   lost at ranking
+ *     0 (off)           198.1        34.7%
+ *     0.05              191.9        36.0%
+ *     0.3               160.6        41.0%
+ *     1.0               135.1        44.4%
+ *
+ * Monotonic. Even the smallest weight costs six titles a session.
+ *
+ * SO THE BEST-SEPARATING SIGNAL AVAILABLE MAKES THE PRODUCT WORSE. That is not
+ * a paradox, and it is the most useful thing this engine has learned:
+ *
+ *   AUC scores one ranking of one pool. Harvest is what fifty consecutive
+ *   batches of ten collectively find. A signal that says "this title is next
+ *   to something you watched" is genuinely more accurate per candidate, and
+ *   adding it to a global score makes every batch drill the same hole — the
+ *   neighbourhood is mined out and no new one is ever opened. Accuracy within
+ *   a batch is bought with coverage across the session, and the goal is
+ *   denominated in coverage.
+ *
+ * This is now the SEVENTH weight-shaped fix to fail on this problem, and the
+ * only one that failed while being measurably the most accurate signal on
+ * offer. The pattern is no longer suggestive: the collapse is not a ranking
+ * error and cannot be reached by changing what a score adds up.
+ *
+ * WHAT IT ARGUES FOR. The frontier is right about which titles; it is wrong as
+ * a global term. `watchedGrid` already uses it correctly — decisively, inside
+ * one screen, then the screen is replaced and the next one is drawn elsewhere.
+ * That is the shape: use it to decide WHEN TO ASK DIFFERENTLY, not how much to
+ * add. Which is the Burst grid, and is why the regions exist.
+ * ─────────────────────────────────────────────────────────────────────────
+ */
+const DECK_FRONTIER = num("DECK_FRONTIER", 0);
 
 /* ══════════════════════════════════════════════════════════════════════════
  * EXPOSURE DEBT — so a good candidate cannot starve behind better ones.

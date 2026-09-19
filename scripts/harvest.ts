@@ -94,6 +94,10 @@ const SECONDS_PER_CARD = Number(process.env.SEC_CARD ?? 1.1);
 /** a screen costs a fixed beat to take in, plus a glance per poster */
 const GRID_FIXED = Number(process.env.GRID_FIXED ?? 1.5);
 const GRID_PER_TILE = Number(process.env.GRID_TILE ?? 0.35);
+/** how many recent answers the burst detector looks at */
+const BURST_WINDOW = Number(process.env.BURST_WINDOW ?? 10);
+/** how many of them must have landed before a screen is spent */
+const BURST_HITS = Number(process.env.BURST_HITS ?? 4);
 /**
  * THE RULER COULD NOT PRODUCE ONE OF THE PRODUCT'S FOUR ANSWERS.
  *
@@ -250,6 +254,26 @@ for (const [uid, history] of users) {
   /** every title the gate has admitted at any point for this person */
   const reachedIds = new Set<string>();
 
+  /**
+   * MODE=burst — deck to LOCATE, grid to EXPLOIT.
+   *
+   * Everything measured today says the same thing from a different angle: the
+   * deck's problem is coverage across a session, not accuracy within a batch.
+   * Seven weight-shaped fixes have failed, the last one while being the
+   * highest-AUC signal available, because concentrating a global score makes
+   * every batch drill the same hole.
+   *
+   * The grid does not have that failure mode. It concentrates HARD — inside
+   * one screen the frontier is decisive, a neighbour is watched 48.7% of the
+   * time against a 3.5% base rate — and then the screen is over and the next
+   * one is drawn somewhere else. Concentration with an exit.
+   *
+   * So: swipe normally, and the moment a run of cards shows the viewer is
+   * somewhere dense, spend one screen of forty on that neighbourhood instead
+   * of one card. The deck finds the vein; the grid works it out.
+   */
+  let recent: boolean[] = [];
+
   // the opening grid: their best-known favourites, the way a real person
   // would tap the handful they recognise on the first screen
   const favourites = [...seen.entries()]
@@ -265,7 +289,50 @@ for (const [uid, history] of users) {
 
   let found = favourites.length;
   let cards = 0;
+  let bursts = 0;
   while (cards < CARDS) {
+    /* a vein, not a lucky card: BURST_WINDOW answers with at least
+       BURST_HITS of them landing */
+    const hot =
+      MODE === "burst" &&
+      recent.length >= BURST_WINDOW &&
+      recent.slice(-BURST_WINDOW).filter(Boolean).length >= BURST_HITS;
+
+    if (hot) {
+      const screen = watchedGrid(pool, profile, {
+        excludeIds: shown,
+        count: GRID,
+        seed: 7 + bursts,
+        watched: [...liked, ...neutral, ...disliked],
+      });
+      bursts++;
+      recent = [];
+      seconds += GRID_FIXED + GRID_PER_TILE * screen.length;
+      for (const title of screen) {
+        if (cards >= CARDS) break;
+        const rating = seen.get(title.id);
+        if (rating !== undefined) {
+          harvested[Math.floor(cards / BLOCK)]++;
+          found++;
+          neutral.push(title);
+          bump(fameBandOf(title), true);
+          bump(eraOf(title), true);
+        } else {
+          bump(fameBandOf(title), false);
+          bump(eraOf(title), false);
+        }
+        profile = applySwipe(
+          profile,
+          title,
+          vf(title),
+          rating === undefined ? "not_seen" : "seen"
+        );
+        shown.add(title.id);
+        cards++;
+      }
+      continue;
+    }
+
     const batch: Title[] =
       MODE === "grid"
         ? /**
@@ -344,6 +411,7 @@ for (const [uid, history] of users) {
       /* every dealt card is a trial; a rating means the person had watched it */
       bump(fameBandOf(title), rating !== undefined);
       bump(eraOf(title), rating !== undefined);
+      if (MODE === "burst") recent.push(rating !== undefined);
       if (action === "liked") liked.push(title);
       else if (action === "disliked") disliked.push(title);
       else if (action === "seen") neutral.push(title);

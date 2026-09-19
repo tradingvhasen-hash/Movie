@@ -27,3 +27,5 @@ root. This directory is for results somebody will want to find on purpose.
 | 2026-09-19 | 48,553 | `TARGET_SEEN` (active learning) refuted: monotonically worse, 198.1 → 133.4 at 0.5 | `recommend.ts`, this commit |
 | 2026-09-19 | 48,553 | Tail at card 900 is NOT information-free: fame 0.757, shipped 0.757, **degree+fame 0.788** AUC against a 4.9% base rate | `scripts/tail-signal.ts` |
 | 2026-09-19 | 48,553 | Language door was shut (`HOME_LANG_STRENGTH = 0`): 0 Arabic in 60 cards for an Arabic browser; 5 at 0.05 | `scripts/home-language-guard.ts` |
+| 2026-09-19 | 48,553 | Frontier in the deck's score: monotonically worse at every weight (198.1 → 191.9 → 160.6 → 135.1) **despite being the highest-AUC signal available**. AUC ≠ harvest: accuracy within a batch is bought with coverage across the session | `recommend.ts` DECK_FRONTIER |
+| 2026-09-19 | 48,553 | Burst (deck + grid when hot) is an **interpolation, not a synthesis**: deck 198.1/1,297·h · burst 139.1/1,462·h · grid 98.9/1,745·h. Grid wins on time, deck on cards; burst beats neither on its own metric | `scripts/harvest.ts` MODE=burst |

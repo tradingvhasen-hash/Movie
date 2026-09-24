@@ -21,7 +21,7 @@ import {
   syncSwipeIds,
   type CloudLibrary,
 } from "./sync";
-import { loadCatalog } from "@/lib/catalog";
+import { resolveTitleSnapshots } from "@/lib/title-resolver";
 import { useDhawq } from "@/lib/store";
 
 export type SyncState = "idle" | "working" | "ok" | (string & {});
@@ -47,6 +47,23 @@ function currentLibrary(): CloudLibrary {
 
 function hasLocalLibrary(lib: CloudLibrary): boolean {
   return lib.swipeOrder.length > 0 || lib.lists.length > 0;
+}
+
+function withResolvedTitles(
+  lib: CloudLibrary,
+  resolved: Map<string, import("@/lib/types").Title>
+): CloudLibrary {
+  return {
+    ...lib,
+    swipes: Object.fromEntries(
+      Object.entries(lib.swipes).map(([id, swipe]) => [
+        id,
+        swipe.title || !resolved.has(id)
+          ? swipe
+          : { ...swipe, title: resolved.get(id) },
+      ])
+    ),
+  };
 }
 
 /**
@@ -108,18 +125,16 @@ function useAccountController(): AccountState {
 
     void (async () => {
       try {
-        await loadCatalog().catch(() => undefined);
         const before = useDhawq.getState();
         const priorOwner = before.accountOwner;
         const local = currentLibrary();
+        const switchingAccounts = Boolean(priorOwner && priorOwner !== userId);
 
         const [cloud, cloudProfile] = await Promise.all([
           loadCloudLibrary(userId),
           loadCloudPublicProfile(userId),
         ]);
         if (!alive) return;
-
-        const switchingAccounts = Boolean(priorOwner && priorOwner !== userId);
 
         // Persisted tombstones win over stale cloud rows after an offline
         // deletion. They belong only to the account that owned this local
@@ -141,9 +156,29 @@ function useAccountController(): AccountState {
               }
             : cloud;
 
+        const idsNeedingMetadata = new Set<string>();
+        if (!switchingAccounts) {
+          for (const [id, swipe] of Object.entries(local.swipes)) {
+            if (!swipe.title) idsNeedingMetadata.add(id);
+          }
+        }
+        for (const [id, swipe] of Object.entries(cloudAfterDeletes?.swipes ?? {})) {
+          if (!swipe.title) idsNeedingMetadata.add(id);
+        }
+
+        const resolved = await resolveTitleSnapshots([...idsNeedingMetadata]);
+        if (!alive) return;
+
+        const localResolved = switchingAccounts
+          ? local
+          : withResolvedTitles(local, resolved);
+        const cloudResolved = cloudAfterDeletes
+          ? withResolvedTitles(cloudAfterDeletes, resolved)
+          : null;
+
         const merged = switchingAccounts
-          ? cloudAfterDeletes ?? { swipes: {}, swipeOrder: [], lists: [] }
-          : mergeLibraries(local, cloudAfterDeletes);
+          ? cloudResolved ?? { swipes: {}, swipeOrder: [], lists: [] }
+          : mergeLibraries(localResolved, cloudResolved);
 
         const googleName =
           (session?.user.user_metadata?.full_name as string | undefined) ?? "";

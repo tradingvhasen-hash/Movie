@@ -3,11 +3,20 @@
 -- Additive only: historical migrations may already be applied in production,
 -- so fixes live in a new migration instead of rewriting old history.
 
+-- Production can be partially migrated because early schema changes were
+-- historically applied from the SQL editor. Converge the title-id model here:
+-- ids are meaningful TMDB-prefixed identifiers and must not depend on the
+-- incomplete public.titles seed table.
+alter table public.swipes drop constraint if exists swipes_title_id_fkey;
+alter table public.list_items drop constraint if exists list_items_title_id_fkey;
+
 -- Public profiles expose only explicit likes. Dislikes, neutral-seen answers
 -- and not-seen answers are private even when the profile itself is public.
 drop policy if exists "public library readable" on public.swipes;
 create policy "public liked library readable" on public.swipes
-  for select using (
+  for select
+  to anon, authenticated
+  using (
     action = 'liked'
     and exists (
       select 1

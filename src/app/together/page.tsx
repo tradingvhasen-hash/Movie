@@ -61,16 +61,11 @@ export default function TogetherPage() {
   const locale = useLocale();
   const t = useT();
   const answerDialogRef = useRef<HTMLDivElement>(null);
-  const [ready, setReady] = useState(false);
   const [slots, setSlots] = useState<(Title | null)[]>([null, null]);
   const [editing, setEditing] = useState<number | null>(null);
   const [round, setRound] = useState(0);
   const [showing, setShowing] = useState(false);
   const haptics = useDhawq((s) => s.settings.haptics);
-
-  useEffect(() => {
-    void loadCatalog().then(() => setReady(true));
-  }, []);
 
   useDialogKeyboard(showing, answerDialogRef, () => setShowing(false));
 
@@ -313,7 +308,6 @@ export default function TogetherPage() {
       <AnimatePresence>
         {editing !== null && (
           <PickSheet
-            ready={ready}
             taken={new Set(chosen.map((t) => t.id))}
             onPick={(t) => {
               setSlot(editing, t);
@@ -398,12 +392,10 @@ function Slot({
  * most common way a mobile search is made unusable.
  */
 function PickSheet({
-  ready,
   taken,
   onPick,
   onClose,
 }: {
-  ready: boolean;
   taken: Set<string>;
   onPick: (t: Title) => void;
   onClose: () => void;
@@ -431,20 +423,46 @@ function PickSheet({
    * most-recognised titles in the catalog, which turns a blank prompt into a
    * grid you can simply tap — and typing still narrows it the moment you start.
    */
-  const suggestions = useMemo(() => {
-    if (!ready) return [];
-    return getLocalCatalog()
-      .map((c) => c.title)
-      .filter((t) => !taken.has(t.id))
-      .sort((a, b) => b.voteCount - a.voteCount)
-      .slice(0, 30);
-  }, [ready, taken]);
+  const [results, setResults] = useState<Title[]>([]);
 
-  const results = useMemo(() => {
-    if (!ready) return [];
-    if (q.trim().length < 2) return suggestions;
-    return searchCatalog(q, { limit: 30, skip: (id) => taken.has(id) });
-  }, [ready, q, taken, suggestions]);
+  useEffect(() => {
+    let alive = true;
+    const query = q.trim();
+    const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+    void fetch(`${base}/api/search`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        query,
+        skipIds: [...taken],
+        limit: 30,
+      }),
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`search ${res.status}`);
+        const body = (await res.json()) as { titles?: Title[] };
+        if (!Array.isArray(body.titles)) throw new Error("invalid search response");
+        if (alive) setResults(body.titles);
+      })
+      .catch(async () => {
+        await loadCatalog();
+        if (!alive) return;
+        if (query.length < 2) {
+          setResults(
+            getLocalCatalog()
+              .map((c) => c.title)
+              .filter((title) => !taken.has(title.id))
+              .sort((a, b) => b.voteCount - a.voteCount)
+              .slice(0, 30)
+          );
+        } else {
+          setResults(searchCatalog(query, { limit: 30, skip: (id) => taken.has(id) }));
+        }
+      });
+    return () => {
+      alive = false;
+    };
+  }, [q, taken]);
 
   return (
     <motion.div className="fixed inset-0 z-50 flex flex-col justify-end">

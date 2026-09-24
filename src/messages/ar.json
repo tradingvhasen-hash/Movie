@@ -50,7 +50,9 @@
     "startSwiping": "ابدأ السحب",
     "addFilms": "إضافة أعمال",
     "watchedTab": "شاهدت",
-    "listsTab": "القوائم"
+    "listsTab": "القوائم",
+    "notInLibrary": "ليس في مكتبتك",
+    "nothingFound": "لا يوجد عمل بهذا الاسم في الفهرس."
   },
   "discover": {
     "title": "اكتشف",

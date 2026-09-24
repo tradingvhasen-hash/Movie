@@ -11,6 +11,7 @@ import Link from "next/link";
 import ImportLibrary from "./ImportLibrary";
 import { useDhawq } from "@/lib/store";
 import type { Title } from "@/lib/types";
+import { useLocale, useT } from "@/lib/i18n";
 
 /** how many titles the grid offers */
 const CHOICES = 48;
@@ -62,6 +63,8 @@ const MIN_PICKS = 3;
  *   read at a glance and cannot be phrased wrongly.
  */
 export default function TastePicker({ onDone }: { onDone: () => void }) {
+  const t = useT();
+  const locale = useLocale();
   const swipe = useDhawq((s) => s.swipe);
   const learnPasses = useDhawq((s) => s.learnPasses);
   const haptics = useDhawq((s) => s.settings.haptics);
@@ -110,8 +113,8 @@ export default function TastePicker({ onDone }: { onDone: () => void }) {
 
   const confirm = () => {
     for (const t of choices) if (picked.has(t.id)) swipe(t, "liked");
-    // the tiles they looked at and left alone are evidence as well — see
-    // learnPasses. Without them the grid teaches likes and nothing else.
+    // Unselected favourites are not "not watched". Retire them as weak
+    // onboarding passes without training the taste or exposure model.
     learnPasses(choices.filter((t) => !picked.has(t.id)));
     onDone();
   };
@@ -130,9 +133,9 @@ export default function TastePicker({ onDone }: { onDone: () => void }) {
       <motion.div variants={FADE_UP} className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-[30px] font-bold leading-tight tracking-[-0.03em]">
-            What have you
+            {t("taste.titleTop")}
             <br />
-            loved?
+            {t("taste.titleBottom")}
           </h1>
           {/* three or more, drawn rather than written */}
           <div className="mt-3.5 flex items-center gap-1.5" aria-hidden>
@@ -168,7 +171,7 @@ export default function TastePicker({ onDone }: { onDone: () => void }) {
           onClick={onDone}
           className="-me-2 shrink-0 rounded-full px-3 py-2 text-sm font-semibold text-ink-faint transition-colors hover:text-ink-dim active:scale-95"
         >
-          Skip
+          {t("taste.skip")}
         </button>
       </motion.div>
 
@@ -180,6 +183,7 @@ export default function TastePicker({ onDone }: { onDone: () => void }) {
             selected={picked.has(t.id)}
             dimmed={anyPicked && !picked.has(t.id)}
             onToggle={() => toggle(t.id)}
+            label={locale === "ar" ? t.title.ar || t.title.en : t.title.en}
           />
         ))}
       </motion.div>
@@ -200,10 +204,10 @@ export default function TastePicker({ onDone }: { onDone: () => void }) {
         className="mt-3 block w-full rounded-2xl border border-line bg-surface px-4 py-3.5 transition-colors hover:border-ink-faint"
       >
         <span className="block text-sm font-bold text-ink-strong">
-          Add forty at a time
+          {t("taste.addForty")}
         </span>
         <span className="mt-0.5 block text-xs text-ink-faint">
-          Tap only what you have watched — everything else is free
+          {t("taste.addFortyHint")}
         </span>
       </Link>
 
@@ -241,7 +245,7 @@ export default function TastePicker({ onDone }: { onDone: () => void }) {
               transition={SPRING_SNAPPY}
               className="rounded-full bg-accent px-8 py-4 text-base font-bold text-[color:var(--color-on-accent)] shadow-[0_10px_34px_rgb(var(--rgb-accent)/0.45)]"
             >
-              Start with {picked.size}
+              {t("taste.start", { count: picked.size })}
             </motion.button>
           </motion.div>
         )}
@@ -263,11 +267,13 @@ function PickTile({
   selected,
   dimmed,
   onToggle,
+  label,
 }: {
   title: Title;
   selected: boolean;
   dimmed: boolean;
   onToggle: () => void;
+  label: string;
 }) {
   return (
     <motion.button
@@ -275,7 +281,7 @@ function PickTile({
       variants={FADE_UP}
       onClick={onToggle}
       aria-pressed={selected}
-      aria-label={title.title.en}
+      aria-label={label}
       whileTap={{ scale: 0.93 }}
       /**
        * The tiles that are not chosen step back — ONE property, not three.

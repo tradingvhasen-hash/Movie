@@ -46,8 +46,7 @@ export default function SwipeDeck() {
   const answered = useDhawq((s) => (s.onboardingSeen ? 0 : s.profile.totalSwipes));
   const onboardingSeen = useDhawq((s) => s.onboardingSeen) || answered > 0;
   const setOnboardingSeen = useDhawq((s) => s.setOnboardingSeen);
-  const resetAll = useDhawq((s) => s.resetAll);
-  const settings = useDhawq((s) => s.settings);
+   const settings = useDhawq((s) => s.settings);
 
   /**
    * The top card's position, owned here rather than by the card.
@@ -317,7 +316,7 @@ export default function SwipeDeck() {
     );
   }
 
-  if (!hydrated || showDemo === null) {
+  if ((!hydrated && queue.length === 0) || showDemo === null) {
     return (
       <div
         className="mx-auto flex w-full max-w-md flex-col items-center overflow-hidden px-4 pt-4"
@@ -504,8 +503,7 @@ export default function SwipeDeck() {
                   <motion.div whileTap={{ scale: 0.95 }} className="mt-7">
                     <NeuButton
                       onClick={() => {
-                        resetAll();
-                        setTimeout(refill, 50);
+                        refill();
                       }}
                       className="text-sm"
                     >

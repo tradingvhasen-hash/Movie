@@ -25,6 +25,7 @@
  */
 import {
   reconstructLibrary,
+  mergeLibraries,
   type CloudListRow,
   type CloudSwipeRow,
 } from "../src/lib/supabase/sync";
@@ -76,7 +77,8 @@ const deviceA: CloudSwipeRow[] = [
 ];
 const listsA: CloudListRow[] = [
   {
-    id: "L1",
+    id: "cloud-L1",
+    client_id: "local-list-1",
     name: "Favourites",
     is_public: true,
     created_at: at(5),
@@ -179,8 +181,71 @@ check(
   snap ? `overview="${snap.overview.en}" related=${snap.related}` : "no snapshot"
 );
 
+
+/* ── 10 · equal-size libraries merge by per-title time, not aggregate count ── */
+const localEqual = reconstructLibrary(
+  [row("m1", "disliked", 100), row("m2", "liked", 2)],
+  [],
+  lookup
+)!;
+const cloudEqual = reconstructLibrary(
+  [row("m1", "liked", 1), row("m2", "liked", 90)],
+  [],
+  lookup
+)!;
+const mergedEqual = mergeLibraries(localEqual, cloudEqual);
+check(
+  "equal counts do not let stale cloud overwrite a newer local correction",
+  mergedEqual.swipes.m1.action === "disliked" && mergedEqual.swipes.m2.action === "liked",
+  `m1=${mergedEqual.swipes.m1.action} m2=${mergedEqual.swipes.m2.action}`
+);
+
+/* ── 11 · cloud database ids never replace stable local list identity ── */
+check(
+  "a synced list reconstructs with its client id, not its database uuid",
+  b !== null && b.lists[0]?.id === "local-list-1",
+  b?.lists[0] ? `id=${b.lists[0].id}` : "no list"
+);
+
+/* ── 12 · same-name lists remain separate objects when identities differ ── */
+const cloudLists = reconstructLibrary(
+  [],
+  [
+    {
+      id: "cloud-A",
+      client_id: "list-A",
+      name: "Weekend",
+      is_public: false,
+      created_at: at(1),
+      list_items: [{ title_id: "m1" }],
+    },
+  ],
+  lookup
+)!;
+const localLists = {
+  swipes: {},
+  swipeOrder: [],
+  lists: [
+    {
+      id: "list-B",
+      name: "Weekend",
+      isPublic: false,
+      titleIds: ["m2"],
+      createdAt: Date.parse(at(2)),
+    },
+  ],
+};
+const mergedLists = mergeLibraries(localLists, cloudLists);
+check(
+  "same-name lists with different ids do not collide",
+  mergedLists.lists.length === 2 &&
+    mergedLists.lists.some((l) => l.id === "list-A") &&
+    mergedLists.lists.some((l) => l.id === "list-B"),
+  mergedLists.lists.map((l) => `${l.id}:${l.name}`).join(" ")
+);
+
 console.log(
-  `\n${9 - failures}/9 checks passed` +
+  `\n${12 - failures}/12 checks passed` +
     (failures ? "\n\nA failure here means a person signing in on a second device\nloses their library, or is asked about films they already answered.\n" : "\n")
 );
 process.exit(failures ? 1 : 0);

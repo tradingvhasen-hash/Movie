@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
+  animate,
   motion,
   useMotionValue,
   useMotionValueEvent,
@@ -205,7 +206,7 @@ export default function SwipeCard({
    */
   const press = useRef<{ px: number; py: number; at: number } | null>(null);
   /** set by the release, read by the exit transition — see handleDragEnd */
-  const flightSeconds = useRef(0.56);
+  const flightSeconds = useRef(0.3);
 
   function handlePointerDown(e: React.PointerEvent) {
     press.current = { px: e.clientX, py: e.clientY, at: Date.now() };
@@ -244,66 +245,36 @@ export default function SwipeCard({
             ? "disliked"
             : null;
 
-    /**
-     * HOW HARD YOU THREW IT IS THE ONE THING THE ANIMATION MUST NOT IGNORE.
-     *
-     * The user: "you throw the card as fast as you can, and then the moment
-     * the effect appears the card gets slow and gets thrown to the left. That
-     * takes out the feeling of throwing — it feels like a ready-made effect
-     * that plays anyway no matter how fast you throw."
-     *
-     * He is describing a fixed 560ms tween, which is exactly what it was. A
-     * flick and a shove produced the identical flight, so the gesture stopped
-     * being his.
-     *
-     * The fix is not to hand the animation back to physics — that was the
-     * previous version, and it threw the card off-screen in 284ms with the
-     * colour not yet drawn. It is to let velocity choose the duration inside a
-     * range where every value is still watchable: a hard throw leaves in
-     * 400ms, a gentle push takes 620ms, and nothing is ever faster than the
-     * eye. The gesture is felt, and the effect is always seen.
-     *
-     * The floor is 400 rather than the 340 I first picked, and the reason is
-     * measured: at 340 a hard flick put the card off-screen at 317ms, which is
-     * within thirty milliseconds of the 284ms he had already told me was too
-     * fast to see. A range whose fast end lands on the number he complained
-     * about is not a compromise, it is the same bug with extra arithmetic.
-     * 400 → 620 is still a 55% spread, which is plainly felt.
-     */
-    const speed = Math.hypot(info.velocity.x, info.velocity.y);
-    flightSeconds.current = Math.max(0.4, Math.min(0.62, 0.62 - speed / 9000));
-
-    /**
-     * And the momentum has to die at the exact moment a verdict is given.
-     *
-     * `dragMomentum` is back on, because turning it off is what cost the card
-     * its float — see the drag props below. But inertia and the exit tween
-     * animate the same two values, and if inertia is still running the card
-     * leaves on whichever finishes last, which is the arbitrary behaviour the
-     * user filmed. Stopping the values here means momentum owns the release
-     * and the exit owns the departure, with no overlap.
-     */
-    if (action) {
-      x.stop();
-      y.stop();
-    }
-    /**
-     * A gesture that commits does NOT switch the screen feedback off here.
-     *
-     * It used to, and on a flick that meant the wash existed for about forty
-     * milliseconds — the whole gesture — and was gone before the eye
-     * registered it. The user: "it is thrown so fast that the glow and the
-     * rest have no time to appear." A verdict is exactly the moment the colour
-     * should be at its loudest, not the moment it is switched off.
-     *
-     * The deck now owns that: it holds the wash while the card flies and eases
-     * it out behind it. A gesture that commits nothing still turns it off
-     * immediately, because there is nothing to celebrate.
-     */
     if (!action) {
+      /*
+       * A short throw that does not cross a verdict line should float home
+       * immediately. Framer's inertia used to own this path and could keep the
+       * card drifting for well over a second; a small spring is predictable
+       * and remains directly connected to the release point.
+       */
       onDragActive?.(false);
+      const settle = { type: "spring" as const, stiffness: 340, damping: 31, mass: 0.78 };
+      void animate(x, 0, settle);
+      void animate(y, 0, settle);
       return;
     }
+
+    /*
+     * Preserve the velocity the thumb actually supplied.
+     *
+     * The previous floor forced every hard flick through at least 400 ms of
+     * canned travel, which is the "hit a wall, pause, then leave slowly"
+     * feeling reported on the phone. Duration now comes from the remaining
+     * distance divided by release speed. A deliberate drag still has a clean
+     * visible flight; a hard flick is allowed to be a hard flick.
+     */
+    const speed = Math.max(1100, Math.hypot(info.velocity.x, info.velocity.y));
+    const remaining =
+      action === "liked" || action === "disliked"
+        ? Math.max(180, 620 - Math.abs(x.get()))
+        : Math.max(220, 820 - Math.abs(y.get()));
+    flightSeconds.current = Math.max(0.16, Math.min(0.46, remaining / speed));
+
     setExiting(action);
     onSwipe(action);
   }
@@ -461,37 +432,23 @@ export default function SwipeCard({
           ? {
               ...exitPose,
               transition: {
-                duration: flightSeconds.current,
-                ease: [0.32, 0.3, 0.55, 0.98],
+                duration: exiting ? flightSeconds.current : 0.3,
+                ease: EASE_OUT,
                 opacity: {
-                  duration: flightSeconds.current * 0.36,
-                  delay: flightSeconds.current * 0.64,
+                  duration: (exiting ? flightSeconds.current : 0.3) * 0.3,
+                  delay: (exiting ? flightSeconds.current : 0.3) * 0.7,
                   ease: "linear",
                 },
               },
             }
-          : { ...exitPose, transition: { duration: 0.24, ease: EASE_OUT } }
+          : { ...exitPose, transition: { duration: 0.2, ease: EASE_OUT } }
       }
       drag={isTop && !activeExit}
       dragElastic={0.55}
-      /**
-       * MOMENTUM IS BACK, AND IT IS WHAT "FLOATING" MEANS.
-       *
-       * The user: "before, when you dragged the card and let go, it felt like
-       * it was floating. Now the moment you stop pressing it, it just stops.
-       * I like the previous one."
-       *
-       * He is describing `dragMomentum`, which I turned off last round to stop
-       * a hard flick outrunning the exit animation. That fixed the throw and
-       * broke the release, which is the trade I should have noticed: those are
-       * two different gestures and they deserved two different answers.
-       *
-       * They have them now. Momentum is on, so a card let go mid-drag carries
-       * and glides back. And `handleDragEnd` stops both values the instant a
-       * verdict is given, so the exit never has to race the inertia it used to
-       * lose to.
-       */
-      dragMomentum
+      /* Exit and return-to-centre are both owned explicitly above. Letting
+         Framer add a second inertia animation here makes release timing
+         nondeterministic and was the source of the post-flick hitch. */
+      dragMomentum={false}
       /**
        * There is no downward verdict, so downward should not be a gesture.
        *

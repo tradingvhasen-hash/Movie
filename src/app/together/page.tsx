@@ -72,15 +72,7 @@ export default function TogetherPage() {
     void loadCatalog().then(() => setReady(true));
   }, []);
 
-  useEffect(() => {
-    if (!showing) return;
-    answerDialogRef.current?.focus();
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setShowing(false);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [showing]);
+  useDialogKeyboard(showing, answerDialogRef, () => setShowing(false));
 
   const chosen = useMemo(() => slots.filter((s): s is Title => Boolean(s)), [slots]);
 
@@ -345,6 +337,9 @@ function Slot({
   onOpen: () => void;
   onClear: () => void;
 }) {
+  const t = useT();
+  const locale = useLocale();
+  const label = title ? (locale === "ar" ? title.title.ar || title.title.en : title.title.en) : t("together.nameFilm");
   return (
     <div className="relative">
       <motion.button
@@ -362,14 +357,14 @@ function Slot({
                  edge, which is a place something goes. */
               "grid place-items-center gap-1.5 border-2 border-dashed border-ink-faint/40 bg-surface text-ink-dim"
         }`}
-        aria-label={title ? title.title.en : "Name a film"}
+        aria-label={label}
       >
         {title ? (
           <PosterArt title={title} sizes="160px" className="h-full w-full" />
         ) : (
           <>
             <SearchIcon size={22} />
-            <span className="text-[11px] font-semibold">Name one</span>
+            <span className="text-[11px] font-semibold">{t("together.nameOne")}</span>
           </>
         )}
       </motion.button>
@@ -384,7 +379,7 @@ function Slot({
             transition={SPRING_SNAPPY}
             onClick={onClear}
             className="absolute -end-1.5 -top-1.5 grid h-[22px] w-[22px] place-items-center rounded-full bg-[rgb(var(--rgb-scrim)/0.62)] text-white shadow-md backdrop-blur-sm"
-            aria-label="Remove"
+            aria-label={t("together.remove")}
           >
             <XIcon size={11} strokeWidth={3} />
           </motion.button>
@@ -413,7 +408,11 @@ function PickSheet({
   onPick: (t: Title) => void;
   onClose: () => void;
 }) {
+  const t = useT();
+  const locale = useLocale();
+  const sheetRef = useRef<HTMLDivElement>(null);
   const [q, setQ] = useState("");
+  useDialogKeyboard(true, sheetRef, onClose);
 
   /**
    * IT OPENS FULL, NOT EMPTY.
@@ -460,6 +459,11 @@ function PickSheet({
         onClick={onClose}
       />
       <motion.div
+        ref={sheetRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("together.pickerTitle")}
+        tabIndex={-1}
         initial={{ y: "100%" }}
         animate={{ y: 0 }}
         exit={{ y: "100%", transition: { duration: 0.34, ease: [0.4, 0, 0.7, 1] } }}
@@ -480,7 +484,7 @@ function PickSheet({
             autoFocus
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Snatch · Inception · الفيل الأزرق"
+            placeholder={t("together.searchPlaceholder")}
             className="w-full bg-transparent text-base outline-none placeholder:text-ink-faint"
           />
         </label>
@@ -495,7 +499,7 @@ function PickSheet({
                 transition={SPRING_SNAPPY}
                 onClick={() => onPick(t)}
                 className="block w-full min-w-0 overflow-hidden rounded-xl bg-surface-2"
-                aria-label={t.title.en}
+                aria-label={locale === "ar" ? t.title.ar || t.title.en : t.title.en}
               >
                 <PosterArt title={t} sizes="130px" className="aspect-[2/3] w-full" />
               </motion.button>
@@ -505,4 +509,60 @@ function PickSheet({
       </motion.div>
     </motion.div>
   );
+}
+
+
+function useDialogKeyboard(
+  active: boolean,
+  ref: React.RefObject<HTMLElement | null>,
+  onClose: () => void
+) {
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+
+  useEffect(() => {
+    if (!active) return;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const root = ref.current;
+    if (!root) return;
+
+    const focusables = () =>
+      Array.from(
+        root.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+      ).filter((el) => !el.hasAttribute("hidden"));
+
+    queueMicrotask(() => (focusables()[0] ?? root).focus());
+
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const items = focusables();
+      if (items.length === 0) {
+        event.preventDefault();
+        root.focus();
+        return;
+      }
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      previous?.focus();
+    };
+  }, [active, ref]);
 }

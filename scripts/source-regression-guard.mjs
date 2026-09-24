@@ -50,6 +50,11 @@ check("dead remote recommender is not on the deck path", !deck.includes('fetch("
 const store = read("src/lib/store.ts");
 check("account ownership is persisted", store.includes("accountOwner: string | null"));
 check("full local erase exists", store.includes("eraseAllUserData"));
+check("offline deletions are persisted as tombstones",
+  store.includes("deletedSwipeIds: string[]") &&
+  store.includes("deletedListIds: string[]") &&
+  store.includes("deletedSwipeIds: st.deletedSwipeIds.includes(lastId)")
+);
 
 const account = read("src/lib/supabase/useAccount.ts");
 check("account controller is a singleton provider",
@@ -58,6 +63,11 @@ check("account controller is a singleton provider",
 );
 check("sign-out flushes account truth before auth session ends",
   account.indexOf("await syncLocalToCloud(userId)") < account.indexOf("await supabase.auth.signOut()")
+);
+check("reconciliation applies offline deletion tombstones",
+  account.includes("cloudAfterDeletes") &&
+  account.includes("before.deletedSwipeIds.includes(id)") &&
+  account.includes("before.deletedListIds.includes(list.id)")
 );
 
 const layout = read("src/app/layout.tsx");
@@ -85,5 +95,5 @@ check("custom recommendation dialogs have modal semantics and focus handling",
   together.includes("useDialogKeyboard")
 );
 
-console.log(`\n${failures ? "FAIL" : "PASS"} — ${17 - failures}/17 source invariants`);
+console.log(`\n${failures ? "FAIL" : "PASS"} — ${19 - failures}/19 source invariants`);
 process.exit(failures ? 1 : 0);

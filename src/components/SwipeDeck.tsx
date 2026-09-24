@@ -448,7 +448,7 @@ export default function SwipeDeck() {
             touchAction: "manipulation",
           }}
         >
-          Add fast
+          {t("quickAdd.title")}
         </Link>
       </motion.div>
 

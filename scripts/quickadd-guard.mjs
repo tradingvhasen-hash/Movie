@@ -3,7 +3,7 @@
  *
  * The +56% was measured in a simulator. This checks the screen actually built
  * from it: forty posters arrive, tapping marks watched, "None of these" still
- * records forty "not seen" answers, and a fresh screen follows with no repeats.
+ * retires untouched posters as weak passes (not hard "not seen" answers), and a fresh screen follows with no repeats.
  * The last one matters most — a grid that re-deals what it just asked about is
  * the eye-icon bug again, in a new surface.
  */
@@ -37,17 +37,18 @@ await p.waitForTimeout(1500);
 const third = await names();
 const overlap2 = third.filter(t=>[...first,...second].includes(t)).length;
 
-const store = await p.evaluate(()=>{try{const s=JSON.parse(localStorage.getItem("dhawq-store")||"{}").state?.swipes||{};
- const v=Object.values(s); return {seen:v.filter(x=>x.action==="seen").length, notSeen:v.filter(x=>x.action==="not_seen").length};}catch{return{seen:-1,notSeen:-1};}});
+const store = await p.evaluate(()=>{try{const state=JSON.parse(localStorage.getItem("dhawq-store")||"{}").state||{};
+ const v=Object.values(state.swipes||{}); return {seen:v.filter(x=>x.action==="seen").length, notSeen:v.filter(x=>x.action==="not_seen").length, passed:(state.passed||[]).length};}catch{return{seen:-1,notSeen:-1,passed:-1};}});
 
 console.log("\n— quick add grid —");
 console.log("  posters on a screen      :", tiles1);
 console.log("  button showed the count  :", chosenLabel>0?"yes":"NO");
 console.log("  marked watched (stored)  :", store.seen);
-console.log("  not-seen recorded free   :", store.notSeen);
+console.log("  hard not-seen recorded   :", store.notSeen);
+console.log("  weak passes recorded     :", store.passed);
 console.log("  repeats on screen 2      :", overlap);
 console.log("  repeats on screen 3      :", overlap2);
 console.log("  page errors              :", errs.length?errs.join(" | "):"clean");
-const ok = tiles1===40 && chosenLabel>0 && store.seen===3 && store.notSeen>=70 && overlap===0 && overlap2===0 && !errs.length;
+const ok = tiles1===40 && chosenLabel>0 && store.seen===3 && store.notSeen===0 && store.passed>=70 && overlap===0 && overlap2===0 && !errs.length;
 console.log(ok?"\nPASS":"\nFAIL");
 await b.close(); process.exit(ok?0:1);

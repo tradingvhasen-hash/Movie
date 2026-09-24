@@ -25,6 +25,14 @@ check("browser deletion uses authenticated edge and guest reset clears local sta
   dataPanel.includes("eraseAllUserData()")
 );
 
+const labPage = read("src/app/lab/page.tsx");
+const labScreen = read("src/app/lab/LabScreen.tsx");
+check("production lab is guest-only before destructive test reset",
+  labPage.includes("<LabScreen />") &&
+  labScreen.includes("if (session)") &&
+  labScreen.includes("eraseAllUserData()")
+);
+
 const publicSharing = read("supabase/migrations/0011_public_sharing_rpc.sql");
 const publicProfilePage = read("src/app/u/[slug]/page.tsx");
 const publicListPage = read("src/app/l/[slug]/page.tsx");
@@ -122,5 +130,5 @@ check("custom recommendation dialogs have modal semantics and focus handling",
   together.includes("useDialogKeyboard")
 );
 
-console.log(`\n${failures ? "FAIL" : "PASS"} — ${22 - failures}/22 source invariants`);
+console.log(`\n${failures ? "FAIL" : "PASS"} — ${23 - failures}/23 source invariants`);
 process.exit(failures ? 1 : 0);

@@ -1,8 +1,7 @@
 name: Deploy static demo to GitHub Pages
 
+# A deliberately separate demo. It never follows production automatically.
 on:
-  push:
-    branches: [claude/movie-swipe-app-0bvkc8, main]
   workflow_dispatch:
 
 permissions:

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import PosterArt from "./PosterArt";
 import { getLocalTitle, loadCatalog } from "@/lib/catalog";
+import { resolveTitleSnapshots } from "@/lib/title-resolver";
 import { matches, searchCatalog } from "@/lib/search";
 import { useDhawq } from "@/lib/store";
 import { FADE_UP, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
@@ -62,19 +63,21 @@ export default function ListBuilder({
   const list = lists.find((l) => l.id === listId);
   const inList = useMemo(() => new Set(list?.titleIds ?? []), [list?.titleIds]);
 
-  /**
-   * The catalog has to be here before anything below can name a film.
-   *
-   * Every read in this component goes through `getLocalTitle`, which answers
-   * from memory and returns nothing until the catalog has been fetched. On the
-   * deck that fetch has always already happened; arriving at this screen
-   * directly — from a link, or a reload — it has not, so the library read as
-   * empty and the genre chips as "you have watched nothing".
-   */
-  const [catalogReady, setCatalogReady] = useState(false);
+  const [resolvedTitles, setResolvedTitles] = useState<Map<string, Title>>(new Map());
+
   useEffect(() => {
-    void loadCatalog().then(() => setCatalogReady(true));
-  }, []);
+    let alive = true;
+    const wanted = new Set<string>(list?.titleIds ?? []);
+    for (const sw of Object.values(swipes)) {
+      if (!sw.title && !getLocalTitle(sw.titleId)) wanted.add(sw.titleId);
+    }
+    void resolveTitleSnapshots([...wanted]).then((map) => {
+      if (alive) setResolvedTitles(map);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [list?.titleIds, swipes]);
 
   const [mode, setMode] = useState<Mode>("pick");
   const [query, setQuery] = useState("");
@@ -86,11 +89,11 @@ export default function ListBuilder({
     void catalogReady;
     for (const sw of Object.values(swipes)) {
       if (sw.action === "not_seen") continue;
-      const t = getLocalTitle(sw.titleId) ?? sw.title;
+      const t = getLocalTitle(sw.titleId) ?? sw.title ?? resolvedTitles.get(sw.titleId);
       if (t) out.push(t);
     }
     return out.reverse();
-  }, [swipes, catalogReady]);
+  }, [swipes, resolvedTitles]);
 
   const genres = useMemo(() => {
     const counts = new Map<string, number>();
@@ -111,12 +114,35 @@ export default function ListBuilder({
     );
   }, [library, chosenGenres]);
 
-  /** the whole catalog, for names that are not in the library yet */
-  const typed = useMemo(() => {
-    if (query.trim().length < 2) return [];
-    void catalogReady;
-    return searchCatalog(query, { limit: 24 });
-  }, [query, catalogReady]);
+  /** the whole catalog, searched on the server; local catalog is fallback only */
+  const [typed, setTyped] = useState<Title[]>([]);
+  useEffect(() => {
+    const q = query.trim();
+    if (mode !== "type" || q.length < 2) {
+      setTyped([]);
+      return;
+    }
+    let alive = true;
+    const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+    void fetch(`${base}/api/search`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ query: q, limit: 24 }),
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`search ${res.status}`);
+        const body = (await res.json()) as { titles?: Title[] };
+        if (!Array.isArray(body.titles)) throw new Error("invalid search response");
+        if (alive) setTyped(body.titles);
+      })
+      .catch(async () => {
+        await loadCatalog();
+        if (alive) setTyped(searchCatalog(q, { limit: 24 }));
+      });
+    return () => {
+      alive = false;
+    };
+  }, [query, mode]);
 
   const pickable = useMemo(() => {
     if (!query.trim()) return library;
@@ -149,7 +175,7 @@ export default function ListBuilder({
       : picked.size;
 
   const contents = list.titleIds
-    .map((id) => getLocalTitle(id))
+    .map((id) => getLocalTitle(id) ?? resolvedTitles.get(id))
     .filter((t): t is Title => Boolean(t));
 
   return (

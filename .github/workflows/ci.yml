@@ -32,6 +32,8 @@ jobs:
         run: npx tsc --noEmit
       - name: Production build
         run: npm run build
+      - name: Source data-safety invariants
+        run: npm run guard:source
       - name: Cross-device reconstruction guard
         run: npm run sync
       - name: Reach canaries

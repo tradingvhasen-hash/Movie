@@ -39,6 +39,7 @@ import { useEffect, useRef, useState } from "react";
 import { animate, motion, useMotionValue, useTransform } from "framer-motion";
 import ScreenFeedback from "./ScreenFeedback";
 import { EASE_OUT, SPRING_SETTLE } from "@/lib/motion";
+import { useT } from "@/lib/i18n";
 
 let shownThisLoad = false;
 
@@ -58,20 +59,20 @@ export function demoAlreadyShown(): boolean {
 const WELCOME_CARDS = [
   {
     id: "w-right",
-    line: "Swipe right",
-    note: "you watched it and loved it",
+    lineKey: "welcome.right",
+    noteKey: "welcome.rightNote",
     from: "var(--color-accent)",
   },
   {
     id: "w-left",
-    line: "Swipe left",
-    note: "you watched it, it was not for you",
+    lineKey: "welcome.left",
+    noteKey: "welcome.leftNote",
     from: "var(--color-danger)",
   },
   {
     id: "w-up",
-    line: "Swipe up",
-    note: "you have not seen it",
+    lineKey: "welcome.up",
+    noteKey: "welcome.upNote",
     from: "var(--color-skip)",
   },
 ] as const;
@@ -379,6 +380,7 @@ export default function WelcomeDemo({ onDone }: { onDone: () => void }) {
  * nothing that can arrive late.
  */
 function WelcomeFace({ card }: { card: (typeof WELCOME_CARDS)[number] }) {
+  const t = useT();
   return (
     <div
       className="flex h-full w-full flex-col items-center justify-center gap-3 px-7 text-center"
@@ -387,10 +389,10 @@ function WelcomeFace({ card }: { card: (typeof WELCOME_CARDS)[number] }) {
       }}
     >
       <span className="text-[27px] font-bold leading-tight tracking-[-0.03em] text-white [text-shadow:0_1px_4px_rgb(0_0_0/0.28)]">
-        {card.line}
+        {t(card.lineKey)}
       </span>
       <span className="max-w-[15rem] text-[13.5px] font-medium leading-relaxed text-white/85">
-        {card.note}
+        {t(card.noteKey)}
       </span>
     </div>
   );

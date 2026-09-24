@@ -35,6 +35,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import AccountPanel from "./AccountPanel";
 import { ChevronRightIcon, HeartIcon, ShieldIcon, SlidersIcon, StackIcon } from "./ui/Icons";
 import { useAccount } from "@/lib/supabase/useAccount";
+import { pushPublicProfile } from "@/lib/supabase/sync";
 import { useDhawq } from "@/lib/store";
 import { EASE_OUT, FADE_UP, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
 
@@ -48,6 +49,8 @@ export default function ProfilePanel() {
   const [name, setName] = useState("");
   const [bio, setBio] = useState("");
   const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   /* seed the fields from the account the first time it arrives, so somebody
      who has just signed in does not face two empty boxes when Google already
@@ -166,18 +169,38 @@ export default function ProfilePanel() {
 
               <motion.button
                 type="button"
-                disabled={!dirty}
+                disabled={!dirty || saving}
                 onClick={() => {
-                  setProfile({ name: name.trim(), bio: bio.trim(), avatarUrl: avatar ?? "" });
-                  setEditing(false);
+                  if (!session || saving) return;
+                  const next = {
+                    name: name.trim(),
+                    bio: bio.trim(),
+                    avatarUrl: avatar ?? "",
+                  };
+                  setSaving(true);
+                  setSaveError(null);
+                  void pushPublicProfile(session.user.id, next)
+                    .then(() => {
+                      setProfile(next);
+                      setEditing(false);
+                    })
+                    .catch((e: unknown) => {
+                      setSaveError(e instanceof Error ? e.message : "Could not save profile.");
+                    })
+                    .finally(() => setSaving(false));
                 }}
-                animate={{ opacity: dirty ? 1 : 0.4 }}
+                animate={{ opacity: dirty && !saving ? 1 : 0.4 }}
                 whileTap={dirty ? { scale: 0.97 } : undefined}
                 transition={SPRING_SNAPPY}
                 className="rounded-2xl bg-accent px-5 py-3 font-semibold text-[color:var(--color-on-accent)]"
               >
-                Save
+                {saving ? "Saving…" : "Save"}
               </motion.button>
+              {saveError && (
+                <p role="alert" className="text-xs leading-snug text-danger">
+                  {saveError}
+                </p>
+              )}
             </div>
           </motion.div>
         )}

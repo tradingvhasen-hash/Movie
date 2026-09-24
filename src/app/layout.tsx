@@ -5,6 +5,7 @@ import "./globals.css";
 import AppShell from "@/components/AppShell";
 import LocaleProvider from "@/components/LocaleProvider";
 import ServiceWorker from "@/components/ServiceWorker";
+import { AccountProvider } from "@/lib/supabase/useAccount";
 
 const plexArabic = IBM_Plex_Sans_Arabic({
   variable: "--font-plex-arabic",
@@ -61,7 +62,9 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-dvh font-sans">
         <LocaleProvider>
-          <AppShell>{children}</AppShell>
+          <AccountProvider>
+            <AppShell>{children}</AppShell>
+          </AccountProvider>
         </LocaleProvider>
         <ServiceWorker />
       </body>

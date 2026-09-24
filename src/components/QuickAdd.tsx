@@ -7,6 +7,7 @@ import { getLocalCatalog, getLocalTitle, loadCatalog } from "@/lib/catalog";
 import { watchedGrid } from "@/lib/engine/recommend";
 import { useDhawq } from "@/lib/store";
 import type { Title } from "@/lib/types";
+import { useT, useLocale } from "@/lib/i18n";
 
 /**
  * FORTY AT A TIME, BECAUSE ONE AT A TIME IS THE THING THAT COLLAPSES.
@@ -38,6 +39,8 @@ import type { Title } from "@/lib/types";
 const PER_SCREEN = 40;
 
 export default function QuickAdd() {
+  const t = useT();
+  const locale = useLocale();
   const [ready, setReady] = useState(false);
   const [screen, setScreen] = useState(0);
   const [picked, setPicked] = useState<Record<string, true>>({});
@@ -90,14 +93,11 @@ export default function QuickAdd() {
   }, []);
 
   /**
-   * Untapped means "not seen", and that is the whole economy of this screen.
+   * Untouched means unknown, not "not seen".
    *
-   * A grid where both answers cost a tap is a grid nobody finishes: forty
-   * posters would be forty decisions. The base rate is about 5%, so the
-   * overwhelming majority of correct answers are "no" — making those free is
-   * what turns forty questions into two or three taps. It is the same trade
-   * `/calibrate` is built on, and it is why a screen here is worth about
-   * twelve seconds against forty-four for the same titles in the deck.
+   * Fast scanning is useful only if a missed poster cannot become a confident
+   * negative. Untouched titles are retired from this fast surface as weak
+   * passes; only explicit taps become watched answers.
    */
   const commit = () => {
     const swipe = useDhawq.getState().swipe;
@@ -129,17 +129,16 @@ export default function QuickAdd() {
   if (!ready) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center text-sm text-ink-dim">
-        loading…
+        {t("quickAdd.loading")}
       </div>
     );
   }
 
   return (
     <div className="px-4 pb-32 pt-5">
-      <h1 className="text-2xl font-bold tracking-tight text-ink-strong">Add fast</h1>
+      <h1 className="text-2xl font-bold tracking-tight text-ink-strong">{t("quickAdd.title")}</h1>
       <p className="mt-1.5 max-w-prose text-sm leading-relaxed text-ink-dim">
-        Tap everything you have watched. Anything you leave alone is simply skipped,
-        so missing a poster never records a false “not watched” answer.
+        {t("quickAdd.intro")}
       </p>
 
       <div className="mt-5 grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
@@ -169,7 +168,7 @@ export default function QuickAdd() {
                 )}
               </div>
               <div className="w-full truncate text-center text-[10px] leading-tight text-ink-dim">
-                {t.title.en} · {t.year}
+                {(locale === "ar" ? t.title.ar || t.title.en : t.title.en)} · {t.year}
               </div>
             </button>
           );
@@ -179,9 +178,8 @@ export default function QuickAdd() {
       <div className="fixed inset-x-0 bottom-[calc(64px+env(safe-area-inset-bottom))] z-20 border-t border-line bg-bg/95 px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
           <p className="text-xs tabular-nums text-ink-dim">
-            <span className="font-semibold text-ink-strong">{library}</span> in your
-            library
-            {added > 0 && <> · {added} added here</>}
+            {t("quickAdd.library", { count: library })}
+            {added > 0 && <> · {t("quickAdd.added", { count: added })}</>}
           </p>
           <motion.button
             type="button"
@@ -189,7 +187,7 @@ export default function QuickAdd() {
             onClick={commit}
             className="rounded-full bg-accent px-6 py-3 text-sm font-bold text-[color:var(--color-on-accent)]"
           >
-            {chosen > 0 ? `Add ${chosen} · next` : "None of these"}
+            {chosen > 0 ? t("quickAdd.addNext", { count: chosen }) : t("quickAdd.none")}
           </motion.button>
         </div>
       </div>

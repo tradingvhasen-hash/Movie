@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import PosterArt from "./PosterArt";
-import { getLocalCatalog, loadCatalog } from "@/lib/catalog";
+import { getLocalCatalog } from "@/lib/catalog";
 import { resolveSeeds } from "@/lib/data/taste-seeds";
 import { EASE_OUT, FADE_UP, QUICK, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
 import { haptic } from "@/lib/haptics";
@@ -69,37 +69,45 @@ export default function TastePicker({ onDone }: { onDone: () => void }) {
   const learnPasses = useDhawq((s) => s.learnPasses);
   const haptics = useDhawq((s) => s.settings.haptics);
   const [picked, setPicked] = useState<Set<string>>(new Set());
-  const [ready, setReady] = useState(false);
+  const [choices, setChoices] = useState<Title[]>([]);
 
   useEffect(() => {
-    void loadCatalog().then(() => setReady(true));
-  }, []);
+    let alive = true;
 
-  const choices = useMemo(() => {
-    void ready;
-    const pool = getLocalCatalog().map((c) => c.title);
-
-    /**
-     * The grid is a named list, not a derived one — see taste-seeds.ts for why
-     * two attempts at deriving it both produced the same wall of modern
-     * blockbusters.
-     */
-    const out = resolveSeeds(pool, CHOICES);
-
-    // only reachable if the catalog fetch failed and we are on the bundled
-    // sample set: fill the remainder with whatever is best known
-    if (out.length < CHOICES) {
-      const used = new Set(out.map((t) => t.id));
-      for (const t of [...pool].sort((a, b) => b.voteCount - a.voteCount)) {
-        if (out.length >= CHOICES) break;
-        if (!used.has(t.id)) {
-          used.add(t.id);
-          out.push(t);
+    const fallback = () => {
+      const pool = getLocalCatalog().map((c) => c.title);
+      const out = resolveSeeds(pool, CHOICES);
+      if (out.length < CHOICES) {
+        const used = new Set(out.map((title) => title.id));
+        for (const title of [...pool].sort((a, b) => b.voteCount - a.voteCount)) {
+          if (out.length >= CHOICES) break;
+          if (!used.has(title.id)) {
+            used.add(title.id);
+            out.push(title);
+          }
         }
       }
-    }
-    return out;
-  }, [ready]);
+      if (alive) setChoices(out);
+    };
+
+    const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+    void fetch(`${base}/api/onboarding`)
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`onboarding ${res.status}`);
+        const body = (await res.json()) as { titles?: Title[] };
+        if (!Array.isArray(body.titles) || body.titles.length === 0) {
+          throw new Error("empty onboarding");
+        }
+        if (alive) setChoices(body.titles.slice(0, CHOICES));
+      })
+      .catch(fallback);
+
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const ready = choices.length > 0;
 
   const toggle = (id: string) => {
     haptic("tick", haptics);

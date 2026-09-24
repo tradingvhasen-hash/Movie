@@ -61,6 +61,7 @@ export async function publishList(list: UserList): Promise<string | null> {
         is_public: true,
         hide_owner: list.hideOwner ?? false,
         source_list_id: list.sourceListId ?? null,
+        updated_at: new Date(list.updatedAt ?? list.createdAt).toISOString(),
       })
       .select("id, share_slug")
       .single();
@@ -75,6 +76,7 @@ export async function publishList(list: UserList): Promise<string | null> {
         is_public: true,
         hide_owner: list.hideOwner ?? false,
         source_list_id: list.sourceListId ?? null,
+        updated_at: new Date(list.updatedAt ?? list.createdAt).toISOString(),
       })
       .eq("id", listId)
       .eq("user_id", userId)

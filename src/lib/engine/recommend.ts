@@ -565,7 +565,9 @@ const STREAK_BOOST = num("STREAK_BOOST", 1.5);
  * The multipliers are the swept points: 3 is what ships and measures best on
  * MovieLens, 8 puts roughly 40% of the catalog in reach, 20 puts 87%.
  */
-const REACH_GROWTH: Record<string, number> = {
+export type ReachSetting = "narrow" | "medium" | "wide";
+
+const REACH_GROWTH: Record<ReachSetting, number> = {
   narrow: 3,
   medium: 8,
   /**
@@ -584,13 +586,23 @@ const REACH_GROWTH: Record<string, number> = {
    */
   wide: Number.POSITIVE_INFINITY,
 };
-let reachGrowth = REACH_GROWTH.narrow;
+let defaultReachGrowth = REACH_GROWTH.narrow;
 
-export function setReach(reach: "narrow" | "medium" | "wide"): void {
-  reachGrowth = REACH_GROWTH[reach] ?? REACH_GROWTH.narrow;
+/**
+ * Kept for benchmark/instrument compatibility. Production requests pass reach
+ * explicitly so one user can never mutate another user's gate on a shared
+ * server process.
+ */
+export function setReach(reach: ReachSetting): void {
+  defaultReachGrowth = REACH_GROWTH[reach] ?? REACH_GROWTH.narrow;
 }
 
-export function fameTierSize(profile: TasteProfile, mode: RankMode = "swipe"): number {
+export function fameTierSize(
+  profile: TasteProfile,
+  mode: RankMode = "swipe",
+  reach?: ReachSetting
+): number {
+  const reachGrowth = reach ? REACH_GROWTH[reach] : defaultReachGrowth;
   if (mode === "discover") return DISCOVER_POOL;
   const answered = profile.seenCount + profile.unseenCount;
 
@@ -1988,6 +2000,8 @@ export interface RecommendOptions {
    * quality floor, no fame bias, no probes.
    */
   mode?: RankMode;
+  /** request-scoped reach; avoids shared mutable state in server ranking */
+  reach?: ReachSetting;
 }
 
 /**
@@ -2130,7 +2144,7 @@ export function recommend(
   ];
   const gated = fameGate(
     pool,
-    fameTierSize(profile, mode),
+    fameTierSize(profile, mode, opts.reach),
     mode === "swipe" ? profile.facets : undefined,
     profile,
     opts.homeLanguages,
@@ -2826,12 +2840,18 @@ export function watchedGrid(
     seed?: number;
     /** everything the viewer has confirmed watching, in any of the three ways */
     watched?: Title[];
+    reach?: ReachSetting;
   }
 ): Title[] {
   const { excludeIds, count } = opts;
   const seed = opts.seed ?? 1;
 
-  const gated = fameGate(pool, fameTierSize(profile, "swipe"), profile.facets, profile);
+  const gated = fameGate(
+    pool,
+    fameTierSize(profile, "swipe", opts.reach),
+    profile.facets,
+    profile
+  );
   /**
    * The frontier is built once per screen, not per candidate: it is one pass
    * over the viewer's confirmed titles and then a lookup.

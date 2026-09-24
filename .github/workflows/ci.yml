@@ -26,6 +26,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Generate Next.js route types
+        run: npx next typegen
       - name: TypeScript
         run: npx tsc --noEmit
       - name: Production build

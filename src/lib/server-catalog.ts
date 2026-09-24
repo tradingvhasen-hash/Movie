@@ -12,6 +12,7 @@ import { normalise, searchText } from "@/lib/search-core";
 let catalogPromise: Promise<CandidateItem[]> | null = null;
 let byId = new Map<string, CandidateItem>();
 let searchHay: string[] = [];
+let fameTitles: Title[] = [];
 const vectors = new Map<string, Float32Array>();
 
 /**
@@ -28,6 +29,7 @@ export function getServerCatalog(): Promise<CandidateItem[]> {
     const pool = titles.map((title) => ({ title }));
     byId = new Map(pool.map((item) => [item.title.id, item]));
     searchHay = titles.map(searchText);
+    fameTitles = [...titles].sort((a, b) => b.voteCount - a.voteCount);
     return pool;
   })();
   return catalogPromise;
@@ -59,8 +61,16 @@ export async function searchServerTitles(
   limit = 24
 ): Promise<Title[]> {
   const q = normalise(query);
-  if (q.length < 2) return [];
   const pool = await getServerCatalog();
+  if (q.length < 2) {
+    const out: Title[] = [];
+    for (const title of fameTitles) {
+      if (skipIds.has(title.id)) continue;
+      out.push(title);
+      if (out.length >= limit) break;
+    }
+    return out;
+  }
 
   const starts: Title[] = [];
   const contains: Title[] = [];

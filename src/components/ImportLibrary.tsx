@@ -6,6 +6,7 @@ import { getLocalCatalog, loadCatalog } from "@/lib/catalog";
 import { matchAll, readExport } from "@/lib/import/watchlist";
 import { useDhawq } from "@/lib/store";
 import type { Title } from "@/lib/types";
+import { useT } from "@/lib/i18n";
 
 /**
  * THE OFFER THAT SHOULD HAVE BEEN ON THE FIRST SCREEN.
@@ -36,21 +37,22 @@ export default function ImportLibrary({
   compact?: boolean;
   onDone?: (added: number) => void;
 }) {
+  const t = useT();
   const input = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const run = async (file: File) => {
     setBusy(true);
-    setStatus("reading…");
+    setStatus(t("importLibrary.reading"));
     try {
       const text = await file.text();
       const rows = readExport(text);
       if (rows.length === 0) {
-        setStatus("No film titles in that file. Export it as CSV and try again.");
+        setStatus(t("importLibrary.empty"));
         return;
       }
-      setStatus("matching against the catalog…");
+      setStatus(t("importLibrary.matching"));
       await loadCatalog();
       const catalog = getLocalCatalog().map((c: { title: Title }) => c.title);
       const { matched, unmatched } = matchAll(rows, catalog);
@@ -64,17 +66,18 @@ export default function ImportLibrary({
         added++;
         // hand the frame back so a 2,000-row file does not lock the page
         if (i % 200 === 0) {
-          setStatus(`${i} of ${matched.length}…`);
+          setStatus(t("importLibrary.progress", { current: i, total: matched.length }));
           await new Promise((r) => setTimeout(r, 0));
         }
       }
       setStatus(
-        `Added ${added} film${added === 1 ? "" : "s"}` +
-          (unmatched.length > 0 ? ` · ${unmatched.length} not in this catalog` : "")
+        unmatched.length > 0
+          ? t("importLibrary.resultUnmatched", { added, unmatched: unmatched.length })
+          : t("importLibrary.result", { added })
       );
       onDone?.(added);
     } catch {
-      setStatus("Could not read that file.");
+      setStatus(t("importLibrary.failed"));
     } finally {
       setBusy(false);
     }
@@ -101,10 +104,10 @@ export default function ImportLibrary({
         className="w-full rounded-2xl border border-line bg-surface px-4 py-3.5 text-start transition-colors hover:border-ink-faint disabled:opacity-60"
       >
         <span className="block text-sm font-bold text-ink-strong">
-          {busy ? "Working…" : "Already track your films somewhere?"}
+          {busy ? t("importLibrary.working") : t("importLibrary.prompt")}
         </span>
         <span className="mt-0.5 block text-xs text-ink-faint">
-          Import a CSV from Letterboxd, IMDb, Trakt or TV Time — your whole library at once
+          {t("importLibrary.hint")}
         </span>
       </motion.button>
       {status && (

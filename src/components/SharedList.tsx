@@ -1,10 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import PosterArt from "./PosterArt";
-import { getLocalTitle, loadCatalog } from "@/lib/catalog";
 import { useDhawq } from "@/lib/store";
 import { FADE_UP, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
 import { CheckIcon, PlusIcon } from "./ui/Icons";
@@ -24,29 +22,19 @@ export default function SharedList({
   name,
   owner,
   titleIds,
+  titles,
 }: {
   listId: string;
   name: string;
   owner: string | null;
   titleIds: string[];
+  titles: Title[];
 }) {
   const t = useT();
-  const [ready, setReady] = useState(false);
   const createList = useDhawq((s) => s.createList);
   const addToList = useDhawq((s) => s.addToList);
   const lists = useDhawq((s) => s.lists);
   const alreadyAdded = lists.some((l) => l.sourceListId === listId);
-
-  useEffect(() => {
-    void loadCatalog().then(() => setReady(true));
-  }, []);
-
-  const titles = useMemo(() => {
-    if (!ready) return [];
-    return titleIds
-      .map((id) => getLocalTitle(id))
-      .filter((t): t is Title => Boolean(t));
-  }, [ready, titleIds]);
 
   const add = () => {
     if (alreadyAdded) return;
@@ -97,24 +85,17 @@ export default function SharedList({
       </motion.p>
 
       <motion.div variants={FADE_UP} className="mt-7 grid grid-cols-3 gap-2 sm:grid-cols-5 lg:grid-cols-6">
-        {(ready ? titles : Array.from({ length: Math.min(titleIds.length, 12) })).map((t, i) =>
-          t ? (
+        {titles.map((t, i) => (
             <motion.span
-              key={(t as Title).id}
+              key={t.id}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ ...SPRING_SNAPPY, delay: Math.min(i, 12) * 0.02 }}
               className="block overflow-hidden rounded-xl border border-line"
             >
-              <PosterArt title={t as Title} sizes="140px" className="aspect-[2/3] w-full" />
+              <PosterArt title={t} sizes="140px" className="aspect-[2/3] w-full" />
             </motion.span>
-          ) : (
-            <span
-              key={i}
-              className="block aspect-[2/3] w-full animate-pulse rounded-xl bg-surface-2"
-            />
-          )
-        )}
+        ))}
       </motion.div>
 
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-bg/85 px-5 pb-[calc(20px+env(safe-area-inset-bottom))] pt-3 backdrop-blur-xl">

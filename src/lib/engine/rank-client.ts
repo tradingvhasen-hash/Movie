@@ -188,6 +188,7 @@ function rankViaWorker(w: Worker, q: RankQuery): Promise<RankResult> {
     seed: q.seed,
     likedIds: q.likedIds,
     dislikedIds: q.dislikedIds,
+    seenIds: q.seenIds,
     homeLanguages: q.homeLanguages,
     reach: q.reach,
     withReasons: q.withReasons,

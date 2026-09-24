@@ -18,8 +18,10 @@ check("deletion derives identity from JWT and performs one admin user delete",
   deleteFn.includes("auth.admin.deleteUser(who.user.id)") &&
   !deleteFn.includes("req.json()")
 );
-check("browser deletion uses authenticated edge and clears local state",
+check("browser deletion uses authenticated edge and guest reset clears local state",
   dataPanel.includes('functions.invoke("delete-account"') &&
+  dataPanel.includes("if (!supabase || !session)") &&
+  dataPanel.includes('t("data.localDeleted")') &&
   dataPanel.includes("eraseAllUserData()")
 );
 

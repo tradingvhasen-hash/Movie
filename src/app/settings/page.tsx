@@ -15,7 +15,7 @@ import { useDhawq } from "@/lib/store";
 import { useT } from "@/lib/i18n";
 import DataPanel from "@/components/DataPanel";
 import { useEffect, useState } from "react";
-import { getLocalCatalog, loadCatalog } from "@/lib/catalog";
+import { CATALOG_SIZE } from "@/lib/data/catalog-meta";
 
 /**
  * SETTINGS — the place the fifth button went.
@@ -47,16 +47,6 @@ export default function SettingsPage() {
    * After mount, because the catalog is installed client-side and a server
    * render has nothing to count.
    */
-  const [catalogSize, setCatalogSize] = useState(0);
-  useEffect(() => {
-    let alive = true;
-    void loadCatalog().then(() => {
-      if (alive) setCatalogSize(getLocalCatalog().length);
-    });
-    return () => {
-      alive = false;
-    };
-  }, []);
   const settings = useDhawq((s) => s.settings);
   const setSettings = useDhawq((s) => s.setSettings);
 
@@ -144,9 +134,7 @@ export default function SettingsPage() {
         <ChoiceRow
           icon={<span className="text-[color:var(--color-skip)]"><ArrowUpIcon size={18} /></span>}
           label={
-            catalogSize > 0
-              ? t("settings.everythingCount", { count: catalogSize.toLocaleString() })
-              : t("settings.everything")
+            t("settings.everythingCount", { count: CATALOG_SIZE.toLocaleString() })
           }
           on={settings.reach === "wide"}
           onSelect={() => tap("reach", "wide")}

@@ -138,10 +138,10 @@ function useAccountController(): AccountState {
           passed: switchingAccounts ? [] : before.passed,
           accountOwner: userId,
           onboardingSeen: merged.swipeOrder.length > 0 || before.onboardingSeen,
-          publicProfile: cloudProfile ?? {
-            name: googleName,
-            bio: "",
-            avatarUrl: googleAvatar,
+          publicProfile: {
+            name: cloudProfile?.name || googleName,
+            bio: cloudProfile?.bio ?? "",
+            avatarUrl: cloudProfile?.avatarUrl || googleAvatar,
           },
         });
         useDhawq.getState().rebuildProfile();
@@ -165,7 +165,7 @@ function useAccountController(): AccountState {
     return () => {
       alive = false;
     };
-  }, [userId, session?.user.user_metadata]);
+  }, [userId]);
 
   /**
    * Continuous sync of actual source rows.

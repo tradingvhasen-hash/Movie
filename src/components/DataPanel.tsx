@@ -46,8 +46,13 @@ export default function DataPanel() {
     try {
       const supabase = getSupabase();
       const session = (await supabase?.auth.getSession())?.data.session;
+
+      // Guest reset is a first-class path. A tester (or any signed-out user)
+      // should be able to return this browser to a truly fresh Dhawq state
+      // without creating an account just to delete it.
       if (!supabase || !session) {
-        setNote(t("data.notSignedIn"));
+        useDhawq.getState().eraseAllUserData();
+        setNote(t("data.localDeleted"));
         return;
       }
 
@@ -109,7 +114,6 @@ export default function DataPanel() {
           label={t("data.restore")}
           hint={t("data.restoreHint")}
           onClick={() => fileRef.current?.click()}
-          last={!isSupabaseConfigured()}
         />
         <input
           ref={fileRef}
@@ -123,8 +127,7 @@ export default function DataPanel() {
           }}
         />
 
-        {isSupabaseConfigured() && (
-          <div className="px-4 py-3.5">
+        <div className="px-4 py-3.5">
             {!confirming ? (
               <button
                 type="button"
@@ -159,7 +162,6 @@ export default function DataPanel() {
               </div>
             )}
           </div>
-        )}
       </div>
 
       {note && (

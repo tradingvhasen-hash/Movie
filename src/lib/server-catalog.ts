@@ -7,9 +7,11 @@ import { buildRarityIndex } from "@/lib/engine/facets";
 import { featurize } from "@/lib/engine/features";
 import type { CandidateItem } from "@/lib/engine/recommend";
 import type { Title } from "@/lib/types";
+import { normalise, searchText } from "@/lib/search-core";
 
 let catalogPromise: Promise<CandidateItem[]> | null = null;
 let byId = new Map<string, CandidateItem>();
+let searchHay: string[] = [];
 const vectors = new Map<string, Float32Array>();
 
 /**
@@ -25,6 +27,7 @@ export function getServerCatalog(): Promise<CandidateItem[]> {
     buildRarityIndex(titles);
     const pool = titles.map((title) => ({ title }));
     byId = new Map(pool.map((item) => [item.title.id, item]));
+    searchHay = titles.map(searchText);
     return pool;
   })();
   return catalogPromise;
@@ -47,4 +50,32 @@ export function serverVectorOf(title: Title): Float32Array {
     vectors.set(title.id, vector);
   }
   return vector;
+}
+
+
+export async function searchServerTitles(
+  query: string,
+  skipIds: Set<string>,
+  limit = 24
+): Promise<Title[]> {
+  const q = normalise(query);
+  if (q.length < 2) return [];
+  const pool = await getServerCatalog();
+
+  const starts: Title[] = [];
+  const contains: Title[] = [];
+  for (let i = 0; i < pool.length; i++) {
+    const at = searchHay[i].indexOf(q);
+    if (at < 0) continue;
+    const title = pool[i].title;
+    if (skipIds.has(title.id)) continue;
+    if (at === 0 || searchHay[i].charCodeAt(at - 1) === 32) starts.push(title);
+    else contains.push(title);
+  }
+
+  const byFame = (a: Title, b: Title) => b.voteCount - a.voteCount;
+  starts.sort(byFame);
+  if (starts.length >= limit) return starts.slice(0, limit);
+  contains.sort(byFame);
+  return [...starts, ...contains].slice(0, limit);
 }

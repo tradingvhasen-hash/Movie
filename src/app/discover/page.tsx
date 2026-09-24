@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import PosterArt from "@/components/PosterArt";
@@ -18,6 +18,7 @@ import { haptic } from "@/lib/haptics";
 import { useDhawq } from "@/lib/store";
 import { useLocale, useT } from "@/lib/i18n";
 import type { Recommendation, SwipeAction } from "@/lib/types";
+import { useDialogKeyboard } from "@/lib/useDialogKeyboard";
 
 /**
  * DISCOVER — what to watch next, and nothing else.
@@ -57,6 +58,8 @@ export default function DiscoverPage() {
   const haptics = useDhawq((s) => s.settings.haptics);
 
   const [open, setOpen] = useState<Recommendation | null>(null);
+  const detailDialogRef = useRef<HTMLDivElement>(null);
+  useDialogKeyboard(Boolean(open), detailDialogRef, () => setOpen(null));
 
   /**
    * The answers, ranked on a worker thread.
@@ -321,6 +324,11 @@ export default function DiscoverPage() {
               rather than being deleted underneath a fade.
             */}
             <motion.div
+              ref={detailDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="discover-detail-title"
+              tabIndex={-1}
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%", transition: { duration: 0.34, ease: [0.4, 0, 0.7, 1] } }}
@@ -334,7 +342,7 @@ export default function DiscoverPage() {
                   <PosterArt title={open.title} sizes="180px" className="h-full w-full" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h2 className="text-xl font-bold leading-tight tracking-tight">
+                  <h2 id="discover-detail-title" className="text-xl font-bold leading-tight tracking-tight">
                     {open.title.title[locale]}
                   </h2>
                   <p className="mt-1 text-xs font-medium text-ink-faint">

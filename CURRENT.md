@@ -50,6 +50,11 @@
 
 - `/`
 - `/add`
+- `/api/import-match`
+- `/api/onboarding`
+- `/api/rank`
+- `/api/search`
+- `/api/titles`
 - `/calibrate`
 - `/discover`
 - `/l/[slug]`

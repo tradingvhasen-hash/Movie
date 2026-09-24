@@ -265,12 +265,6 @@ function DemoButton({
 
 function WelcomeFace({ card }: { card: (typeof WELCOME_CARDS)[number] }) {
   const t = useT();
-  const Icon =
-    card.action === "liked"
-      ? HeartIcon
-      : card.action === "disliked"
-        ? ThumbsDownIcon
-        : ArrowUpIcon;
 
   return (
     <div
@@ -295,7 +289,13 @@ function WelcomeFace({ card }: { card: (typeof WELCOME_CARDS)[number] }) {
           background: `color-mix(in srgb, ${card.from} 8%, var(--color-surface))`,
         }}
       >
-        <Icon size={21} filled={card.action === "liked"} />
+        {card.action === "liked" ? (
+          <HeartIcon size={21} filled />
+        ) : card.action === "disliked" ? (
+          <ThumbsDownIcon size={21} />
+        ) : (
+          <ArrowUpIcon size={21} />
+        )}
       </div>
       <span className="text-[27px] font-bold leading-tight tracking-[-0.03em] text-ink">
         {t(card.lineKey)}

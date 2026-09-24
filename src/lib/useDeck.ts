@@ -54,7 +54,7 @@ const RESERVE = 24;
  * them. The real answer is to get this work off the main thread entirely, and
  * that is a bigger change than a broken app should wait for.
  */
-const REFILL_AT = 8;
+const REFILL_AT = 16;
 
 /** Local ranking is authoritative. The old /api/recommend path is intentionally
  * not called: its Supabase catalog is not seeded and it added a cold network
@@ -202,7 +202,7 @@ function whenIdle(fn: () => void): () => void {
  * handler; it now runs on an idle callback and consecutive swipes collapse
  * into a single rebuild, so flicking through cards never waits on it.
  */
-export function useDeck() {
+export function useDeck(enabled = true) {
   const swipes = useDhawq((s) => s.swipes);
   const profile = useDhawq((s) => s.profile);
   const doSwipe = useDhawq((s) => s.swipe);
@@ -321,25 +321,27 @@ export function useDeck() {
 
   /** coalescing wrapper: many swipes in a row cost one rebuild */
   const refill = useCallback(() => {
-    cancelPending.current?.();
+    if (!enabled || cancelPending.current) return;
     cancelPending.current = whenIdle(() => {
       cancelPending.current = null;
       rebuild();
     });
-  }, [rebuild]);
+  }, [enabled, rebuild]);
 
   // The deck no longer waits for or preloads the 48k browser catalog.
   // Starter cards are available immediately; ranking prefers the server's full
   // catalog and only downloads catalog.json if that path fails/offline.
   useEffect(() => {
+    if (!enabled) return;
     warmRanker();
     hydratedRef.current = true;
     setHydrated(true);
     rebuild();
     return () => {
       cancelPending.current?.();
+      cancelPending.current = null;
     };
-  }, [rebuild]);
+  }, [enabled, rebuild]);
 
   /**
    * Answers the card that is on top *now* and returns it, so the caller never

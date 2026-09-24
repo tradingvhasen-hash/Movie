@@ -261,7 +261,7 @@ interface DhawqState {
    * against yet — so it happens the moment there is.
    */
   compactSwipes: () => void;
-  createList: (name: string) => string;
+  createList: (name: string, sourceListId?: string) => string;
   deleteList: (id: string) => void;
   renameList: (id: string, name: string) => void;
   toggleListItem: (listId: string, titleId: string) => void;
@@ -493,12 +493,19 @@ export const useDhawq = create<DhawqState>()(
 
       setPublicProfile: (p) => set({ publicProfile: p }),
 
-      createList: (name) => {
+      createList: (name, sourceListId) => {
         const id = `list-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
         set((s) => ({
           lists: [
             ...s.lists,
-            { id, name, isPublic: false, titleIds: [], createdAt: Date.now() },
+            {
+              id,
+              name,
+              isPublic: false,
+              titleIds: [],
+              createdAt: Date.now(),
+              ...(sourceListId ? { sourceListId } : null),
+            },
           ],
         }));
         return id;

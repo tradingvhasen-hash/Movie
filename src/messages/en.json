@@ -47,7 +47,10 @@
     "share": "Share your library",
     "addToList": "Add to list",
     "removeSwipe": "Remove from library",
-    "startSwiping": "Start swiping"
+    "startSwiping": "Start swiping",
+    "addFilms": "Add films",
+    "watchedTab": "Watched",
+    "listsTab": "Lists"
   },
   "discover": {
     "title": "Discover",
@@ -275,5 +278,10 @@
     "leftNote": "you watched it, it was not for you",
     "up": "Swipe up",
     "upNote": "you have not seen it"
+  },
+  "notFound": {
+    "title": "Page not found",
+    "body": "This page doesn't exist — let's get you back to swiping.",
+    "back": "Back to swiping"
   }
 }

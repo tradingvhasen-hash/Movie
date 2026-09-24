@@ -1,21 +1,18 @@
 "use client";
 
 /**
- * Talking to the ranking worker, with the main thread as the safety net.
+ * Server-first ranking, with the full browser worker as the correctness
+ * fallback.
  *
- * One worker for the whole app, created on first use and kept: starting one
- * costs a catalog fetch and a parse, and three screens want the same answer
- * from the same data. Requests are matched by an incrementing id, so a screen
- * that asks twice in quick succession — Discover while a swipe is still
- * settling, say — gets both answers to the right callers and can ignore the
- * stale one.
- *
- * THE FALLBACK IS NOT DECORATION. If `Worker` is missing, blocked by a policy,
- * or throws on construction, every call runs the identical `recommend()` on
- * the main thread and the app behaves exactly as it did before this file
- * existed — slowly, but correctly. A performance optimisation that can break
- * the product when it fails is not an optimisation.
+ * Normal production requests send only the taste/profile and ids to
+ * `/api/rank`; the server already owns the full versioned catalog and returns
+ * a few dozen Title objects. A timeout/network/server failure falls back to the
+ * previous worker path, which loads the same `catalog.json` and runs the same
+ * `recommend()` implementation. Failures use bounded backoff rather than a
+ * permanent "remote offline" switch, so a transient error cannot disable the
+ * preferred path for the rest of the session.
  */
+
 import {
   getEncodedCatalog,
   getLocalCatalog,
@@ -198,7 +195,7 @@ function getWorker(): Worker | null {
   }
 }
 
-/** warm the worker (and its catalog) before anybody is waiting on an answer */
+/** prepare the fallback worker; it does not load the catalog until needed */
 export function warmRanker() {
   getWorker();
 }
@@ -249,11 +246,8 @@ async function runHere(q: RankQuery): Promise<RankResult> {
 }
 
 /**
- * Hand the worker the catalog the main thread already has, once.
- *
- * Awaiting `loadCatalog()` costs nothing anybody was not already paying: the
- * screen cannot render a card without it either. What it buys is the worker
- * skipping its own fetch of the same 2.7 MB.
+ * Offline/failure path: hand the worker the one browser catalog copy once,
+ * avoiding a second fetch between the main thread and worker.
  */
 let handoff: Promise<void> | null = null;
 function sendCatalog(w: Worker): Promise<void> {

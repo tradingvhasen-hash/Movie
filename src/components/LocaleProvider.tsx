@@ -32,6 +32,11 @@ export default function LocaleProvider({ children }: { children: React.ReactNode
        a first load that resolves to the SSR default still needs these set */
     document.documentElement.lang = next;
     document.documentElement.dir = isRtl(next) ? "rtl" : "ltr";
+    if (pref === "ar" || pref === "en") {
+      document.cookie = `dhawq-locale=${pref}; Path=/; Max-Age=31536000; SameSite=Lax`;
+    } else {
+      document.cookie = "dhawq-locale=; Path=/; Max-Age=0; SameSite=Lax";
+    }
   }, [pref]);
 
   return (

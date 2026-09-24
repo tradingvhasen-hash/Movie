@@ -96,6 +96,11 @@ export async function syncSwipeIds(userId: string, ids: string[]): Promise<void>
       .in("title_id", removed.slice(i, i + 500));
     if (error) throw new Error(error.message);
   }
+
+  // Tombstones are durable until the corresponding cloud mutation succeeds.
+  useDhawq.setState((state) => ({
+    deletedSwipeIds: state.deletedSwipeIds.filter((id) => !unique.includes(id)),
+  }));
 }
 
 export async function pushProfile(userId: string): Promise<void> {
@@ -117,7 +122,8 @@ export async function syncListIds(userId: string, clientIds: string[]): Promise<
   if (!supabase || clientIds.length === 0) return;
   const state = useDhawq.getState();
 
-  for (const clientId of [...new Set(clientIds)]) {
+  const uniqueIds = [...new Set(clientIds)];
+  for (const clientId of uniqueIds) {
     const local = state.lists.find((l) => l.id === clientId);
     if (!local) {
       const { error } = await supabase
@@ -213,14 +219,24 @@ export async function syncListIds(userId: string, clientIds: string[]): Promise<
       if (error) throw new Error(error.message);
     }
   }
+
+  useDhawq.setState((state) => ({
+    deletedListIds: state.deletedListIds.filter((id) => !uniqueIds.includes(id)),
+  }));
 }
 
 /** Initial/repair sync: upload the complete local truth once. */
 export async function syncLocalToCloud(userId: string): Promise<void> {
   const state = useDhawq.getState();
-  await syncSwipeIds(userId, Object.keys(state.swipes));
+  await syncSwipeIds(
+    userId,
+    [...Object.keys(state.swipes), ...state.deletedSwipeIds]
+  );
   await pushProfile(userId);
-  await syncListIds(userId, state.lists.map((l) => l.id));
+  await syncListIds(
+    userId,
+    [...state.lists.map((l) => l.id), ...state.deletedListIds]
+  );
 }
 
 export async function loadCloudProfile(userId: string): Promise<TasteProfile | null> {

@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import ListBuilder from "./ListBuilder";
 import PosterArt from "./PosterArt";
 import { getLocalTitle } from "@/lib/catalog";
+import { resolveTitleSnapshots } from "@/lib/title-resolver";
+import type { Title } from "@/lib/types";
 import { useDhawq } from "@/lib/store";
 import { useAccount } from "@/lib/supabase/useAccount";
 import { publishList } from "@/lib/supabase/lists";
@@ -65,6 +67,27 @@ export default function ListsView() {
   const [sharing, setSharing] = useState<string | null>(null);
   const [shared, setShared] = useState<Record<string, string>>({});
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [resolvedTitles, setResolvedTitles] = useState<Map<string, Title>>(new Map());
+
+  useEffect(() => {
+    let alive = true;
+    const ids = [...new Set(lists.flatMap((list) => list.titleIds))].filter(
+      (id) => !getLocalTitle(id)
+    );
+    if (ids.length === 0) return () => { alive = false; };
+
+    void resolveTitleSnapshots(ids).then((map) => {
+      if (!alive) return;
+      setResolvedTitles((prev) => {
+        const next = new Map(prev);
+        for (const [id, title] of map) next.set(id, title);
+        return next;
+      });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [lists]);
 
   const create = () => {
     const trimmed = name.trim();
@@ -218,7 +241,7 @@ export default function ListsView() {
         <AnimatePresence initial={false}>
           {lists.map((list) => {
             const covers = list.titleIds
-              .map((id) => getLocalTitle(id))
+              .map((id) => getLocalTitle(id) ?? resolvedTitles.get(id))
               .filter(Boolean)
               .slice(0, 5);
             const armed = confirmDelete === list.id;

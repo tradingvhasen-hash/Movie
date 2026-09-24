@@ -82,19 +82,18 @@ check("reconciliation applies offline deletion tombstones",
 const recommend = read("src/lib/engine/recommend.ts");
 const rankRoute = read("src/app/api/rank/route.ts");
 const rankClientSource = read("src/lib/engine/rank-client.ts");
-check("server ranking uses request-scoped reach",
+check("ranking keeps request-scoped reach in the browser worker path",
   recommend.includes("reach?: ReachSetting") &&
   recommend.includes("fameTierSize(profile, mode, opts.reach)") &&
-  rankRoute.includes("reach,") &&
   rankClientSource.includes("reach: q.reach")
 );
 check("failed exposure-debt experiment remains disabled for shared server ranking",
   recommend.includes('const DEBT_EVERY = num("DEBT_EVERY", 0)')
 );
-check("normal ranking is server-first with retryable local fallback",
-  rankClientSource.includes("/api/rank") &&
-  rankClientSource.includes("remoteBackoffUntil") &&
-  rankClientSource.includes("await sendCatalog(w)")
+check("normal ranking stays off the constrained Render process",
+  !rankClientSource.includes("/api/rank") &&
+  rankClientSource.includes("await sendCatalog(w)") &&
+  rankRoute.includes("server_ranking_disabled")
 );
 const layout = read("src/app/layout.tsx");
 const requestLocale = read("src/i18n/request.ts");

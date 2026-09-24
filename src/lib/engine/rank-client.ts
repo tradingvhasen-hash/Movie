@@ -1,16 +1,16 @@
 "use client";
 
 /**
- * Server-first ranking, with the full browser worker as the correctness
- * fallback.
+ * Browser-worker ranking is the production path.
  *
- * Normal production requests send only the taste/profile and ids to
- * `/api/rank`; the server already owns the full versioned catalog and returns
- * a few dozen Title objects. A timeout/network/server failure falls back to the
- * previous worker path, which loads the same `catalog.json` and runs the same
- * `recommend()` implementation. Failures use bounded backoff rather than a
- * permanent "remote offline" switch, so a transient error cannot disable the
- * preferred path for the rest of the session.
+ * The server-first experiment kept the entire 48k-title catalog plus ranking
+ * indexes resident inside a 512 MB Render instance. Real traffic repeatedly
+ * crashed the Node process ("Aborted (core dumped)"), so ranking belongs back
+ * in the browser worker where it was already measured and stable.
+ *
+ * The worker receives the same versioned catalog and runs the same
+ * recommendation engine. The main-thread path remains a correctness fallback
+ * only when Worker is unavailable.
  */
 
 import {
@@ -47,58 +47,6 @@ export interface RankResult {
   becauseOf: (string | null)[];
 }
 
-let remoteFailures = 0;
-let remoteBackoffUntil = 0;
-
-async function rankRemote(q: RankQuery): Promise<RankResult | null> {
-  if (typeof window === "undefined" || Date.now() < remoteBackoffUntil) return null;
-
-  const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 4500);
-  try {
-    const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
-    const res = await fetch(`${base}/api/rank`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        mode: q.mode,
-        profile: q.profile,
-        excludeIds: [...q.excludeIds],
-        count: q.count,
-        seed: q.seed,
-        likedIds: q.likedIds,
-        dislikedIds: q.dislikedIds,
-        seenIds: q.seenIds ?? [],
-        homeLanguages: q.homeLanguages ?? [],
-        reach: q.reach,
-        withReasons: q.withReasons ?? false,
-      }),
-      signal: controller.signal,
-    });
-    if (!res.ok) throw new Error(`rank ${res.status}`);
-
-    const body = (await res.json()) as Partial<RankResult>;
-    if (!Array.isArray(body.titles)) throw new Error("invalid rank response");
-
-    remoteFailures = 0;
-    remoteBackoffUntil = 0;
-    return {
-      titles: body.titles as Title[],
-      match: Array.isArray(body.match) ? body.match : [],
-      reasons: Array.isArray(body.reasons) ? body.reasons : [],
-      becauseOf: Array.isArray(body.becauseOf) ? body.becauseOf : [],
-    };
-  } catch {
-    remoteFailures++;
-    // Retry later; never permanently disable the authoritative server path.
-    remoteBackoffUntil =
-      Date.now() + Math.min(60_000, 1000 * 2 ** Math.min(remoteFailures, 6));
-    return null;
-  } finally {
-    window.clearTimeout(timeout);
-  }
-}
-
 export interface GridRankQuery {
   profile: TasteProfile;
   excludeIds: Set<string> | string[];
@@ -109,40 +57,6 @@ export interface GridRankQuery {
 }
 
 export async function rankWatchedGrid(q: GridRankQuery): Promise<Title[]> {
-  if (typeof window !== "undefined" && Date.now() >= remoteBackoffUntil) {
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 4500);
-    try {
-      const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
-      const res = await fetch(`${base}/api/rank`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          surface: "grid",
-          profile: q.profile,
-          excludeIds: [...q.excludeIds],
-          count: q.count,
-          seed: q.seed,
-          watchedIds: q.watchedIds,
-          reach: q.reach,
-        }),
-        signal: controller.signal,
-      });
-      if (!res.ok) throw new Error(`grid ${res.status}`);
-      const body = (await res.json()) as { titles?: Title[] };
-      if (!Array.isArray(body.titles)) throw new Error("invalid grid response");
-      remoteFailures = 0;
-      remoteBackoffUntil = 0;
-      return body.titles;
-    } catch {
-      remoteFailures++;
-      remoteBackoffUntil =
-        Date.now() + Math.min(60_000, 1000 * 2 ** Math.min(remoteFailures, 6));
-    } finally {
-      window.clearTimeout(timeout);
-    }
-  }
-
   await loadCatalog();
   const { watchedGrid } = await import("./recommend");
   const watched = q.watchedIds
@@ -263,17 +177,12 @@ function sendCatalog(w: Worker): Promise<void> {
 }
 
 export async function rank(q: RankQuery): Promise<RankResult> {
-  const remote = await rankRemote(q);
-  if (remote) return remote;
-
   const w = getWorker();
   if (!w) {
     await loadCatalog();
     return runHere(q);
   }
 
-  // Offline/static-demo fallback: install the exact same full catalog in the
-  // worker only after the server path is unavailable.
   await sendCatalog(w);
   return rankViaWorker(w, q);
 }

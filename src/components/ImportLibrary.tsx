@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { getLocalCatalog, loadCatalog } from "@/lib/catalog";
 import { matchAll, readExport } from "@/lib/import/watchlist";
 import { useDhawq } from "@/lib/store";
-import type { Title } from "@/lib/types";
+import type { SwipeAction, Title } from "@/lib/types";
 import { useT } from "@/lib/i18n";
 
 /**
@@ -53,9 +53,33 @@ export default function ImportLibrary({
         return;
       }
       setStatus(t("importLibrary.matching"));
-      await loadCatalog();
-      const catalog = getLocalCatalog().map((c: { title: Title }) => c.title);
-      const { matched, unmatched } = matchAll(rows, catalog);
+
+      let matched: { title: Title; action: SwipeAction }[] = [];
+      let unmatchedCount = 0;
+      try {
+        const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+        const res = await fetch(`${base}/api/import-match`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ rows }),
+        });
+        if (!res.ok) throw new Error(`import ${res.status}`);
+        const body = (await res.json()) as {
+          matched?: { title: Title; action: SwipeAction }[];
+          unmatchedCount?: number;
+        };
+        if (!Array.isArray(body.matched)) throw new Error("invalid import response");
+        matched = body.matched;
+        unmatchedCount = Number(body.unmatchedCount ?? 0);
+      } catch {
+        // Static demo/offline fallback keeps the old exact matcher.
+        await loadCatalog();
+        const catalog = getLocalCatalog().map((c: { title: Title }) => c.title);
+        const local = matchAll(rows, catalog);
+        matched = local.matched.map(({ title, action }) => ({ title, action }));
+        unmatchedCount = local.unmatched.length;
+      }
+
       const swipe = useDhawq.getState().swipe;
       const already = useDhawq.getState().swipes;
       let added = 0;
@@ -71,8 +95,8 @@ export default function ImportLibrary({
         }
       }
       setStatus(
-        unmatched.length > 0
-          ? t("importLibrary.resultUnmatched", { added, unmatched: unmatched.length })
+        unmatchedCount > 0
+          ? t("importLibrary.resultUnmatched", { added, unmatched: unmatchedCount })
           : t("importLibrary.result", { added })
       );
       onDone?.(added);

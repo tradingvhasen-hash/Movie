@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getLocalItem, loadCatalog } from "@/lib/catalog";
+import { getLocalItem } from "@/lib/catalog";
 import { rank, warmRanker } from "@/lib/engine/rank-client";
 import { STARTER_PACK } from "@/lib/data/starter-pack";
 import { COLD_START_TARGET, isCalibrating } from "@/lib/engine/taste";
@@ -210,7 +210,7 @@ export function useDeck() {
 
   const [queue, setQueue] = useState<Title[]>([]);
   const [hydrated, setHydrated] = useState(false);
-  /** true once a ranking against the REAL catalog has come back — see `install` */
+  /** true once an authoritative full-catalog ranking has come back */
   const [filled, setFilled] = useState(false);
   const hydratedRef = useRef(false);
   const queueRef = useRef<Title[]>([]);
@@ -258,23 +258,9 @@ export function useDeck() {
       setQueue(next);
       queueRef.current = next;
       /**
-       * A ranking has come back — but only count it if it ranked the REAL
-       * catalog.
-       *
-       * Two separate windows could make the deck look finished when it was
-       * only loading, and the second is why a screenshot still showed "Reset
-       * all cards" three seconds into a returning visit:
-       *
-       *   1. the catalog file has not arrived. `hydrated` covers this.
-       *   2. it has not arrived, a rebuild ran anyway against the 50-title
-       *      fallback set, the viewer had already answered those in
-       *      onboarding, and so the rank came back EMPTY and marked the deck
-       *      filled. Nothing covered this.
-       *
-       * Gating on `hydratedRef` closes the second: an install that happened
-       * before the real catalog landed does not get to say the deck is empty.
-       * A ref rather than the state value because `install` is called from
-       * callbacks that captured an older render.
+       * A completed rank request may mark the deck filled. The server ranks
+       * the full catalog; the worker fallback loads the same catalog before it
+       * answers, so either successful path is authoritative.
        */
       if (hydratedRef.current) setFilled(true);
     };
@@ -342,24 +328,15 @@ export function useDeck() {
     });
   }, [rebuild]);
 
-  // wait for the catalog fetch and the persisted store before the first fill
+  // The deck no longer waits for or preloads the 48k browser catalog.
+  // Starter cards are available immediately; ranking prefers the server's full
+  // catalog and only downloads catalog.json if that path fails/offline.
   useEffect(() => {
-    let cancelled = false;
     warmRanker();
-    // Install the bundled starter pack synchronously. The ranking it starts
-    // behind the scenes may wait for catalog.json, but the first real card does not.
+    hydratedRef.current = true;
+    setHydrated(true);
     rebuild();
-    void loadCatalog().then(() => {
-      if (cancelled) return;
-      // a library saved by an older build carries a copy of every title it
-      // already has in catalog.json; drop those now that we can check
-      useDhawq.getState().compactSwipes();
-      hydratedRef.current = true;
-      setHydrated(true);
-      rebuild();
-    });
     return () => {
-      cancelled = true;
       cancelPending.current?.();
     };
   }, [rebuild]);

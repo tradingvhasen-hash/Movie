@@ -45,31 +45,29 @@ export default function DataPanel() {
     setNote(null);
     try {
       const supabase = getSupabase();
-      const token = (await supabase?.auth.getSession())?.data.session?.access_token;
-      if (!token) {
+      const session = (await supabase?.auth.getSession())?.data.session;
+      if (!supabase || !session) {
         setNote(t("data.notSignedIn"));
         return;
       }
-      const res = await fetch("/api/account", {
+
+      const { data, error } = await supabase.functions.invoke("delete-account", {
         method: "POST",
-        headers: { authorization: `Bearer ${token}` },
       });
-      const body = (await res.json()) as {
-        ok?: boolean;
-        authDeleted?: boolean;
-        error?: string;
-      };
-      if (!res.ok || !body.ok) {
-        setNote(
-          body.error === "account_deletion_not_configured"
-            ? t("data.deleteNotConfigured")
-            : (body.error ?? t("data.deleteFailed"))
-        );
+      const body = (data ?? {}) as { ok?: boolean; error?: string };
+      if (error || !body.ok) {
+        setNote(body.error ?? error?.message ?? t("data.deleteFailed"));
         return;
       }
-      await supabase?.auth.signOut();
-      /* the local copy goes too — deleting the cloud and leaving the device
-         full of the same data is not what anybody means by "delete my data" */
+
+      // The cloud identity is already gone at this point. Local cleanup must
+      // not depend on a network sign-out call succeeding against that deleted
+      // identity.
+      try {
+        await supabase.auth.signOut({ scope: "local" });
+      } catch {
+        // eraseAllUserData below remains authoritative for this device
+      }
       useDhawq.getState().eraseAllUserData();
       setNote(t("data.deleted"));
     } catch (e) {

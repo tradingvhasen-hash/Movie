@@ -67,11 +67,11 @@ anon / public key ... ____________________
 service_role key .... ____________________
    *** THE DANGEROUS ONE ***
    Full read/write on the database, bypasses every security rule.
-   Never put it in the repo and never prefix it with NEXT_PUBLIC_.
-   It may be configured as a protected server-only Render environment secret:
-   the account-deletion route needs it to delete auth.users atomically.
-   It is also used locally by privileged maintenance scripts such as seed.ts.
-   It must never be exposed to browser/client code.
+   Never put it in the repo, never prefix it with NEXT_PUBLIC_, and do not put
+   it on Render. Account deletion runs inside Supabase Edge Functions, where
+   Supabase supplies a server-only secret/service role automatically.
+   Local privileged maintenance scripts such as seed.ts may still use a
+   service-role/secret key. It must never be exposed to browser/client code.
 
 Database password ... ____________________
    Where: Project Settings -> Database -> Connection string

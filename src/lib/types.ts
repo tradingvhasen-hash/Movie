@@ -92,6 +92,8 @@ export interface UserList {
   hideOwner?: boolean;
   /** the slug this list is reachable at once it has been shared */
   slug?: string;
+  /** cloud list this was copied from; prevents false name-based deduplication */
+  sourceListId?: string;
 }
 
 export interface Recommendation {

@@ -109,10 +109,7 @@ export function warmRanker() {
  * runs, imports it directly on its own thread as it always did.
  */
 async function runHere(q: RankQuery): Promise<RankResult> {
-  const { recommend, setReach } = await import("./recommend");
-  /* the worker is told per request; the fallback has to be told too, or the
-     two paths would disagree about how far the deck may reach */
-  if (q.reach) setReach(q.reach);
+  const { recommend } = await import("./recommend");
   const titlesFor = (ids: string[]) => {
     const out: Title[] = [];
     for (const id of ids) {
@@ -131,6 +128,7 @@ async function runHere(q: RankQuery): Promise<RankResult> {
     seenTitles: titlesFor(q.seenIds ?? []),
     homeLanguages: q.homeLanguages,
     mode: q.mode,
+    reach: q.reach,
   });
   return {
     titles: recs.map((r) => r.title),

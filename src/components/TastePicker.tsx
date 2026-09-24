@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { memo, useCallback, useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import PosterArt from "./PosterArt";
 import { getLocalCatalog } from "@/lib/catalog";
 import { resolveSeeds } from "@/lib/data/taste-seeds";
-import { EASE_OUT, FADE_UP, QUICK, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
+import { FADE_UP, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
 import { haptic } from "@/lib/haptics";
-import Link from "next/link";
 import ImportLibrary from "./ImportLibrary";
 import { useDhawq } from "@/lib/store";
 import type { Title } from "@/lib/types";
@@ -107,9 +106,7 @@ export default function TastePicker({ onDone }: { onDone: () => void }) {
     };
   }, []);
 
-  const ready = choices.length > 0;
-
-  const toggle = (id: string) => {
+  const toggle = useCallback((id: string) => {
     haptic("tick", haptics);
     setPicked((prev) => {
       const next = new Set(prev);
@@ -117,7 +114,7 @@ export default function TastePicker({ onDone }: { onDone: () => void }) {
       else next.add(id);
       return next;
     });
-  };
+  }, [haptics]);
 
   const confirm = () => {
     for (const t of choices) if (picked.has(t.id)) swipe(t, "liked");
@@ -128,7 +125,6 @@ export default function TastePicker({ onDone }: { onDone: () => void }) {
   };
 
   const enough = picked.size >= MIN_PICKS;
-  const anyPicked = picked.size > 0;
 
   return (
     <motion.div
@@ -189,36 +185,13 @@ export default function TastePicker({ onDone }: { onDone: () => void }) {
             key={t.id}
             title={t}
             selected={picked.has(t.id)}
-            dimmed={anyPicked && !picked.has(t.id)}
-            onToggle={() => toggle(t.id)}
+            onToggle={toggle}
             label={locale === "ar" ? t.title.ar || t.title.en : t.title.en}
           />
         ))}
       </motion.div>
 
-      {/*
-        The faster road, offered next to the slower one rather than hidden
-        behind it. Someone who already keeps a library elsewhere should never
-        be asked to tap thirty posters first.
-      */}
-      {/*
-        The third road out of this screen, and by measurement the fastest one
-        that does not require a file: forty posters at a time reads 1,750
-        titles an hour against the deck's 1,121.
-      */}
-      <Link
-        href="/add"
-        onClick={onDone}
-        className="mt-3 block w-full rounded-2xl border border-line bg-surface px-4 py-3.5 transition-colors hover:border-ink-faint"
-      >
-        <span className="block text-sm font-bold text-ink-strong">
-          {t("taste.addForty")}
-        </span>
-        <span className="mt-0.5 block text-xs text-ink-faint">
-          {t("taste.addFortyHint")}
-        </span>
-      </Link>
-
+      {/* A file import remains available for people who already keep a library elsewhere. */}
       <ImportLibrary
         onDone={(added) => {
           // let the count land before the screen goes. Importing a whole
@@ -270,24 +243,22 @@ export default function TastePicker({ onDone }: { onDone: () => void }) {
  * brightness and saturation. The set you have picked reads as a group from
  * across the room, which is exactly how somebody checks whether they are done.
  */
-function PickTile({
+const PickTile = memo(function PickTile({
   title,
   selected,
-  dimmed,
   onToggle,
   label,
 }: {
   title: Title;
   selected: boolean;
-  dimmed: boolean;
-  onToggle: () => void;
+  onToggle: (id: string) => void;
   label: string;
 }) {
   return (
     <motion.button
       type="button"
       variants={FADE_UP}
-      onClick={onToggle}
+      onClick={() => onToggle(title.id)}
       aria-pressed={selected}
       aria-label={label}
       whileTap={{ scale: 0.93 }}
@@ -319,16 +290,16 @@ function PickTile({
        * The scale nudge is gone because 0.985 against 1 is not visible at this
        * size and cost a third of the work; the sheet element is gone with it.
        */
-      animate={{ opacity: dimmed ? 0.82 : 1 }}
-      transition={{ duration: QUICK, ease: EASE_OUT }}
       className="relative block w-full min-w-0 overflow-hidden rounded-2xl bg-surface-2"
+      animate={{ scale: selected ? 0.985 : 1 }}
+      transition={SPRING_SNAPPY}
       style={{
         boxShadow: selected
-          ? "0 0 0 3px var(--color-accent), 0 10px 26px rgb(var(--rgb-accent) / 0.35)"
+          ? "0 0 0 2px var(--color-accent), 0 8px 22px rgb(var(--rgb-accent) / 0.22)"
           : "0 2px 10px rgb(var(--rgb-shadow) / 0.07)",
       }}
     >
       <PosterArt title={title} sizes="140px" className="aspect-[2/3] w-full" />
     </motion.button>
   );
-}
+});

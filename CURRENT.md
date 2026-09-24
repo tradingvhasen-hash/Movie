@@ -50,7 +50,6 @@
 
 - `/`
 - `/add`
-- `/api/account`
 - `/calibrate`
 - `/discover`
 - `/l/[slug]`

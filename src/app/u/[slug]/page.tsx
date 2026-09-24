@@ -1,6 +1,7 @@
 import { getTranslations } from "next-intl/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import PublicProfileGrid from "@/components/PublicProfileGrid";
+import { serverTitlesFor } from "@/lib/server-catalog";
 
 export const dynamic = "force-dynamic";
 
@@ -39,12 +40,14 @@ export default async function PublicProfilePage({ params }: PageProps<"/u/[slug]
     return <ShareNotFound message={t("share.notFound")} />;
   }
 
+  const titles = await serverTitlesFor((rows ?? []).map((row) => String(row.title_id)));
+
   return (
     <div className="px-5 pb-16 pt-8">
       <h1 className="text-3xl font-bold">
         {t("share.libraryOf", { name: profile.display_name ?? "—" })}
       </h1>
-      <PublicProfileGrid titleIds={(rows ?? []).map((row) => String(row.title_id))} />
+      <PublicProfileGrid titles={titles} />
       <p className="mt-10 text-center text-xs text-ink-faint">{t("share.poweredBy")}</p>
     </div>
   );

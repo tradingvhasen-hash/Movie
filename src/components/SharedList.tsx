@@ -9,6 +9,7 @@ import { useDhawq } from "@/lib/store";
 import { FADE_UP, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
 import { CheckIcon, PlusIcon } from "./ui/Icons";
 import type { Title } from "@/lib/types";
+import { useT } from "@/lib/i18n";
 
 /**
  * A public list can be copied into local storage immediately. An account is a
@@ -29,6 +30,7 @@ export default function SharedList({
   owner: string | null;
   titleIds: string[];
 }) {
+  const t = useT();
   const [ready, setReady] = useState(false);
   const createList = useDhawq((s) => s.createList);
   const addToList = useDhawq((s) => s.addToList);
@@ -81,10 +83,10 @@ export default function SharedList({
       <motion.p variants={FADE_UP} className="mt-8 text-center text-sm text-ink-dim">
         {owner ? (
           <>
-            <span className="font-semibold text-ink">{owner}</span> shared
+            {t("shared.sharedBy", { name: owner })}
           </>
         ) : (
-          "Shared"
+          t("shared.shared")
         )}
       </motion.p>
       <motion.h1 variants={FADE_UP} className="mt-1 text-center text-3xl font-bold tracking-tight">
@@ -122,11 +124,11 @@ export default function SharedList({
           transition={SPRING_SNAPPY}
           onClick={add}
           disabled={alreadyAdded}
-          aria-label={alreadyAdded ? "Added to my lists" : "Add to my lists"}
+          aria-label={alreadyAdded ? t("shared.added") : t("shared.add")}
           className="mx-auto flex w-full max-w-md items-center justify-center gap-2 rounded-full bg-accent py-3.5 text-sm font-semibold text-on-accent disabled:opacity-60"
         >
           {alreadyAdded ? <CheckIcon size={17} strokeWidth={2.6} /> : <PlusIcon size={17} strokeWidth={2.4} />}
-          {alreadyAdded ? "Added" : "Add to my lists"}
+          {alreadyAdded ? t("shared.added") : t("shared.add")}
         </motion.button>
       </div>
     </motion.div>

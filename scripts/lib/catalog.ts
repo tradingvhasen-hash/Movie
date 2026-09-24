@@ -1,21 +1,10 @@
 /**
- * THE WHOLE CATALOG, THE WAY THE BROWSER EVENTUALLY SEES IT.
+ * THE CATALOG THE BROWSER RANKS.
  *
- * The catalog ships as two files. `public/catalog.json` holds the most
- * recognised 11,000 titles and is what the opening download waits on;
- * `public/catalog-tail.json` holds the other 40,922 and is fetched on idle,
- * then merged. A browser a few seconds into a session has all 51,922.
- *
- * Every instrument in this repo read `public/catalog.json` directly, which was
- * correct when that file was the entire catalog and became silently wrong the
- * moment it stopped being. Left alone, every ruler would have graded the
- * engine against **11,000 titles instead of 51,922** — a catalog smaller than
- * the one that shipped last week — and reported the shrinkage as a result.
- *
- * That is the same failure that has now voided three measurements in one day:
- * the ruler withholding an input the thing under test consumes. So there is
- * one loader, it reads both files, and nothing has to remember to.
- *
+ * The production browser currently receives one encoded ranking catalog at
+ * `public/catalog.json`; overviews are a separate lazy asset. Every benchmark
+ * and experiment must load the same ranking catalog or it is grading a
+ * different product. Keep this helper as the single script-side loader.
  */
 import { readFileSync } from "node:fs";
 import { installRegions } from "../../src/lib/engine/facets";
@@ -23,20 +12,9 @@ import { decodeCatalog, type EncodedCatalog } from "../../src/lib/data/catalog-c
 import type { Title } from "../../src/lib/types";
 
 const CORE = "public/catalog.json";
-/**
- * The deep half no longer ships as ranking data — it is a search index now,
- * carrying no keywords, cast or co-watch links, so there is nothing here for
- * an instrument that grades ranking to read. See `attachIndex` in
- * `src/lib/catalog.ts` for why it was cut down.
- *
- * This loader stays because the lesson that created it stands: when the
- * shipped shape changes, every ruler must change with it or they all silently
- * grade something the browser never sees.
- */
-
 let cached: Title[] | null = null;
 
-/** every title that ships, core plus tail, in fame order */
+/** every rankable title that ships, in fame order */
 export function loadFullCatalog(): Title[] {
   if (cached) return cached;
   cached = decodeCatalog(JSON.parse(readFileSync(CORE, "utf8")) as EncodedCatalog);
@@ -44,7 +22,7 @@ export function loadFullCatalog(): Title[] {
 }
 
 /**
- * The co-watch regions, installed into the facet engine.
+ * Recommendation-graph regions, installed into the facet engine.
  *
  * Every ruler that measures the deck has to see the same regions the browser
  * sees, for the reason this file exists at all: an instrument that withholds

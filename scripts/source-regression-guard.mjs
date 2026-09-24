@@ -42,9 +42,11 @@ check("fast-add does not hard-label untouched posters not-seen",
 );
 
 const deck = read("src/lib/useDeck.ts");
-const startup = deck.indexOf("rebuild();");
-const load = deck.indexOf("void loadCatalog().then");
-check("starter deck is installed before catalog resolves", startup >= 0 && load >= 0 && startup < load);
+check("starter deck is immediate and default swipe does not preload the full catalog",
+  deck.includes("STARTER_PACK.filter") &&
+  deck.includes("hydratedRef.current = true") &&
+  !deck.includes("loadCatalog(")
+);
 check("dead remote recommender is not on the deck path", !deck.includes('fetch("/api/recommend"'));
 
 const store = read("src/lib/store.ts");

@@ -4,44 +4,30 @@ import { serverTitlesFor } from "@/lib/server-catalog";
 
 export const dynamic = "force-dynamic";
 
+type PublicListRpcRow = {
+  id: string;
+  name: string;
+  owner: string | null;
+  title_ids: string[] | null;
+};
+
 export default async function SharedListPage({ params }: PageProps<"/l/[slug]">) {
   const { slug } = await params;
   const supabase = getServerSupabase();
   if (!supabase) return <NotFound />;
 
-  // lists.user_id and profiles.id both point at auth.users; there is no direct
-  // foreign key between lists and profiles, so do not rely on an inferred
-  // PostgREST embedded relation.
-  const { data: list, error: listError } = await supabase
-    .from("lists")
-    .select("id, user_id, name, hide_owner")
-    .eq("share_slug", slug)
-    .eq("is_public", true)
-    .maybeSingle();
+  const { data, error } = await supabase.rpc("get_public_list", { p_slug: slug });
+  const list = (Array.isArray(data) ? data[0] : data) as PublicListRpcRow | null;
+  if (error || !list) return <NotFound />;
 
-  if (listError || !list) return <NotFound />;
-
-  const [{ data: items, error: itemsError }, ownerResult] = await Promise.all([
-    supabase.from("list_items").select("title_id").eq("list_id", list.id),
-    list.hide_owner
-      ? Promise.resolve({ data: null, error: null })
-      : supabase.from("profiles").select("display_name").eq("id", list.user_id).maybeSingle(),
-  ]);
-
-  if (itemsError) return <NotFound />;
-
-  const owner =
-    list.hide_owner || ownerResult.error
-      ? null
-      : ((ownerResult.data as { display_name?: string } | null)?.display_name ?? null);
-  const titleIds = (items ?? []).map((r) => String(r.title_id));
+  const titleIds = list.title_ids ?? [];
   const titles = await serverTitlesFor(titleIds);
 
   return (
     <SharedList
       listId={String(list.id)}
       name={String(list.name)}
-      owner={owner}
+      owner={list.owner}
       titleIds={titleIds}
       titles={titles}
     />

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import PosterArt from "@/components/PosterArt";
 import { PlusIcon, SearchIcon, ShuffleIcon, SparklesIcon, XIcon } from "@/components/ui/Icons";
@@ -13,7 +13,7 @@ import { genreLabel } from "@/lib/genres";
 import { EASE_OUT, FADE_UP, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
 import { haptic } from "@/lib/haptics";
 import { useDhawq } from "@/lib/store";
-import { useLocale } from "@/lib/i18n";
+import { useLocale, useT } from "@/lib/i18n";
 import type { Title } from "@/lib/types";
 
 /** five a side, which is more people than fit on a sofa */
@@ -59,6 +59,8 @@ const MAX_SLOTS = 10;
  */
 export default function TogetherPage() {
   const locale = useLocale();
+  const t = useT();
+  const answerDialogRef = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
   const [slots, setSlots] = useState<(Title | null)[]>([null, null]);
   const [editing, setEditing] = useState<number | null>(null);
@@ -69,6 +71,16 @@ export default function TogetherPage() {
   useEffect(() => {
     void loadCatalog().then(() => setReady(true));
   }, []);
+
+  useEffect(() => {
+    if (!showing) return;
+    answerDialogRef.current?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setShowing(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showing]);
 
   const chosen = useMemo(() => slots.filter((s): s is Title => Boolean(s)), [slots]);
 
@@ -133,7 +145,7 @@ export default function TogetherPage() {
       className="mx-auto max-w-md px-5 pb-28 pt-6"
     >
       <motion.h1 variants={FADE_UP} className="text-[26px] font-bold tracking-[-0.03em]">
-        Together
+        {t("together.title")}
       </motion.h1>
 
       {/*
@@ -157,7 +169,7 @@ export default function TogetherPage() {
             className="overflow-hidden text-sm leading-relaxed text-ink-dim"
           >
             <span className="mt-1.5 block">
-              Everyone names a film they love. It finds one for all of you.
+              {t("together.intro")}
             </span>
           </motion.p>
         )}
@@ -211,7 +223,7 @@ export default function TogetherPage() {
             }}
             transition={SPRING_SNAPPY}
             className="pointer-events-auto grid h-[68px] w-[68px] place-items-center rounded-full border border-line bg-surface text-accent shadow-[0_10px_30px_rgb(var(--rgb-shadow)/0.16)] disabled:text-ink-faint"
-            aria-label="Find something for all of us"
+            aria-label={t("together.find")}
           >
             <SparklesIcon size={26} strokeWidth={1.9} />
           </motion.button>
@@ -226,7 +238,7 @@ export default function TogetherPage() {
           whileTap={{ scale: 0.97 }}
           transition={SPRING_SNAPPY}
           className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-ink-faint/40 bg-surface py-3.5 text-sm font-semibold text-ink-dim transition-colors hover:text-ink"
-          aria-label="One more person"
+          aria-label={t("together.addPerson")}
         >
           <PlusIcon size={18} strokeWidth={2.4} />
         </motion.button>
@@ -247,6 +259,11 @@ export default function TogetherPage() {
               onClick={() => setShowing(false)}
             />
             <motion.div
+              ref={answerDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-label={t("together.dialogTitle")}
+              tabIndex={-1}
               key={answer.id}
               initial={{ opacity: 0, y: 28, scale: 0.92 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -282,7 +299,7 @@ export default function TogetherPage() {
                   className="flex flex-1 items-center justify-center gap-2 rounded-full border border-line py-3 text-sm font-semibold text-ink-dim"
                 >
                   <ShuffleIcon size={17} />
-                  Another
+                  {t("together.another")}
                 </motion.button>
                 <motion.button
                   type="button"
@@ -290,7 +307,7 @@ export default function TogetherPage() {
                   transition={SPRING_SNAPPY}
                   onClick={() => setShowing(false)}
                   className="grid h-[46px] w-[46px] shrink-0 place-items-center rounded-full bg-accent text-[color:var(--color-on-accent)]"
-                  aria-label="Close"
+                  aria-label={t("together.close")}
                 >
                   <XIcon size={18} strokeWidth={2.6} />
                 </motion.button>

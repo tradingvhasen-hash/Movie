@@ -102,6 +102,64 @@ async function rankRemote(q: RankQuery): Promise<RankResult | null> {
   }
 }
 
+export interface GridRankQuery {
+  profile: TasteProfile;
+  excludeIds: Set<string> | string[];
+  count: number;
+  seed: number;
+  watchedIds: string[];
+  reach?: "narrow" | "medium" | "wide";
+}
+
+export async function rankWatchedGrid(q: GridRankQuery): Promise<Title[]> {
+  if (typeof window !== "undefined" && Date.now() >= remoteBackoffUntil) {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 4500);
+    try {
+      const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+      const res = await fetch(`${base}/api/rank`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          surface: "grid",
+          profile: q.profile,
+          excludeIds: [...q.excludeIds],
+          count: q.count,
+          seed: q.seed,
+          watchedIds: q.watchedIds,
+          reach: q.reach,
+        }),
+        signal: controller.signal,
+      });
+      if (!res.ok) throw new Error(`grid ${res.status}`);
+      const body = (await res.json()) as { titles?: Title[] };
+      if (!Array.isArray(body.titles)) throw new Error("invalid grid response");
+      remoteFailures = 0;
+      remoteBackoffUntil = 0;
+      return body.titles;
+    } catch {
+      remoteFailures++;
+      remoteBackoffUntil =
+        Date.now() + Math.min(60_000, 1000 * 2 ** Math.min(remoteFailures, 6));
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  }
+
+  await loadCatalog();
+  const { watchedGrid } = await import("./recommend");
+  const watched = q.watchedIds
+    .map((id) => getLocalItem(id)?.title)
+    .filter((title): title is Title => Boolean(title));
+  return watchedGrid(getLocalCatalog(), q.profile, {
+    excludeIds: q.excludeIds instanceof Set ? q.excludeIds : new Set(q.excludeIds),
+    count: q.count,
+    seed: q.seed,
+    watched,
+    reach: q.reach,
+  });
+}
+
 let worker: Worker | null = null;
 let workerBroken = false;
 let nextId = 1;

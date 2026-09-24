@@ -77,6 +77,7 @@ export default function QuickAdd() {
       count: PER_SCREEN,
       seed: 1 + screen * 7919,
       watched,
+      reach: state.settings.reach,
     });
     // profile and swipes are deliberately not dependencies: a fresh grid is
     // wanted per screen, not per answer

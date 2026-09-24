@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { AnimatePresence, animate, motion, useMotionValue, useMotionValueEvent } from "framer-motion";
 import SwipeCard, { SWIPE_UP_THRESHOLD, SWIPE_X_THRESHOLD } from "./SwipeCard";
 import SwipeBurst, { type BurstHandle } from "./SwipeBurst";
@@ -25,7 +24,6 @@ import type { SwipeAction } from "@/lib/types";
 
 export default function SwipeDeck() {
   const t = useT();
-  const { queue, hydrated, filled, swipeTop, undo, canUndo, refill } = useDeck();
   /**
    * Someone who came in through the grid has already answered thirty
    * questions, and greeting them with "Swipe cards so we learn your taste"
@@ -69,13 +67,28 @@ export default function SwipeDeck() {
    */
   const [exitOf, setExitOf] = useState<{ id: string; action: SwipeAction } | null>(null);
   /** welcome → pick a few you love → deck */
-  const [picking, setPicking] = useState(false);
+  const [picking, setPicking] = useState(
+    () =>
+      !useDhawq.getState().onboardingSeen &&
+      useDhawq.getState().profile.totalSwipes === 0 &&
+      demoAlreadyShown()
+  );
   /**
    * The demo runs when nothing has been swiped and it has not already run
    * since this page was loaded. Read once into state so the answer cannot
    * change under the component mid-render.
    */
   const [showDemo, setShowDemo] = useState<boolean | null>(null);
+
+  /**
+   * Do not start the 48k-title ranking/catalog work behind the welcome demo or
+   * the poster picker. It used to compete with the first taps on a phone, so a
+   * screen that looked simple could still freeze while invisible work decoded
+   * the catalog. The deck owns that cost only once the deck is actually shown.
+   */
+  const deckEnabled = onboardingSeen && !picking && showDemo === false;
+  const { queue, hydrated, filled, swipeTop, undo, canUndo, refill } = useDeck(deckEnabled);
+
   const burstRef = useRef<BurstHandle>(null);
 
   /**
@@ -190,8 +203,32 @@ export default function SwipeDeck() {
     [swipeTop, settings.haptics, x, y]
   );
 
-  // a button press is the same commit, just without a finger to lift
-  const trigger = handleSwipe;
+  /**
+   * A button verdict gets one paint to tell the live card which way it is
+   * leaving before the queue removes it.
+   *
+   * Previously both updates happened in one React batch. AnimatePresence kept
+   * the departing component, but with its previous props, so the card often
+   * had no exit direction and simply faded away. One animation frame is enough
+   * to arm the exit and still feels instantaneous under a thumb.
+   */
+  const buttonPending = useRef(false);
+  const trigger = useCallback(
+    (action: SwipeAction) => {
+      if (buttonPending.current) return;
+      const top = queue[0];
+      if (!top) return;
+      buttonPending.current = true;
+      setExitOf({ id: top.id, action });
+      requestAnimationFrame(() => {
+        handleSwipe(action);
+        requestAnimationFrame(() => {
+          buttonPending.current = false;
+        });
+      });
+    },
+    [handleSwipe, queue]
+  );
 
   const takeBack = useCallback(() => {
     haptic("undo", settings.haptics);
@@ -248,7 +285,12 @@ export default function SwipeDeck() {
    * ranking/search transport.
    */
   useEffect(() => {
-    setShowDemo(useDhawq.getState().profile.totalSwipes === 0 && !demoAlreadyShown());
+    const state = useDhawq.getState();
+    const shouldDemo = state.profile.totalSwipes === 0 && !demoAlreadyShown();
+    setShowDemo(shouldDemo);
+    if (!shouldDemo && !state.onboardingSeen && state.profile.totalSwipes === 0) {
+      setPicking(true);
+    }
   }, []);
 
   useEffect(() => {
@@ -349,7 +391,6 @@ export default function SwipeDeck() {
         onDone={() => {
           setOnboardingSeen();
           setPicking(false);
-          setTimeout(refill, 0);
         }}
       />
     );
@@ -390,23 +431,9 @@ export default function SwipeDeck() {
         variants={FADE_UP}
         initial="hidden"
         animate="show"
-        className="relative z-10 mb-2 flex w-full shrink-0 items-center justify-between"
+        className="relative z-10 mb-2 flex w-full shrink-0 items-center"
       >
         <h1 className="text-[26px] font-bold tracking-[-0.03em]">ذَوق</h1>
-        {/* Fast-add is the high-throughput companion to one-card swiping. */}
-        <Link
-          href="/add"
-          prefetch={false}
-          className="rounded-full border border-line px-3 py-1.5 text-xs font-bold text-ink-dim transition-colors hover:border-ink-faint hover:text-ink-strong"
-          style={{
-            WebkitTouchCallout: "none",
-            WebkitUserSelect: "none",
-            userSelect: "none",
-            touchAction: "manipulation",
-          }}
-        >
-          {t("quickAdd.title")}
-        </Link>
       </motion.div>
 
       {/* card stack — height-driven so everything fits */}

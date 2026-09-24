@@ -6,6 +6,7 @@ import AppShell from "@/components/AppShell";
 import LocaleProvider from "@/components/LocaleProvider";
 import ServiceWorker from "@/components/ServiceWorker";
 import { AccountProvider } from "@/lib/supabase/useAccount";
+import { getServerLocale } from "@/lib/i18n-server";
 
 const plexArabic = IBM_Plex_Sans_Arabic({
   variable: "--font-plex-arabic",
@@ -49,15 +50,14 @@ export const viewport: Viewport = {
   themeColor: "#0b0b13",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const locale = await getServerLocale();
   return (
     <html
-      lang="en"
-      dir="ltr"
+      lang={locale}
+      dir={locale === "ar" ? "rtl" : "ltr"}
       className={`${plexArabic.variable} ${geistSans.variable} h-full antialiased`}
     >
       <body className="min-h-dvh font-sans">

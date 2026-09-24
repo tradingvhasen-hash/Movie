@@ -43,6 +43,7 @@ export default function QuickAdd() {
   const [picked, setPicked] = useState<Record<string, true>>({});
   const [added, setAdded] = useState(0);
   const swipes = useDhawq((s) => s.swipes);
+  const learnPasses = useDhawq((s) => s.learnPasses);
 
   useEffect(() => {
     void loadCatalog().then(() => setReady(true));
@@ -56,7 +57,7 @@ export default function QuickAdd() {
   const titles = useMemo<Title[]>(() => {
     if (!ready) return [];
     const state = useDhawq.getState();
-    const exclude = new Set(Object.keys(state.swipes));
+    const exclude = new Set([...Object.keys(state.swipes), ...state.passed]);
     /**
      * Everything they have confirmed watching, whatever they felt about it.
      * This is what opens the frontier — a co-watch neighbour of a confirmed
@@ -101,14 +102,18 @@ export default function QuickAdd() {
   const commit = () => {
     const swipe = useDhawq.getState().swipe;
     let n = 0;
+    const untouched: Title[] = [];
     for (const t of titles) {
       if (picked[t.id]) {
         swipe(t, "seen");
         n++;
       } else {
-        swipe(t, "not_seen");
+        untouched.push(t);
       }
     }
+    // A missed poster is not proof that the title was never watched. Retire it
+    // from this fast-scanning surface without training a hard negative.
+    learnPasses(untouched);
     setAdded((a) => a + n);
     setPicked({});
     setScreen((s) => s + 1);
@@ -133,8 +138,8 @@ export default function QuickAdd() {
     <div className="px-4 pb-32 pt-5">
       <h1 className="text-2xl font-bold tracking-tight text-ink-strong">Add fast</h1>
       <p className="mt-1.5 max-w-prose text-sm leading-relaxed text-ink-dim">
-        Tap everything you have watched. Anything you leave alone counts as not
-        watched, so a screen usually costs two or three taps.
+        Tap everything you have watched. Anything you leave alone is simply skipped,
+        so missing a poster never records a false “not watched” answer.
       </p>
 
       <div className="mt-5 grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">

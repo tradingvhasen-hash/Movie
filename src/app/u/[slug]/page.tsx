@@ -5,42 +5,27 @@ import { serverTitlesFor } from "@/lib/server-catalog";
 
 export const dynamic = "force-dynamic";
 
+type PublicProfileRpcRow = {
+  display_name: string | null;
+  bio: string | null;
+  avatar_url: string | null;
+  liked_title_ids: string[] | null;
+};
+
 export default async function PublicProfilePage({ params }: PageProps<"/u/[slug]">) {
   const { slug } = await params;
   const t = await getTranslations();
   const supabase = getServerSupabase();
 
-  if (!supabase) {
-    return <ShareNotFound message={t("share.notFound")} />;
-  }
+  if (!supabase) return <ShareNotFound message={t("share.notFound")} />;
 
-  const { data: profile, error: profileError } = await supabase
-    .from("profiles")
-    .select("id, display_name, is_public")
-    .eq("public_slug", slug)
-    .eq("is_public", true)
-    .maybeSingle();
+  const { data, error } = await supabase.rpc("get_public_profile", { p_slug: slug });
+  const profile = (Array.isArray(data) ? data[0] : data) as PublicProfileRpcRow | null;
 
-  if (profileError || !profile) {
-    return <ShareNotFound message={t("share.notFound")} />;
-  }
+  if (error || !profile) return <ShareNotFound message={t("share.notFound")} />;
 
-  // swipes.title_id intentionally has no FK to public.titles; that database
-  // table is not the complete product catalog. Fetch ids only and let the
-  // browser catalog resolve presentation data.
-  const { data: rows, error: swipeError } = await supabase
-    .from("swipes")
-    .select("title_id")
-    .eq("user_id", profile.id)
-    .eq("action", "liked")
-    .order("created_at", { ascending: false })
-    .limit(120);
-
-  if (swipeError) {
-    return <ShareNotFound message={t("share.notFound")} />;
-  }
-
-  const titles = await serverTitlesFor((rows ?? []).map((row) => String(row.title_id)));
+  const titleIds = (profile.liked_title_ids ?? []).slice(0, 120);
+  const titles = await serverTitlesFor(titleIds);
 
   return (
     <div className="px-5 pb-16 pt-8">

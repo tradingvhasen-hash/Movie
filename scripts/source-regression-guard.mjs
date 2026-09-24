@@ -53,14 +53,20 @@ check("service-worker cache is build-versioned",
 );
 check("mutable JSON revalidates", sw.includes("stale-while-revalidate"));
 
-const quick = read("src/components/QuickAdd.tsx");
-check("fast-add does not hard-label untouched posters not-seen",
-  quick.includes("learnPasses(untouched)") && !quick.includes('swipe(t, "not_seen")')
+const addPage = read("src/app/add/page.tsx");
+const tastePicker = read("src/components/TastePicker.tsx");
+const deckSurface = read("src/components/SwipeDeck.tsx");
+check("retired fast-add experiment stays out of the live product",
+  addPage.includes('redirect("/")') &&
+  !tastePicker.includes('href="/add"') &&
+  !deckSurface.includes('href="/add"')
 );
 
 const deck = read("src/lib/useDeck.ts");
-check("starter deck is immediate and default swipe does not preload the full catalog",
+check("starter deck is immediate and ranking waits until the deck is visible",
   deck.includes("STARTER_PACK.filter") &&
+  deck.includes("if (!enabled) return") &&
+  deck.includes("if (!enabled || cancelPending.current) return") &&
   deck.includes("hydratedRef.current = true") &&
   !deck.includes("loadCatalog(")
 );

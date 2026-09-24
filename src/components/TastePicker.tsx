@@ -106,8 +106,6 @@ export default function TastePicker({ onDone }: { onDone: () => void }) {
     };
   }, []);
 
-  const ready = choices.length > 0;
-
   const toggle = useCallback((id: string) => {
     haptic("tick", haptics);
     setPicked((prev) => {

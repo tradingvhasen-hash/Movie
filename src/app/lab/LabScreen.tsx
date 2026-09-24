@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { matchAll, readExport } from "@/lib/import/watchlist";
 import { useDhawq } from "@/lib/store";
+import { useAccount } from "@/lib/supabase/useAccount";
 import { getLocalCatalog, getLocalTitle, loadCatalog } from "@/lib/catalog";
 import { FADE_UP, staggerContainer } from "@/lib/motion";
 import type { SwipeAction, Title } from "@/lib/types";
@@ -27,7 +28,8 @@ import type { SwipeAction, Title } from "@/lib/types";
 export default function LabScreen() {
   const swipes = useDhawq((s) => s.swipes);
   const swipeOrder = useDhawq((s) => s.swipeOrder);
-  const resetAll = useDhawq((s) => s.resetAll);
+  const eraseAllUserData = useDhawq((s) => s.eraseAllUserData);
+  const { session, ready: accountReady } = useAccount();
 
   const [blocked, setBlocked] = useState(true);
   const [size, setSize] = useState(50);
@@ -45,6 +47,7 @@ export default function LabScreen() {
 
   const tally = (list: SwipeAction[]) => ({
     liked: list.filter((a) => a === "liked").length,
+    seen: list.filter((a) => a === "seen").length,
     disliked: list.filter((a) => a === "disliked").length,
     skipped: list.filter((a) => a === "not_seen").length,
     total: list.length,
@@ -67,11 +70,7 @@ export default function LabScreen() {
   }, [actions, size]);
 
   const reset = () => {
-    resetAll();
-    // resetAll leaves the onboarding flag alone, so the picker would not
-    // return — and "start over" that skips the first three choices is not a
-    // start over
-    useDhawq.setState({ onboardingSeen: false });
+    eraseAllUserData();
     setConfirming(false);
   };
 
@@ -79,10 +78,10 @@ export default function LabScreen() {
     ? blocks
         .map(
           (b) =>
-            `${b.from}-${b.to}${b.done ? "" : " (in progress)"}: liked ${b.liked}, skipped ${b.skipped}, disliked ${b.disliked}`
+            `${b.from}-${b.to}${b.done ? "" : " (in progress)"}: liked ${b.liked}, seen ${b.seen}, skipped ${b.skipped}, disliked ${b.disliked}`
         )
         .join("\n")
-    : `liked ${overall.liked}, skipped ${overall.skipped}, disliked ${overall.disliked}, total ${overall.total}`;
+    : `liked ${overall.liked}, seen ${overall.seen}, skipped ${overall.skipped}, disliked ${overall.disliked}, total ${overall.total}`;
 
   const copy = () => {
     void navigator.clipboard?.writeText(report);
@@ -117,7 +116,8 @@ export default function LabScreen() {
     a.href = url;
     a.download = `seenit-swipes-${rows.length}.json`;
     a.click();
-    URL.revokeObjectURL(url);
+    // Safari may not have consumed the blob when click() returns.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   /**
@@ -234,6 +234,26 @@ export default function LabScreen() {
     }
   };
 
+  if (!accountReady) {
+    return (
+      <div className="px-5 pt-10 text-sm text-ink-dim">
+        Checking test mode…
+      </div>
+    );
+  }
+
+  if (session) {
+    return (
+      <div className="mx-auto max-w-md px-5 pt-10">
+        <h1 className="text-2xl font-bold tracking-tight">Test bench</h1>
+        <p className="mt-3 text-sm leading-relaxed text-ink-dim">
+          Sign out before using the production test bench. Its reset tools are
+          intentionally guest-only so a test cannot touch synced account data.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <motion.div
       variants={staggerContainer(0.05)}
@@ -249,9 +269,10 @@ export default function LabScreen() {
       </motion.p>
 
       {/* ── totals ── */}
-      <motion.div variants={FADE_UP} className="mt-6 grid grid-cols-3 gap-3">
+      <motion.div variants={FADE_UP} className="mt-6 grid grid-cols-4 gap-2">
         {[
           ["Liked", overall.liked, "text-emerald-400"],
+          ["Seen", overall.seen, "text-ink-dim"],
           ["Skipped", overall.skipped, "text-sky-400"],
           ["Disliked", overall.disliked, "text-rose-400"],
         ].map(([label, value, tone]) => (
@@ -324,6 +345,7 @@ export default function LabScreen() {
               <tr>
                 <th className="px-3 py-2 text-left font-medium">Swipes</th>
                 <th className="px-2 py-2 text-right font-medium">Liked</th>
+                <th className="px-2 py-2 text-right font-medium">Seen</th>
                 <th className="px-2 py-2 text-right font-medium">Skipped</th>
                 <th className="px-3 py-2 text-right font-medium">Disliked</th>
               </tr>
@@ -339,6 +361,7 @@ export default function LabScreen() {
                     {!b.done && <span className="ml-1 text-xs">·</span>}
                   </td>
                   <td className="px-2 py-2 text-right text-emerald-400">{b.liked}</td>
+                  <td className="px-2 py-2 text-right text-ink-dim">{b.seen}</td>
                   <td className="px-2 py-2 text-right text-sky-400">{b.skipped}</td>
                   <td className="px-3 py-2 text-right text-rose-400">{b.disliked}</td>
                 </tr>
@@ -428,7 +451,8 @@ export default function LabScreen() {
         Import replays an exported file swipe by swipe, so the taste it rebuilds
         is identical to having done the work by hand. It skips anything already
         answered, so importing the same file twice changes nothing. Reset clears
-        every swipe and the learned taste, and brings back the opening picker.
+        all local Dhawq test data — swipes, lists, taste, settings and onboarding —
+        and returns this guest browser to a fresh start.
       </motion.p>
     </motion.div>
   );

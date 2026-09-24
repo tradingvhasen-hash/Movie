@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { exportCsv, exportJson, restoreBackup } from "@/lib/backup";
 import { useDhawq } from "@/lib/store";
-import { getSupabase, isSupabaseConfigured } from "@/lib/supabase/client";
+import { getSupabase } from "@/lib/supabase/client";
 import { useT } from "@/lib/i18n";
 
 /**
@@ -40,14 +40,19 @@ export default function DataPanel() {
     );
   };
 
-  const deleteAccount = async () => {
+  const deleteData = async () => {
     setBusy(true);
     setNote(null);
     try {
       const supabase = getSupabase();
       const session = (await supabase?.auth.getSession())?.data.session;
+
+      // Guest reset is a first-class path. A tester (or any signed-out user)
+      // should be able to return this browser to a truly fresh Dhawq state
+      // without creating an account just to delete it.
       if (!supabase || !session) {
-        setNote(t("data.notSignedIn"));
+        useDhawq.getState().eraseAllUserData();
+        setNote(t("data.localDeleted"));
         return;
       }
 
@@ -109,7 +114,6 @@ export default function DataPanel() {
           label={t("data.restore")}
           hint={t("data.restoreHint")}
           onClick={() => fileRef.current?.click()}
-          last={!isSupabaseConfigured()}
         />
         <input
           ref={fileRef}
@@ -123,8 +127,7 @@ export default function DataPanel() {
           }}
         />
 
-        {isSupabaseConfigured() && (
-          <div className="px-4 py-3.5">
+        <div className="px-4 py-3.5">
             {!confirming ? (
               <button
                 type="button"
@@ -143,7 +146,7 @@ export default function DataPanel() {
                   <button
                     type="button"
                     disabled={busy}
-                    onClick={() => void deleteAccount()}
+                    onClick={() => void deleteData()}
                     className="rounded-full bg-danger px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
                   >
                     {busy ? t("data.deleting") : t("data.deletePermanent")}
@@ -159,7 +162,6 @@ export default function DataPanel() {
               </div>
             )}
           </div>
-        )}
       </div>
 
       {note && (

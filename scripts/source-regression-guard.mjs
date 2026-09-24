@@ -18,9 +18,19 @@ check("deletion derives identity from JWT and performs one admin user delete",
   deleteFn.includes("auth.admin.deleteUser(who.user.id)") &&
   !deleteFn.includes("req.json()")
 );
-check("browser deletion uses authenticated edge and clears local state",
+check("browser deletion uses authenticated edge and guest reset clears local state",
   dataPanel.includes('functions.invoke("delete-account"') &&
+  dataPanel.includes("if (!supabase || !session)") &&
+  dataPanel.includes('t("data.localDeleted")') &&
   dataPanel.includes("eraseAllUserData()")
+);
+
+const labPage = read("src/app/lab/page.tsx");
+const labScreen = read("src/app/lab/LabScreen.tsx");
+check("production lab is guest-only before destructive test reset",
+  labPage.includes("<LabScreen />") &&
+  labScreen.includes("if (session)") &&
+  labScreen.includes("eraseAllUserData()")
 );
 
 const publicSharing = read("supabase/migrations/0011_public_sharing_rpc.sql");
@@ -120,5 +130,5 @@ check("custom recommendation dialogs have modal semantics and focus handling",
   together.includes("useDialogKeyboard")
 );
 
-console.log(`\n${failures ? "FAIL" : "PASS"} — ${22 - failures}/22 source invariants`);
+console.log(`\n${failures ? "FAIL" : "PASS"} — ${23 - failures}/23 source invariants`);
 process.exit(failures ? 1 : 0);

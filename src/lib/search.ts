@@ -12,57 +12,8 @@ import type { Title } from "./types";
  * notions of "matches" is a bug that only shows up for the people least able
  * to report it.
  */
-const ASCII = /^[\x20-\x7E]*$/;
-const MARKS = /[̀-ͯ]/g;
-const ARABIC_MARKS = /[ـً-ْ]/g;
-const NON_WORD = /[^\p{L}\p{N}]+/gu;
-
-export function normalise(s: string): string {
-  const lower = s.toLowerCase();
-  /**
-   * The fast path exists because of a measurement, not a hunch.
-   *
-   * `String.normalize("NFKD")` is the expensive half of this function, and it
-   * has nothing to do for a string that is already plain ASCII — which most
-   * film titles in this catalog are. Skipping it there took preparing the
-   * whole catalog for search from ~400ms to well under a hundred.
-   */
-  if (ASCII.test(lower)) return lower.replace(NON_WORD, " ").trim();
-  return lower
-    .normalize("NFKD")
-    // combining marks, so accented Latin matches unaccented typing
-    .replace(MARKS, "")
-    // Arabic diacritics and tatweel, which nobody types consistently
-    .replace(ARABIC_MARKS, "")
-    .replace(/[أإآ]/g, "ا")
-    .replace(/ى/g, "ي")
-    .replace(/ة/g, "ه")
-    // Japanese and Korean need no folding, only the punctuation strip below
-    .replace(NON_WORD, " ")
-    .trim();
-}
-
-/**
- * Every name a person might type for this title: the English one, the Arabic
- * translation, and the name in its own script.
- *
- * The third is why this exists. We stored TMDB's English title and its Arabic
- * *translation*, and a film whose own name is already Arabic has no translation
- * to fetch — so `The Blue Elephant` carried an empty second name and the one
- * string anybody would search for was the one we never kept.
- */
-export function searchText(title: Title): string {
-  return `${normalise(title.title.en)} ${normalise(title.title.ar)} ${normalise(
-    title.title.original ?? ""
-  )}`;
-}
-
-/** does this title answer to what was typed? */
-export function matches(title: Title, query: string): boolean {
-  const q = normalise(query);
-  if (!q) return false;
-  return searchText(title).includes(q);
-}
+export { matches, normalise, searchText } from "./search-core";
+import { normalise, searchText } from "./search-core";
 
 /* ────────────────────────────────────────────────────────────────────────
    THE INDEX, AND WHY THE APP WAS UNUSABLE WITHOUT IT.

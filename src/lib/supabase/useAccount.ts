@@ -120,9 +120,30 @@ function useAccountController(): AccountState {
         if (!alive) return;
 
         const switchingAccounts = Boolean(priorOwner && priorOwner !== userId);
+
+        // Persisted tombstones win over stale cloud rows after an offline
+        // deletion. They belong only to the account that owned this local
+        // library; never carry them across an account switch.
+        const cloudAfterDeletes =
+          !switchingAccounts && cloud
+            ? {
+                swipes: Object.fromEntries(
+                  Object.entries(cloud.swipes).filter(
+                    ([id]) => !before.deletedSwipeIds.includes(id)
+                  )
+                ),
+                swipeOrder: cloud.swipeOrder.filter(
+                  (id) => !before.deletedSwipeIds.includes(id)
+                ),
+                lists: cloud.lists.filter(
+                  (list) => !before.deletedListIds.includes(list.id)
+                ),
+              }
+            : cloud;
+
         const merged = switchingAccounts
-          ? cloud ?? { swipes: {}, swipeOrder: [], lists: [] }
-          : mergeLibraries(local, cloud);
+          ? cloudAfterDeletes ?? { swipes: {}, swipeOrder: [], lists: [] }
+          : mergeLibraries(local, cloudAfterDeletes);
 
         const googleName =
           (session?.user.user_metadata?.full_name as string | undefined) ?? "";
@@ -136,6 +157,8 @@ function useAccountController(): AccountState {
           // Weak onboarding passes belong to the device/session that saw them,
           // not to a different authenticated account.
           passed: switchingAccounts ? [] : before.passed,
+          deletedSwipeIds: switchingAccounts ? [] : before.deletedSwipeIds,
+          deletedListIds: switchingAccounts ? [] : before.deletedListIds,
           accountOwner: userId,
           onboardingSeen: merged.swipeOrder.length > 0 || before.onboardingSeen,
           publicProfile: {
@@ -149,7 +172,15 @@ function useAccountController(): AccountState {
         // A guest library or local corrections become cloud truth once merged.
         // On an account switch there is deliberately nothing from the previous
         // owner to upload.
-        if (!switchingAccounts && (hasLocalLibrary(local) || cloud)) {
+        if (
+          !switchingAccounts &&
+          (
+            hasLocalLibrary(local) ||
+            cloud ||
+            before.deletedSwipeIds.length > 0 ||
+            before.deletedListIds.length > 0
+          )
+        ) {
           await syncLocalToCloud(userId);
         }
 

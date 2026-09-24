@@ -86,7 +86,6 @@ export default function ListBuilder({
   /** everything this person has watched, newest first — the pick source */
   const library = useMemo(() => {
     const out: Title[] = [];
-    void catalogReady;
     for (const sw of Object.values(swipes)) {
       if (sw.action === "not_seen") continue;
       const t = getLocalTitle(sw.titleId) ?? sw.title ?? resolvedTitles.get(sw.titleId);

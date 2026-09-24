@@ -432,6 +432,9 @@ export function useDeck() {
   useEffect(() => {
     let cancelled = false;
     warmRanker();
+    // Install the bundled starter pack synchronously. The ranking it starts
+    // behind the scenes may wait for catalog.json, but the first real card does not.
+    rebuild();
     void loadCatalog().then(() => {
       if (cancelled) return;
       // a library saved by an older build carries a copy of every title it

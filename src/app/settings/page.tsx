@@ -15,7 +15,7 @@ import { useDhawq } from "@/lib/store";
 import { useT } from "@/lib/i18n";
 import DataPanel from "@/components/DataPanel";
 import { useEffect, useState } from "react";
-import { getLocalCatalog } from "@/lib/catalog";
+import { getLocalCatalog, loadCatalog } from "@/lib/catalog";
 
 /**
  * SETTINGS — the place the fifth button went.
@@ -49,7 +49,13 @@ export default function SettingsPage() {
    */
   const [catalogSize, setCatalogSize] = useState(0);
   useEffect(() => {
-    setCatalogSize(getLocalCatalog().length);
+    let alive = true;
+    void loadCatalog().then(() => {
+      if (alive) setCatalogSize(getLocalCatalog().length);
+    });
+    return () => {
+      alive = false;
+    };
   }, []);
   const settings = useDhawq((s) => s.settings);
   const setSettings = useDhawq((s) => s.setSettings);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import PosterArt from "@/components/PosterArt";
@@ -10,7 +10,7 @@ import {
   SparklesIcon,
   ThumbsDownIcon,
 } from "@/components/ui/Icons";
-import { getLocalTitle, loadCatalog } from "@/lib/catalog";
+import { getLocalTitle } from "@/lib/catalog";
 import { rank } from "@/lib/engine/rank-client";
 import { genreLabel } from "@/lib/genres";
 import { EASE_OUT, FADE_UP, SECTION, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
@@ -18,6 +18,7 @@ import { haptic } from "@/lib/haptics";
 import { useDhawq } from "@/lib/store";
 import { useLocale, useT } from "@/lib/i18n";
 import type { Recommendation, SwipeAction } from "@/lib/types";
+import { useDialogKeyboard } from "@/lib/useDialogKeyboard";
 
 /**
  * DISCOVER — what to watch next, and nothing else.
@@ -56,18 +57,9 @@ export default function DiscoverPage() {
   const doSwipe = useDhawq((s) => s.swipe);
   const haptics = useDhawq((s) => s.settings.haptics);
 
-  const [hydrated, setHydrated] = useState(false);
   const [open, setOpen] = useState<Recommendation | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void loadCatalog().then(() => {
-      if (!cancelled) setHydrated(true);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const detailDialogRef = useRef<HTMLDivElement>(null);
+  useDialogKeyboard(Boolean(open), detailDialogRef, () => setOpen(null));
 
   /**
    * The answers, ranked on a worker thread.
@@ -87,7 +79,6 @@ export default function DiscoverPage() {
   const [recs, setRecs] = useState<Recommendation[]>([]);
 
   useEffect(() => {
-    if (!hydrated) return;
     let stale = false;
     // discover shows unwatched titles: rated ones are excluded, "not seen" stays
     const exclude = Object.values(swipes)
@@ -95,6 +86,12 @@ export default function DiscoverPage() {
       .map((s) => s.titleId);
     const likedIds = Object.values(swipes)
       .filter((s) => s.action === "liked")
+      .map((s) => s.titleId);
+    const dislikedIds = Object.values(swipes)
+      .filter((s) => s.action === "disliked")
+      .map((s) => s.titleId);
+    const seenIds = Object.values(swipes)
+      .filter((s) => s.action === "seen")
       .map((s) => s.titleId);
 
     void rank({
@@ -104,7 +101,8 @@ export default function DiscoverPage() {
       count: 25,
       seed,
       likedIds,
-      dislikedIds: [],
+      dislikedIds,
+      seenIds,
       withReasons: true,
     }).then((r) => {
       if (stale) return;
@@ -121,7 +119,7 @@ export default function DiscoverPage() {
     return () => {
       stale = true;
     };
-  }, [hydrated, swipes, profile, seed]);
+  }, [swipes, profile, seed]);
 
   const ratedCount = profile.ratedSwipes;
 
@@ -326,6 +324,11 @@ export default function DiscoverPage() {
               rather than being deleted underneath a fade.
             */}
             <motion.div
+              ref={detailDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="discover-detail-title"
+              tabIndex={-1}
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%", transition: { duration: 0.34, ease: [0.4, 0, 0.7, 1] } }}
@@ -339,7 +342,7 @@ export default function DiscoverPage() {
                   <PosterArt title={open.title} sizes="180px" className="h-full w-full" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h2 className="text-xl font-bold leading-tight tracking-tight">
+                  <h2 id="discover-detail-title" className="text-xl font-bold leading-tight tracking-tight">
                     {open.title.title[locale]}
                   </h2>
                   <p className="mt-1 text-xs font-medium text-ink-faint">
@@ -420,7 +423,12 @@ export default function DiscoverPage() {
 function WhyLine({ rec }: { rec: Recommendation }) {
   const locale = useLocale();
   const t = useT();
-  const because = rec.becauseOf ? getLocalTitle(rec.becauseOf) : null;
+  const savedBecause = useDhawq((state) =>
+    rec.becauseOf ? state.swipes[rec.becauseOf] : undefined
+  );
+  const because = rec.becauseOf
+    ? getLocalTitle(rec.becauseOf) ?? savedBecause?.title ?? null
+    : null;
   const why = rec.reasons.map((r) => r.label).join(" · ");
   if (!why && !because) return null;
   return (

@@ -1,133 +1,163 @@
-# ذَوق (Dhawq) 🎬
+# ذَوق · Dhawq
 
-**اكتشف ما تحبّه فعلاً** — تطبيق ويب بواجهة سحب (swipe) للأفلام والمسلسلات:
-اسحب **يميناً** إذا شاهدت العمل وأعجبك، **يساراً** إذا لم يعجبك، **وللأعلى** إذا لم تشاهده.
-مع كل سحبة يبني التطبيق **بصمة ذوقك** ويقترح عليك أعمالاً تناسبها فعلاً.
+ذَوق is a local-first movie and TV history app. Its primary job is not merely
+"recommend something": it helps a person recover the titles they have actually
+watched, record whether they liked them, and turn that history into a taste
+profile and recommendations.
 
-- 📚 مكتبة بكل ما شاهدته في حياتك + قوائم مفضلات قابلة للمشاركة
-- 🧠 محرك اقتراحات رياضي (بدون أي خدمة ذكاء اصطناعي خارجية — مجاني بالكامل)
-- 🌐 عربي + إنجليزي مع دعم RTL كامل
-- 👤 يعمل فوراً كزائر (البيانات على جهازك)، والتسجيل اختياري للمزامنة والمشاركة
+## Swipe language
 
----
+- **Right** — watched and liked.
+- **Left** — watched and disliked.
+- **Up** — not watched by default. The meaning can be changed in Settings.
+- **Eye button** — watched, no strong opinion.
 
-## التشغيل السريع (بدون أي مفاتيح)
+The fast-add grid records only explicit watched taps. Untouched posters are weak
+passes, not hard "not watched" answers.
+
+## Current architecture
+
+- Next.js 16 / React 19 / TypeScript.
+- Zustand local-first state.
+- The same ranking engine runs **server-first** over the full 48.5k catalog; the browser receives only ranked/search result batches.
+- The browser worker + static full catalog remain the offline/failure fallback, not the normal download path.
+- Optional Supabase account/sync using **Google sign-in**.
+- Render is the production deployment.
+- Public list/profile links use narrow Supabase RPC contracts; underlying user tables remain owner-only behind RLS.
+- PWA/service-worker caching is build-versioned.
+- Arabic and English UI with RTL/LTR resolved before the first render.
+
+The ranking algorithm is shared between server and browser. Production normally
+uses `/api/rank` against the repository's complete catalog loaded once per
+server process. This preserves the exact candidate universe while avoiding a
+mandatory ~24 MB raw catalog download on each phone. If the server route is
+unavailable, the existing worker loads `public/catalog.json` and runs the same
+engine locally.
+
+The old Supabase/pgvector `/api/recommend` experiment was removed. The live
+Supabase `titles` table is intentionally not the product catalog; auth/sync and
+public sharing stay in Supabase while catalog ranking/search live with the
+versioned application catalog.
+
+## Local development
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
-افتح <http://localhost:3000> — التطبيق يعمل كاملاً على **كتالوج تجريبي مدمج** (~55 عملاً مشهوراً)
-مع فن بصري مولّد بدل البوسترات. لا يحتاج أي حساب أو مفتاح.
+Without Supabase keys the product still works as a local-first guest experience.
 
-## كيف يعمل محرك الاقتراحات؟
-
-1. **تمثيل رقمي لكل عمل** (`src/lib/engine/features.ts`): متجه 384 بُعداً يُبنى بالتجزئة (feature hashing)
-   من الكلمات المفتاحية (الحبكة والمواضيع) + التصنيفات + المخرج والممثلين + الحقبة + اللغة.
-   رياضيات خالصة وحتمية — نفس الدالة على المتصفح والخادم وسكربت البذر.
-2. **بصمة الذوق** (`src/lib/engine/taste.ts`): كل إعجاب يضيف متجه العمل بوزن ‎+1، وكل رفض بوزن ‎−0.7،
-   مع ترجيح زمني للأحدث. «لم أشاهده» إشارة محايدة.
-3. **الترشيح على مرحلتين** (`src/lib/engine/recommend.ts`): توليد مرشحين بالتشابه الاتجاهي
-   (وعبر pgvector في الوضع السحابي)، ثم إعادة ترتيب تمزج: تشابه الذوق + قرب المُعجَبات − قرب المكروهات
-   + الجودة (تقييم بايزي) + **تنويع MMR** + 10% استكشاف موجّه.
-4. **البداية الباردة**: جولة تعارف من أعمال شهيرة متنوعة تُختار بأخذ العينات الأبعد
-   (farthest-point sampling) في فضاء المتجهات — ‏12 سحبة تكفي لبصمة أولية.
-5. **إشارة تعاونية** (الوضع السحابي): جدول co-occurrence «من أحب X أحب Y» يتحدث دورياً ويُمزج في الترتيب.
-
-## التفعيل السحابي (اختياري، على مراحل)
-
-### 1) قاعدة البيانات والحسابات — Supabase (مجاني)
-
-1. أنشئ مشروعاً في [supabase.com](https://supabase.com)
-2. من **SQL Editor** نفّذ محتوى `supabase/migrations/0001_init.sql`
-3. انسخ من **Project Settings → API**:
+For account/sync features:
 
 ```bash
-# .env.local
-NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 ```
 
-بهذا يتفعّل: تسجيل الدخول (رابط بريدي)، مزامنة المكتبة، روابط المشاركة العامة
-(`/l/…` للقوائم و `/u/…` للمكتبات).
+Account deletion runs in the authenticated Supabase Edge Function
+`delete-account`. Its privileged key is supplied by Supabase's hosted function
+environment and is never stored on Render or sent to the browser.
 
-### 2) توسيع الكتالوج المدمج — TMDB (مجاني)
+## Database
 
-الكتالوج المرفق (`public/catalog.json`) مبنيّ مسبقاً ويعمل بلا مفاتيح. لإعادة بنائه أو توسيعه:
+Schema changes live in `supabase/migrations/`. Apply migrations in order.
+Current hardening migrations also:
 
-1. سجّل في [themoviedb.org](https://www.themoviedb.org) → **Settings → API** → انسخ API Key (v3)
-2. شغّل:
+- decouple swipe/list title identifiers from the incomplete Supabase
+  `titles` seed table;
+- expose public profile/list sharing through shaped RPCs while keeping direct user-table reads private;
+- keep list identity stable across devices;
+- restrict maintenance RPCs to privileged roles;
+- split RLS reads/writes by explicit roles.
+
+Do not rewrite an already-applied historical migration to fix production. Add a
+new migration.
+
+## Catalog
+
+The versioned catalog is generated from TMDB-derived data and currently contains
+about 48.5k movie/TV titles. Rebuild tooling lives in `scripts/build-catalog.ts`.
+The server keeps the decoded ranking catalog in process memory; ordinary swipe,
+Discover, Library, list-building, Together, onboarding and import flows request
+only the title/result slices they need. `public/catalog.json` is retained for
+offline/static-demo/research fallback correctness.
+
+TMDB's recommendation endpoint is used as a **TMDB recommendation graph**. It
+must not be described as raw viewer-level "people who watched A also watched B"
+telemetry; TMDB documents recommendation results, not that behavioral dataset.
+
+See `/legal` for current TMDB attribution. Review the current TMDB terms before
+commercial or ML/AI processing. Historical AI catalog experiments are disabled
+unless separate authorization for that processing is explicitly confirmed.
+
+## Recommendation work
+
+The engine lives mainly under `src/lib/engine/`.
+
+Before changing recommendation behavior:
 
 ```bash
-TMDB_API_KEY=... npm run catalog -- --count 5000
+npm run benchmark
 ```
 
-يجلب الأعمال المعروضة فعلاً (يستبعد ما لم يُعرض بعد، وبرامج الواقع والأخبار)، ويكتب ملفاً مضغوطاً
-بصيغة صفوف موضعية. **التمثيلات الرقمية لا تُخزَّن** — تُحسب في المتصفح عند التحميل (~70 ملّي ثانية
-لـ 5 آلاف عمل)، مما يقلّص حجم التنزيل عدة أضعاف.
+That exact benchmark is the regression ruler. Do not replace a measured engine
+change with a spec-sheet argument. The experiment log in
+`docs/experiments/README.md` records ideas that were tested and rejected.
 
-### 3) الكتالوج السحابي — Supabase (لعشرات الآلاف من الأعمال)
+Useful additional guards include:
 
 ```bash
-TMDB_API_KEY=... SUPABASE_URL=https://xxxx.supabase.co SUPABASE_SERVICE_ROLE_KEY=... npm run seed
+npm run sync
+npm run canaries
+npm run lang
+npm run guard:source
 ```
 
-> `SUPABASE_SERVICE_ROLE_KEY` سرّي — يُستخدم محلياً فقط ولا يوضع أبداً في `NEXT_PUBLIC_*`.
+CI also runs a production build and verifies that `CURRENT.md` can be
+regenerated without a diff.
 
-بعد البذر يقرأ السحب والاكتشاف من القاعدة بدل الملف المدمج.
+## Data safety
 
-### 4) الإشارة التعاونية (اختياري)
+Every answer is written to the browser first. Signed-in accounts synchronize the
+actual swipe rows, lists and taste profile rather than only a summary counter.
 
-فعّل امتداد **pg_cron** من لوحة Supabase ثم نفّذ:
+Local data has an explicit account owner. When a different account signs in on
+the same browser, the previous account's library is not silently adopted by the
+new account. Account deletion is a single Auth-user deletion inside Supabase;
+verified foreign-key cascades remove the dependent cloud rows, then the browser
+clears its local copy.
 
-```sql
-select cron.schedule('refresh-cooc', '30 * * * *', 'select public.refresh_co_occurrence()');
+Browser persistence failures are surfaced in the UI instead of being silently
+ignored. JSON backups are self-contained enough to restore titles even when the
+catalog has changed, and CSV exports resolve human-readable title/year data.
+
+## Deployment
+
+Production is Render-backed. The GitHub Pages workflow is manual-only and should
+be treated as a separate demo, not a second production site.
+
+The release process is:
+
+1. work on a feature/fix branch;
+2. pass CI, build and recommendation benchmark;
+3. review the diff;
+4. merge into the stable production branch;
+5. verify the deployed site and Supabase policy/schema state.
+
+## Repository map
+
+```text
+src/app/                 routes and server endpoints
+src/components/          product UI
+src/lib/engine/          ranking/taste/exposure engine
+src/lib/supabase/        auth, sync and sharing
+src/lib/store.ts         local Zustand state and persistence
+scripts/                 catalog, experiments and guards
+supabase/migrations/     database schema / RLS changes
+docs/                    architecture and experiment history
+CURRENT.md               generated current facts
 ```
 
-### 5) النشر — Vercel (مجاني)
-
-اربط المستودع في [vercel.com](https://vercel.com) وأضف متغيري `NEXT_PUBLIC_SUPABASE_*` في
-**Project → Settings → Environment Variables**. لا شيء آخر.
-
-## البنية
-
-```
-src/
-  lib/engine/       # المحرك: features (المتجهات) / taste (البصمة) / recommend (الترشيح)
-  lib/data/         # الكتالوج التجريبي المدمج
-  lib/supabase/     # الطبقة السحابية الاختيارية + المزامنة
-  lib/store.ts      # حالة التطبيق (zustand + localStorage)
-  components/       # SwipeDeck و SwipeCard (Framer Motion) وبقية الواجهة
-  app/              # الصفحات: / (السحب) /discover /library /lists /l/[slug] /u/[slug]
-  app/api/recommend # نقطة الترشيح السحابية (pgvector + نفس المحرك)
-scripts/seed.ts     # بذر الكتالوج من TMDB
-supabase/migrations # مخطط قاعدة البيانات + RLS + دوال الترشيح
-```
-
-## ملاحظة عن الترقية المستقبلية
-
-البنية جاهزة لاستبدال متجهات التجزئة بتضمينات ذكاء اصطناعي (embeddings) لاحقاً:
-عمود `feature_vector vector(384)` والمحرك لا يعرفان مصدر المتجه — يكفي تعديل
-`featurize` وسكربت البذر دون أي تغيير في الواجهة أو المخطط.
-
-## النشر
-
-الموقع يُنشر بطريقتين، ولكلٍّ سبب:
-
-| | GitHub Pages | Render |
-|---|---|---|
-| النوع | تصدير ساكن | خادم Node حقيقي |
-| الكتالوج | يُحمَّل كاملاً في المتصفّح | يمكن نقله خلف نقطة نهاية |
-| الحدّ الأقصى | ~١٥ ألف عمل (١٧ ميغابايت) | بلا حدّ عملي |
-| الاستخدام | عرض سريع للتجربة | التوسيع وأي شيء يحتاج خادماً |
-
-`render.yaml` في جذر المستودع هو المخطط الجاهز: يكفي ربط المستودع في Render
-واختيار Blueprint. متغيّرات Supabase اختيارية — بدونها يردّ `/api/recommend`
-بـ 503 ويرتّب التطبيق في المتصفّح كما يفعل اليوم.
-
-**ما قيس قبل النشر، لا ما افتُرض:** بتكرار الكتالوج حتى ٥٠ ألف عمل، تكلفة
-البطاقات **لا تتحرّك** (129ms ← 106ms) لأن بوابة الشهرة تحدّ المرشّحات مهما كبر
-الكتالوج؛ الاكتشاف وحده ينمو (103ms ← 376ms) وفهرس الندرة (233ms ← 446ms). أي أن
-المحرّك ينتقل بلا تغيير سطر واحد، والانكسار الوحيد هو حجم التحميل — وهو ما يزيله
-الخادم.
+For the exact current catalog/routes, read `CURRENT.md`, not old experiment
+notes.

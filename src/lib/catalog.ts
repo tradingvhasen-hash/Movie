@@ -7,24 +7,25 @@ import type { CandidateItem } from "@/lib/engine/recommend";
 import type { Title } from "@/lib/types";
 
 /**
- * Catalog access.
+ * Browser-side catalog access — now the fallback, not the normal production
+ * transport.
  *
- * The full TMDB catalog ships as a static asset (public/catalog.json) and is
- * fetched once, then kept in memory.
+ * Production ranking/search uses the exact same versioned `public/catalog.json`
+ * on the Next server and returns only the requested/ranked titles. This module
+ * keeps the complete static catalog path for offline use, the manual static
+ * demo, calibration/research screens, and any server/API failure. That means a
+ * normal phone does not have to download/decode ~48.5k titles, while a network
+ * failure still degrades to the same candidate universe and engine rather than
+ * a reduced catalog.
  *
- * Feature vectors are neither shipped nor precomputed. Ranking runs on the
- * facet tables, which read a title's metadata directly; vectors are only
- * needed by the final diversity pass, for a few dozen titles at a time. So
- * they are built on first use and cached — building all ~5,500 up front cost
- * a visible pause on load and ~8 MB of memory to serve ~60 of them.
- *
- * The small bundled sample set is the fallback before the fetch resolves (and
- * if it ever fails), so the app is never empty.
+ * Feature vectors remain lazy: ranking reads named facet metadata and only the
+ * finalist diversity pass needs vectors.
  */
+
 /**
  * Lean mode: everything a *ranker* needs and nothing a screen needs.
  *
- * The worker copy of the catalog is used only for scoring, so it skips the
+ * The fallback worker copy of the catalog is used only for scoring, so it skips the
  * 1.28 MB of plot summaries and the search index — neither is ever read on
  * that thread, and fetching them would double a download for nothing. The
  * summaries still come over the wire once, on the main thread, for the card
@@ -175,7 +176,7 @@ export function getEncodedCatalog(): EncodedCatalog | null {
   return encoded;
 }
 
-/** Fetches and installs the full catalog. Safe to call repeatedly. */
+/** Fetches and installs the full browser fallback catalog. Safe to call repeatedly. */
 export function loadCatalog(): Promise<CandidateItem[]> {
   if (loadPromise) return loadPromise;
   loadPromise = (async () => {

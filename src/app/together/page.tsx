@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import PosterArt from "@/components/PosterArt";
 import { PlusIcon, SearchIcon, ShuffleIcon, SparklesIcon, XIcon } from "@/components/ui/Icons";
@@ -13,8 +13,9 @@ import { genreLabel } from "@/lib/genres";
 import { EASE_OUT, FADE_UP, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
 import { haptic } from "@/lib/haptics";
 import { useDhawq } from "@/lib/store";
-import { useLocale } from "@/lib/i18n";
+import { useLocale, useT } from "@/lib/i18n";
 import type { Title } from "@/lib/types";
+import { useDialogKeyboard } from "@/lib/useDialogKeyboard";
 
 /** five a side, which is more people than fit on a sofa */
 const MAX_SLOTS = 10;
@@ -59,16 +60,15 @@ const MAX_SLOTS = 10;
  */
 export default function TogetherPage() {
   const locale = useLocale();
-  const [ready, setReady] = useState(false);
+  const t = useT();
+  const answerDialogRef = useRef<HTMLDivElement>(null);
   const [slots, setSlots] = useState<(Title | null)[]>([null, null]);
   const [editing, setEditing] = useState<number | null>(null);
   const [round, setRound] = useState(0);
   const [showing, setShowing] = useState(false);
   const haptics = useDhawq((s) => s.settings.haptics);
 
-  useEffect(() => {
-    void loadCatalog().then(() => setReady(true));
-  }, []);
+  useDialogKeyboard(showing, answerDialogRef, () => setShowing(false));
 
   const chosen = useMemo(() => slots.filter((s): s is Title => Boolean(s)), [slots]);
 
@@ -133,7 +133,7 @@ export default function TogetherPage() {
       className="mx-auto max-w-md px-5 pb-28 pt-6"
     >
       <motion.h1 variants={FADE_UP} className="text-[26px] font-bold tracking-[-0.03em]">
-        Together
+        {t("together.title")}
       </motion.h1>
 
       {/*
@@ -157,7 +157,7 @@ export default function TogetherPage() {
             className="overflow-hidden text-sm leading-relaxed text-ink-dim"
           >
             <span className="mt-1.5 block">
-              Everyone names a film they love. It finds one for all of you.
+              {t("together.intro")}
             </span>
           </motion.p>
         )}
@@ -211,7 +211,7 @@ export default function TogetherPage() {
             }}
             transition={SPRING_SNAPPY}
             className="pointer-events-auto grid h-[68px] w-[68px] place-items-center rounded-full border border-line bg-surface text-accent shadow-[0_10px_30px_rgb(var(--rgb-shadow)/0.16)] disabled:text-ink-faint"
-            aria-label="Find something for all of us"
+            aria-label={t("together.find")}
           >
             <SparklesIcon size={26} strokeWidth={1.9} />
           </motion.button>
@@ -226,7 +226,7 @@ export default function TogetherPage() {
           whileTap={{ scale: 0.97 }}
           transition={SPRING_SNAPPY}
           className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-ink-faint/40 bg-surface py-3.5 text-sm font-semibold text-ink-dim transition-colors hover:text-ink"
-          aria-label="One more person"
+          aria-label={t("together.addPerson")}
         >
           <PlusIcon size={18} strokeWidth={2.4} />
         </motion.button>
@@ -247,6 +247,11 @@ export default function TogetherPage() {
               onClick={() => setShowing(false)}
             />
             <motion.div
+              ref={answerDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-label={t("together.dialogTitle")}
+              tabIndex={-1}
               key={answer.id}
               initial={{ opacity: 0, y: 28, scale: 0.92 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -282,7 +287,7 @@ export default function TogetherPage() {
                   className="flex flex-1 items-center justify-center gap-2 rounded-full border border-line py-3 text-sm font-semibold text-ink-dim"
                 >
                   <ShuffleIcon size={17} />
-                  Another
+                  {t("together.another")}
                 </motion.button>
                 <motion.button
                   type="button"
@@ -290,7 +295,7 @@ export default function TogetherPage() {
                   transition={SPRING_SNAPPY}
                   onClick={() => setShowing(false)}
                   className="grid h-[46px] w-[46px] shrink-0 place-items-center rounded-full bg-accent text-[color:var(--color-on-accent)]"
-                  aria-label="Close"
+                  aria-label={t("together.close")}
                 >
                   <XIcon size={18} strokeWidth={2.6} />
                 </motion.button>
@@ -304,7 +309,6 @@ export default function TogetherPage() {
       <AnimatePresence>
         {editing !== null && (
           <PickSheet
-            ready={ready}
             taken={new Set(chosen.map((t) => t.id))}
             onPick={(t) => {
               setSlot(editing, t);
@@ -328,6 +332,9 @@ function Slot({
   onOpen: () => void;
   onClear: () => void;
 }) {
+  const t = useT();
+  const locale = useLocale();
+  const label = title ? (locale === "ar" ? title.title.ar || title.title.en : title.title.en) : t("together.nameFilm");
   return (
     <div className="relative">
       <motion.button
@@ -345,14 +352,14 @@ function Slot({
                  edge, which is a place something goes. */
               "grid place-items-center gap-1.5 border-2 border-dashed border-ink-faint/40 bg-surface text-ink-dim"
         }`}
-        aria-label={title ? title.title.en : "Name a film"}
+        aria-label={label}
       >
         {title ? (
           <PosterArt title={title} sizes="160px" className="h-full w-full" />
         ) : (
           <>
             <SearchIcon size={22} />
-            <span className="text-[11px] font-semibold">Name one</span>
+            <span className="text-[11px] font-semibold">{t("together.nameOne")}</span>
           </>
         )}
       </motion.button>
@@ -367,7 +374,7 @@ function Slot({
             transition={SPRING_SNAPPY}
             onClick={onClear}
             className="absolute -end-1.5 -top-1.5 grid h-[22px] w-[22px] place-items-center rounded-full bg-[rgb(var(--rgb-scrim)/0.62)] text-white shadow-md backdrop-blur-sm"
-            aria-label="Remove"
+            aria-label={t("together.remove")}
           >
             <XIcon size={11} strokeWidth={3} />
           </motion.button>
@@ -386,17 +393,19 @@ function Slot({
  * most common way a mobile search is made unusable.
  */
 function PickSheet({
-  ready,
   taken,
   onPick,
   onClose,
 }: {
-  ready: boolean;
   taken: Set<string>;
   onPick: (t: Title) => void;
   onClose: () => void;
 }) {
+  const t = useT();
+  const locale = useLocale();
+  const sheetRef = useRef<HTMLDivElement>(null);
   const [q, setQ] = useState("");
+  useDialogKeyboard(true, sheetRef, onClose);
 
   /**
    * IT OPENS FULL, NOT EMPTY.
@@ -415,20 +424,46 @@ function PickSheet({
    * most-recognised titles in the catalog, which turns a blank prompt into a
    * grid you can simply tap — and typing still narrows it the moment you start.
    */
-  const suggestions = useMemo(() => {
-    if (!ready) return [];
-    return getLocalCatalog()
-      .map((c) => c.title)
-      .filter((t) => !taken.has(t.id))
-      .sort((a, b) => b.voteCount - a.voteCount)
-      .slice(0, 30);
-  }, [ready, taken]);
+  const [results, setResults] = useState<Title[]>([]);
 
-  const results = useMemo(() => {
-    if (!ready) return [];
-    if (q.trim().length < 2) return suggestions;
-    return searchCatalog(q, { limit: 30, skip: (id) => taken.has(id) });
-  }, [ready, q, taken, suggestions]);
+  useEffect(() => {
+    let alive = true;
+    const query = q.trim();
+    const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+    void fetch(`${base}/api/search`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        query,
+        skipIds: [...taken],
+        limit: 30,
+      }),
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`search ${res.status}`);
+        const body = (await res.json()) as { titles?: Title[] };
+        if (!Array.isArray(body.titles)) throw new Error("invalid search response");
+        if (alive) setResults(body.titles);
+      })
+      .catch(async () => {
+        await loadCatalog();
+        if (!alive) return;
+        if (query.length < 2) {
+          setResults(
+            getLocalCatalog()
+              .map((c) => c.title)
+              .filter((title) => !taken.has(title.id))
+              .sort((a, b) => b.voteCount - a.voteCount)
+              .slice(0, 30)
+          );
+        } else {
+          setResults(searchCatalog(query, { limit: 30, skip: (id) => taken.has(id) }));
+        }
+      });
+    return () => {
+      alive = false;
+    };
+  }, [q, taken]);
 
   return (
     <motion.div className="fixed inset-0 z-50 flex flex-col justify-end">
@@ -443,6 +478,11 @@ function PickSheet({
         onClick={onClose}
       />
       <motion.div
+        ref={sheetRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("together.pickerTitle")}
+        tabIndex={-1}
         initial={{ y: "100%" }}
         animate={{ y: 0 }}
         exit={{ y: "100%", transition: { duration: 0.34, ease: [0.4, 0, 0.7, 1] } }}
@@ -463,7 +503,7 @@ function PickSheet({
             autoFocus
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Snatch · Inception · الفيل الأزرق"
+            placeholder={t("together.searchPlaceholder")}
             className="w-full bg-transparent text-base outline-none placeholder:text-ink-faint"
           />
         </label>
@@ -478,7 +518,7 @@ function PickSheet({
                 transition={SPRING_SNAPPY}
                 onClick={() => onPick(t)}
                 className="block w-full min-w-0 overflow-hidden rounded-xl bg-surface-2"
-                aria-label={t.title.en}
+                aria-label={locale === "ar" ? t.title.ar || t.title.en : t.title.en}
               >
                 <PosterArt title={t} sizes="130px" className="aspect-[2/3] w-full" />
               </motion.button>
@@ -489,3 +529,4 @@ function PickSheet({
     </motion.div>
   );
 }
+

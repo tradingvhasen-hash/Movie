@@ -2,35 +2,51 @@ import { getSupabase } from "./client";
 import type { UserList } from "@/lib/types";
 
 /**
- * Publishing a list, and the one design decision that makes it work.
+ * Publish by stable local identity, never by display name.
  *
- * The server stores ids and nothing else. It does not join `public.titles` to
- * render posters, and it must not: that table holds whatever the seed script
- * last uploaded, while the catalog the browser ranks against is 15,083 rows —
- * migration 0006 dropped the foreign key for exactly this reason. A share page
- * built on that join would silently lose most of a person's list.
- *
- * So the browser resolves the ids from the catalog it has already downloaded.
- * The shared page then renders the same names and the same posters as the rest
- * of the app, works for every title in it, and stops being the one screen with
- * its own idea of what a film is.
+ * A list can be renamed and two different lists can have the same name.
+ * client_id preserves the local identity in the database so a republish updates
+ * the same public link instead of colliding with an unrelated list.
  */
 export async function publishList(list: UserList): Promise<string | null> {
   const supabase = getSupabase();
   if (!supabase) return null;
 
-  const { data: user } = await supabase.auth.getUser();
+  const { data: user, error: userError } = await supabase.auth.getUser();
   const userId = user.user?.id;
-  if (!userId) return null;
+  if (userError || !userId) return null;
 
-  // one row per list, re-published in place so the link a person already sent
-  // keeps working after they add to it
-  const { data: existing } = await supabase
+  let { data: existing, error: lookupError } = await supabase
     .from("lists")
     .select("id, share_slug")
     .eq("user_id", userId)
-    .eq("name", list.name)
+    .eq("client_id", list.id)
     .maybeSingle();
+
+  if (lookupError) return null;
+
+  // Adopt one unambiguous pre-client_id row, but never guess when two same-name
+  // legacy lists exist.
+  if (!existing) {
+    const { data: legacy, error } = await supabase
+      .from("lists")
+      .select("id, share_slug")
+      .eq("user_id", userId)
+      .eq("name", list.name)
+      .is("client_id", null)
+      .limit(2);
+    if (error) return null;
+    if ((legacy ?? []).length === 1) {
+      const adopted = legacy![0];
+      const { error: adoptError } = await supabase
+        .from("lists")
+        .update({ client_id: list.id })
+        .eq("id", adopted.id)
+        .eq("user_id", userId);
+      if (adoptError) return null;
+      existing = adopted;
+    }
+  }
 
   let listId = existing?.id as string | undefined;
   let slug = existing?.share_slug as string | undefined;
@@ -40,9 +56,12 @@ export async function publishList(list: UserList): Promise<string | null> {
       .from("lists")
       .insert({
         user_id: userId,
+        client_id: list.id,
         name: list.name,
         is_public: true,
         hide_owner: list.hideOwner ?? false,
+        source_list_id: list.sourceListId ?? null,
+        updated_at: new Date(list.updatedAt ?? list.createdAt).toISOString(),
       })
       .select("id, share_slug")
       .single();
@@ -50,24 +69,40 @@ export async function publishList(list: UserList): Promise<string | null> {
     listId = created.id as string;
     slug = created.share_slug as string;
   } else {
-    await supabase
+    const { data: updated, error } = await supabase
       .from("lists")
-      .update({ is_public: true, hide_owner: list.hideOwner ?? false })
-      .eq("id", listId);
+      .update({
+        name: list.name,
+        is_public: true,
+        hide_owner: list.hideOwner ?? false,
+        source_list_id: list.sourceListId ?? null,
+        updated_at: new Date(list.updatedAt ?? list.createdAt).toISOString(),
+      })
+      .eq("id", listId)
+      .eq("user_id", userId)
+      .select("share_slug")
+      .single();
+    if (error) return null;
+    slug = (updated?.share_slug as string | undefined) ?? slug;
   }
 
-  // replace rather than merge: the local list is the truth, and a title the
-  // person removed should disappear from the shared copy too
-  await supabase.from("list_items").delete().eq("list_id", listId);
+  const { error: deleteError } = await supabase
+    .from("list_items")
+    .delete()
+    .eq("list_id", listId);
+  if (deleteError) return null;
+
   const rows = list.titleIds.map((title_id) => ({ list_id: listId!, title_id }));
   for (let i = 0; i < rows.length; i += 500) {
-    await supabase.from("list_items").insert(rows.slice(i, i + 500));
+    const { error } = await supabase
+      .from("list_items")
+      .insert(rows.slice(i, i + 500));
+    if (error) return null;
   }
 
   return slug ?? null;
 }
 
-/** the shape the share page needs, and nothing more */
 export type SharedList = {
   name: string;
   owner: string | null;

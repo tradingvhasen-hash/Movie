@@ -40,6 +40,21 @@
  * here touches it.
  */
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+
+/**
+ * TMDB's published terms restrict using TMDB content with ML/AI systems.
+ * This historical experiment is retained for reproducibility only and cannot
+ * execute unless the operator explicitly confirms they have separate
+ * authorization permitting this processing.
+ */
+if (process.env.TMDB_AI_PROCESSING_AUTHORIZED !== "1") {
+  console.error(
+    "Disabled: TMDB catalog content must not be sent to an AI service without " +
+      "separate authorization. Set TMDB_AI_PROCESSING_AUTHORIZED=1 only after " +
+      "that authorization has been obtained."
+  );
+  process.exit(2);
+}
 import { loadFullCatalog } from "./lib/catalog";
 import type { Title } from "../src/lib/types";
 

@@ -46,8 +46,7 @@ export default function SwipeDeck() {
   const answered = useDhawq((s) => (s.onboardingSeen ? 0 : s.profile.totalSwipes));
   const onboardingSeen = useDhawq((s) => s.onboardingSeen) || answered > 0;
   const setOnboardingSeen = useDhawq((s) => s.setOnboardingSeen);
-  const resetAll = useDhawq((s) => s.resetAll);
-  const settings = useDhawq((s) => s.settings);
+   const settings = useDhawq((s) => s.settings);
 
   /**
    * The top card's position, owned here rather than by the card.
@@ -244,16 +243,9 @@ export default function SwipeDeck() {
   }, [queue]);
 
   /**
-   * Decided from the profile, not from the catalog.
-   *
-   * "Has this person swiped anything" is answered by localStorage, which
-   * zustand rehydrates in about a millisecond. It used to wait on `hydrated`
-   * — the 5.7 MB catalog — for no reason other than that both facts happened
-   * to arrive from the same hook. That wait was the whole of the blank screen
-   * the user filmed; see the render branch below.
-   *
-   * The empty dependency list is deliberate: this runs once, on mount, and the
-   * answer must not change underneath a demo that has already started.
+   * Whether to show the first-run demo is a persisted-profile question, not a
+   * catalog-readiness question. Keep it synchronous and independent from any
+   * ranking/search transport.
    */
   useEffect(() => {
     setShowDemo(useDhawq.getState().profile.totalSwipes === 0 && !demoAlreadyShown());
@@ -275,36 +267,10 @@ export default function SwipeDeck() {
   }, [trigger, takeBack, settings.swipeUp]);
 
   /**
-   * THE FIVE BLANK SECONDS.
-   *
-   * The user, on his very first impression of the site: "it takes nearly five
-   * seconds, even six or seven, and it shows nothing. It is just a blank page."
-   * He filmed it — a skeleton card, a skeleton heading, three skeleton
-   * buttons, and nothing else.
-   *
-   * Measured on a phone-speed CPU and a 1.6 Mbps connection, the first real
-   * content arrived at 3,353ms while the skeleton had been painted since
-   * 715ms. Two and a half seconds of deliberate nothing, and the cause is one
-   * word in the line below: `hydrated`.
-   *
-   * `hydrated` is set by `loadCatalog()` — a 5.7 MB download, a JSON parse and
-   * a decode of 15,083 titles. The deck genuinely needs all of that before it
-   * can deal a card.
-   *
-   * THE WELCOME SCREEN NEEDS NONE OF IT. It says the product's name and then
-   * demonstrates a swipe on three posters it takes from `SAMPLE_TITLES`, which
-   * is bundled in the JavaScript and available synchronously. It was waiting
-   * for a 5.7 MB file it never reads.
-   *
-   * So it does not wait any more. The demo decides whether to run from the
-   * persisted profile alone — which zustand rehydrates from localStorage in a
-   * millisecond — and starts as soon as the page can paint. The catalog loads
-   * underneath it, and the demo's own five and a half seconds are exactly the
-   * budget it needs, so the deck is ready at the moment the demo ends.
-   *
-   * The skeleton still exists, for the person who has swiped before and comes
-   * back to the deck directly. For them the catalog is in the browser cache
-   * and it is on screen for a frame or two.
+   * The first-run demo is bundled content and can paint immediately. Returning
+   * users may briefly see the skeleton while the first ranked batch is being
+   * requested; normal production ranking is server-first and does not preload
+   * the full browser catalog.
    */
   if (showDemo) {
     return (
@@ -317,7 +283,7 @@ export default function SwipeDeck() {
     );
   }
 
-  if (!hydrated || showDemo === null) {
+  if ((!hydrated && queue.length === 0) || showDemo === null) {
     return (
       <div
         className="mx-auto flex w-full max-w-md flex-col items-center overflow-hidden px-4 pt-4"
@@ -427,17 +393,7 @@ export default function SwipeDeck() {
         className="relative z-10 mb-2 flex w-full shrink-0 items-center justify-between"
       >
         <h1 className="text-[26px] font-bold tracking-[-0.03em]">ذَوق</h1>
-        {/*
-          THE FASTER ROUTE, OFFERED WHERE THE SLOW ONE IS FELT.
-
-          One card at a time is the thing that collapses. Measured on 60 real
-          histories, the same engine asked as screens of forty recovers 91% of
-          a library in a third of the time — 1,876 titles an hour against
-          1,121. That screen existed and was reachable from nowhere, which is
-          the third time this week a measured feature shipped behind a URL
-          nobody types. A person who has just watched the deck slow down is
-          exactly the person who wants it.
-        */}
+        {/* Fast-add is the high-throughput companion to one-card swiping. */}
         <Link
           href="/add"
           prefetch={false}
@@ -449,7 +405,7 @@ export default function SwipeDeck() {
             touchAction: "manipulation",
           }}
         >
-          Add fast
+          {t("quickAdd.title")}
         </Link>
       </motion.div>
 
@@ -459,20 +415,9 @@ export default function SwipeDeck() {
           <div className="relative h-full max-w-[80vw]" style={{ aspectRatio: "10 / 14.6" }}>
             <AnimatePresence>
               {/*
-                `hydrated` matters here, and it did not before.
-                
-                This read `queue.length === 0` alone, which is true for two
-                completely different reasons: the viewer has swiped everything,
-                or the catalog has not arrived yet. At 15,083 titles the second
-                case lasted a moment and nobody saw it. At 48,553 the download
-                takes about 75 seconds on a phone, and for all of it the deck
-                announced an empty deck and offered to reset cards that had
-                never been dealt — telling somebody they had run out before
-                they began.
-
-                `hydrated` is false until `loadCatalog()` resolves, so this now
-                says what it means: empty because you finished, not empty
-                because we are still loading.
+                The empty state is only valid after an authoritative rank has
+                completed. A temporary empty queue during startup/retry must
+                never look like the user exhausted their library.
               */}
               {hydrated && filled && queue.length === 0 && (
                 <motion.div
@@ -504,8 +449,7 @@ export default function SwipeDeck() {
                   <motion.div whileTap={{ scale: 0.95 }} className="mt-7">
                     <NeuButton
                       onClick={() => {
-                        resetAll();
-                        setTimeout(refill, 50);
+                        refill();
                       }}
                       className="text-sm"
                     >

@@ -1,21 +1,18 @@
 "use client";
 
 /**
- * Talking to the ranking worker, with the main thread as the safety net.
+ * Server-first ranking, with the full browser worker as the correctness
+ * fallback.
  *
- * One worker for the whole app, created on first use and kept: starting one
- * costs a catalog fetch and a parse, and three screens want the same answer
- * from the same data. Requests are matched by an incrementing id, so a screen
- * that asks twice in quick succession — Discover while a swipe is still
- * settling, say — gets both answers to the right callers and can ignore the
- * stale one.
- *
- * THE FALLBACK IS NOT DECORATION. If `Worker` is missing, blocked by a policy,
- * or throws on construction, every call runs the identical `recommend()` on
- * the main thread and the app behaves exactly as it did before this file
- * existed — slowly, but correctly. A performance optimisation that can break
- * the product when it fails is not an optimisation.
+ * Normal production requests send only the taste/profile and ids to
+ * `/api/rank`; the server already owns the full versioned catalog and returns
+ * a few dozen Title objects. A timeout/network/server failure falls back to the
+ * previous worker path, which loads the same `catalog.json` and runs the same
+ * `recommend()` implementation. Failures use bounded backoff rather than a
+ * permanent "remote offline" switch, so a transient error cannot disable the
+ * preferred path for the rest of the session.
  */
+
 import {
   getEncodedCatalog,
   getLocalCatalog,
@@ -48,6 +45,116 @@ export interface RankResult {
   match: number[];
   reasons: string[][];
   becauseOf: (string | null)[];
+}
+
+let remoteFailures = 0;
+let remoteBackoffUntil = 0;
+
+async function rankRemote(q: RankQuery): Promise<RankResult | null> {
+  if (typeof window === "undefined" || Date.now() < remoteBackoffUntil) return null;
+
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 4500);
+  try {
+    const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+    const res = await fetch(`${base}/api/rank`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        mode: q.mode,
+        profile: q.profile,
+        excludeIds: [...q.excludeIds],
+        count: q.count,
+        seed: q.seed,
+        likedIds: q.likedIds,
+        dislikedIds: q.dislikedIds,
+        seenIds: q.seenIds ?? [],
+        homeLanguages: q.homeLanguages ?? [],
+        reach: q.reach,
+        withReasons: q.withReasons ?? false,
+      }),
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`rank ${res.status}`);
+
+    const body = (await res.json()) as Partial<RankResult>;
+    if (!Array.isArray(body.titles)) throw new Error("invalid rank response");
+
+    remoteFailures = 0;
+    remoteBackoffUntil = 0;
+    return {
+      titles: body.titles as Title[],
+      match: Array.isArray(body.match) ? body.match : [],
+      reasons: Array.isArray(body.reasons) ? body.reasons : [],
+      becauseOf: Array.isArray(body.becauseOf) ? body.becauseOf : [],
+    };
+  } catch {
+    remoteFailures++;
+    // Retry later; never permanently disable the authoritative server path.
+    remoteBackoffUntil =
+      Date.now() + Math.min(60_000, 1000 * 2 ** Math.min(remoteFailures, 6));
+    return null;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+export interface GridRankQuery {
+  profile: TasteProfile;
+  excludeIds: Set<string> | string[];
+  count: number;
+  seed: number;
+  watchedIds: string[];
+  reach?: "narrow" | "medium" | "wide";
+}
+
+export async function rankWatchedGrid(q: GridRankQuery): Promise<Title[]> {
+  if (typeof window !== "undefined" && Date.now() >= remoteBackoffUntil) {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 4500);
+    try {
+      const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+      const res = await fetch(`${base}/api/rank`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          surface: "grid",
+          profile: q.profile,
+          excludeIds: [...q.excludeIds],
+          count: q.count,
+          seed: q.seed,
+          watchedIds: q.watchedIds,
+          reach: q.reach,
+        }),
+        signal: controller.signal,
+      });
+      if (!res.ok) throw new Error(`grid ${res.status}`);
+      const body = (await res.json()) as { titles?: Title[] };
+      if (!Array.isArray(body.titles)) throw new Error("invalid grid response");
+      remoteFailures = 0;
+      remoteBackoffUntil = 0;
+      return body.titles;
+    } catch {
+      remoteFailures++;
+      remoteBackoffUntil =
+        Date.now() + Math.min(60_000, 1000 * 2 ** Math.min(remoteFailures, 6));
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  }
+
+  await loadCatalog();
+  const { watchedGrid } = await import("./recommend");
+  const watched = q.watchedIds
+    .map((id) => getLocalItem(id)?.title)
+    .filter((title): title is Title => Boolean(title));
+  return watchedGrid(getLocalCatalog(), q.profile, {
+    excludeIds: q.excludeIds instanceof Set ? q.excludeIds : new Set(q.excludeIds),
+    count: q.count,
+    seed: q.seed,
+    watched,
+    reach: q.reach,
+  });
 }
 
 let worker: Worker | null = null;
@@ -88,7 +195,7 @@ function getWorker(): Worker | null {
   }
 }
 
-/** warm the worker (and its catalog) before anybody is waiting on an answer */
+/** prepare the fallback worker; it does not load the catalog until needed */
 export function warmRanker() {
   getWorker();
 }
@@ -109,10 +216,7 @@ export function warmRanker() {
  * runs, imports it directly on its own thread as it always did.
  */
 async function runHere(q: RankQuery): Promise<RankResult> {
-  const { recommend, setReach } = await import("./recommend");
-  /* the worker is told per request; the fallback has to be told too, or the
-     two paths would disagree about how far the deck may reach */
-  if (q.reach) setReach(q.reach);
+  const { recommend } = await import("./recommend");
   const titlesFor = (ids: string[]) => {
     const out: Title[] = [];
     for (const id of ids) {
@@ -131,6 +235,7 @@ async function runHere(q: RankQuery): Promise<RankResult> {
     seenTitles: titlesFor(q.seenIds ?? []),
     homeLanguages: q.homeLanguages,
     mode: q.mode,
+    reach: q.reach,
   });
   return {
     titles: recs.map((r) => r.title),
@@ -141,11 +246,8 @@ async function runHere(q: RankQuery): Promise<RankResult> {
 }
 
 /**
- * Hand the worker the catalog the main thread already has, once.
- *
- * Awaiting `loadCatalog()` costs nothing anybody was not already paying: the
- * screen cannot render a card without it either. What it buys is the worker
- * skipping its own fetch of the same 2.7 MB.
+ * Offline/failure path: hand the worker the one browser catalog copy once,
+ * avoiding a second fetch between the main thread and worker.
  */
 let handoff: Promise<void> | null = null;
 function sendCatalog(w: Worker): Promise<void> {
@@ -160,20 +262,20 @@ function sendCatalog(w: Worker): Promise<void> {
   return handoff;
 }
 
-export function rank(q: RankQuery): Promise<RankResult> {
+export async function rank(q: RankQuery): Promise<RankResult> {
+  const remote = await rankRemote(q);
+  if (remote) return remote;
+
   const w = getWorker();
-  if (!w) return runHere(q);
-  /**
-   * The catalog must reach the worker BEFORE the first rank request does.
-   *
-   * This was `void sendCatalog(w)` — fire and forget — which loses the race
-   * it was written to win. A rank request posted first makes the worker call
-   * `loadCatalog()` and fetch its own copy, and the handoff then arrives to
-   * find `loadPromise` already set and quietly does nothing. The second
-   * download it exists to prevent happened anyway, now 24 MB, while the deck
-   * waited on it.
-   */
-  return sendCatalog(w).then(() => rankViaWorker(w, q));
+  if (!w) {
+    await loadCatalog();
+    return runHere(q);
+  }
+
+  // Offline/static-demo fallback: install the exact same full catalog in the
+  // worker only after the server path is unavailable.
+  await sendCatalog(w);
+  return rankViaWorker(w, q);
 }
 
 function rankViaWorker(w: Worker, q: RankQuery): Promise<RankResult> {
@@ -188,6 +290,7 @@ function rankViaWorker(w: Worker, q: RankQuery): Promise<RankResult> {
     seed: q.seed,
     likedIds: q.likedIds,
     dislikedIds: q.dislikedIds,
+    seenIds: q.seenIds,
     homeLanguages: q.homeLanguages,
     reach: q.reach,
     withReasons: q.withReasons,

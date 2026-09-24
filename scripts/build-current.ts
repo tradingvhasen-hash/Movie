@@ -24,18 +24,9 @@
  * CURRENT.md is therefore never edited by hand. It says so at the top of
  * itself, because that is the only place somebody about to edit it will look.
  */
-import { execSync } from "node:child_process";
 import { readFileSync, writeFileSync, readdirSync, statSync } from "node:fs";
 import { loadFullCatalog } from "./lib/catalog";
 import { BRAND, BRAND_LATIN } from "../src/lib/brand";
-
-const git = (cmd: string, fallback = "unknown") => {
-  try {
-    return execSync(`git ${cmd}`, { stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
-  } catch {
-    return fallback;
-  }
-};
 
 const catalog = loadFullCatalog();
 const movies = catalog.filter((t) => t.type === "movie").length;
@@ -91,7 +82,9 @@ const md = `# CURRENT — what is true right now
 > Rebuild with \`npm run current\`. Anything a computer can check lives here so
 > that it cannot quietly go stale; anything it cannot check lives in \`docs/\`.
 >
-> Generated ${new Date().toISOString().slice(0, 10)} from commit \`${git("rev-parse --short HEAD")}\`.
+> Generated from repository data. The file deliberately contains no commit id,
+> branch name, commit count, or current date: those values change when this file
+> is committed and made the previous "freshness" check self-invalidating.
 
 ## The product
 
@@ -101,8 +94,6 @@ const md = `# CURRENT — what is true right now
 | Package | \`${JSON.parse(readFileSync("package.json", "utf8")).name}\` |
 | Live site | https://dhawq.onrender.com |
 | Repository | https://github.com/tradingvhasen-hash/Movie |
-| Branch | \`${git("rev-parse --abbrev-ref HEAD")}\` |
-| Commits | ${git("rev-list --count HEAD", "—")} |
 
 ## The catalog
 
@@ -111,7 +102,7 @@ const md = `# CURRENT — what is true right now
 | Titles | **${catalog.length.toLocaleString()}** |
 | Films / series | ${movies.toLocaleString()} / ${tv.toLocaleString()} |
 | Languages | ${langs.length} |
-| Co-watch links | ${edges.toLocaleString()} |
+| TMDB recommendation graph edges | ${edges.toLocaleString()} |
 | Titles with an original-script name | ${withOriginal.toLocaleString()} |
 | Co-watch regions | ${regionCount} |
 | \`public/catalog.json\` | ${mb("public/catalog.json")} MB |
@@ -150,5 +141,5 @@ ${routes("src/app")
 writeFileSync("CURRENT.md", md);
 console.log(
   `CURRENT.md — ${catalog.length.toLocaleString()} titles, ${langs.length} languages, ` +
-    `${routes("src/app").length} routes, commit ${git("rev-parse --short HEAD")}`
+    `${routes("src/app").length} routes`
 );

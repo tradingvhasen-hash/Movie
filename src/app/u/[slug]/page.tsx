@@ -1,50 +1,38 @@
 import { getTranslations } from "next-intl/server";
 import { getServerSupabase } from "@/lib/supabase/server";
-import ShareGrid, { type SharedTitle } from "@/components/ShareGrid";
+import PublicProfileGrid from "@/components/PublicProfileGrid";
+import { serverTitlesFor } from "@/lib/server-catalog";
 
 export const dynamic = "force-dynamic";
+
+type PublicProfileRpcRow = {
+  display_name: string | null;
+  bio: string | null;
+  avatar_url: string | null;
+  liked_title_ids: string[] | null;
+};
 
 export default async function PublicProfilePage({ params }: PageProps<"/u/[slug]">) {
   const { slug } = await params;
   const t = await getTranslations();
   const supabase = getServerSupabase();
 
-  if (!supabase) {
-    return <ShareNotFound message={t("share.notFound")} />;
-  }
+  if (!supabase) return <ShareNotFound message={t("share.notFound")} />;
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id, display_name, is_public")
-    .eq("public_slug", slug)
-    .eq("is_public", true)
-    .maybeSingle();
+  const { data, error } = await supabase.rpc("get_public_profile", { p_slug: slug });
+  const profile = (Array.isArray(data) ? data[0] : data) as PublicProfileRpcRow | null;
 
-  if (!profile) {
-    return <ShareNotFound message={t("share.notFound")} />;
-  }
+  if (error || !profile) return <ShareNotFound message={t("share.notFound")} />;
 
-  const { data: rows } = await supabase
-    .from("swipes")
-    .select("action, titles(id, type, title_en, title_ar, year, rating, poster_path)")
-    .eq("user_id", profile.id)
-    .eq("action", "liked")
-    .order("created_at", { ascending: false })
-    .limit(120);
-
-  const titles: SharedTitle[] = (rows ?? [])
-    .map((row) => {
-      const t0 = Array.isArray(row.titles) ? row.titles[0] : row.titles;
-      return t0 as SharedTitle | null;
-    })
-    .filter((x): x is SharedTitle => Boolean(x));
+  const titleIds = (profile.liked_title_ids ?? []).slice(0, 120);
+  const titles = await serverTitlesFor(titleIds);
 
   return (
     <div className="px-5 pb-16 pt-8">
       <h1 className="text-3xl font-bold">
         {t("share.libraryOf", { name: profile.display_name ?? "—" })}
       </h1>
-      <ShareGrid titles={titles} />
+      <PublicProfileGrid titles={titles} />
       <p className="mt-10 text-center text-xs text-ink-faint">{t("share.poweredBy")}</p>
     </div>
   );

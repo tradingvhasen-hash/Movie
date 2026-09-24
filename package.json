@@ -30,13 +30,13 @@
     "regions": "tsx scripts/build-regions.ts",
     "current": "tsx scripts/build-current.ts",
     "starter": "tsx scripts/build-starter.ts",
-    "vibe:judge": "tsx scripts/vibe-judge.ts",
-    "lang": "tsx scripts/home-language-guard.ts"
+    "lang": "tsx scripts/home-language-guard.ts",
+    "guard:source": "node scripts/source-regression-guard.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.2",
     "framer-motion": "^13.1.0",
-    "next": "16.3.0",
+    "next": "16.3.6",
     "next-intl": "^4.13.6",
     "react": "19.2.8",
     "react-dom": "19.2.8",

@@ -1,13 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getLocalItem, loadCatalog } from "@/lib/catalog";
+import { getLocalItem } from "@/lib/catalog";
 import { rank, warmRanker } from "@/lib/engine/rank-client";
-import { SENTINEL_EVERY, drawSentinel, recordSentinel } from "@/lib/sentinel";
 import { STARTER_PACK } from "@/lib/data/starter-pack";
 import { COLD_START_TARGET, isCalibrating } from "@/lib/engine/taste";
 import { useDhawq } from "@/lib/store";
-import { isSupabaseConfigured } from "@/lib/supabase/configured";
 import type { SwipeAction, Title } from "@/lib/types";
 
 /** cards rendered as a stack; more than three are never visible */
@@ -58,59 +56,9 @@ const RESERVE = 24;
  */
 const REFILL_AT = 8;
 
-/**
- * Set once the cloud endpoint has failed, and never retried.
- *
- * It answers 503 whenever the Supabase catalog is not seeded, and the client
- * cannot tell that from a network blip — so it asked again on every rebuild,
- * paying a full round trip to learn the same thing. One failure is enough:
- * the bundled catalog is larger than the seeded one anyway.
- */
-let remoteOffline = false;
-
-/** cloud mode: fetch the next batch from the seeded TMDB catalog */
-async function fetchRemoteBatch(count: number): Promise<Title[] | null> {
-  if (remoteOffline) return null;
-  const state = useDhawq.getState();
-  const exclude = Object.keys(state.swipes);
-  const likedIds = Object.values(state.swipes)
-    .filter((s) => s.action === "liked")
-    .map((s) => s.titleId);
-  try {
-    const res = await fetch("/api/recommend", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        profile: state.profile,
-        exclude,
-        likedIds,
-        count,
-      }),
-    });
-    if (!res.ok) {
-      remoteOffline = true;
-      return null;
-    }
-    const data = (await res.json()) as { items: { title: Title }[] };
-    /**
-     * An empty 200 is a dead endpoint, not a quiet one.
-     *
-     * The guard above only caught a failure status. The live endpoint answers
-     * **200 with `items: []`** — the Supabase catalog is not seeded, so the
-     * vector search matches nothing — which meant the app paid a full round
-     * trip on every rebuild, forever, and threw the answer away every time.
-     * Verified against the deployed site.
-     */
-    if (data.items.length === 0) {
-      remoteOffline = true;
-      return null;
-    }
-    return data.items.map((i) => i.title);
-  } catch {
-    remoteOffline = true;
-    return null;
-  }
-}
+/** Local ranking is authoritative. The old /api/recommend path is intentionally
+ * not called: its Supabase catalog is not seeded and it added a cold network
+ * dependency without producing recommendations. */
 
 /** local mode: run the engine over the bundled catalog */
 /**
@@ -173,10 +121,10 @@ async function computeLocalBatch(): Promise<Title[]> {
   /**
    * The 👁 answers.
    *
-   * The co-watch graph records who *watched* two titles, not who enjoyed them,
-   * so a neutral answer seeds it exactly as well as a heart does. Before this
-   * they seeded nothing: one real session marked 61 titles that way and every
-   * one was invisible to the graph.
+   * The TMDB recommendation graph is used as a title-relatedness signal, not
+   * as raw co-watch telemetry. A neutral answer can still seed it without
+   * inventing a taste preference. Before this, one real session marked 61
+   * neutral titles and every one was invisible to that signal.
    */
   const seenIds = Object.values(state.swipes)
     .filter((s) => s.action === "seen")
@@ -191,7 +139,7 @@ async function computeLocalBatch(): Promise<Title[]> {
     likedIds,
     dislikedIds,
     seenIds,
-    homeLanguages: homeLanguages(),
+    homeLanguages: homeLanguages(state.settings.locale),
     /**
      * The reach dial, read fresh on every batch.
      *
@@ -203,43 +151,13 @@ async function computeLocalBatch(): Promise<Title[]> {
     reach: state.settings.reach,
   });
 
-  /**
-   * ONE CARD IN FORTY THE ENGINE DID NOT CHOOSE — see `lib/sentinel.ts`.
-   *
-   * Placed after the ranking rather than inside it, deliberately. The whole
-   * value of a sentinel is that no part of the engine touched its selection;
-   * handing it to `recommend` to position would be the engine choosing again,
-   * more subtly.
-   *
-   * It costs one card in forty — 2.5% of a session — which buys the only kind
-   * of data this project cannot otherwise obtain: an answer about a title the
-   * model did not already believe was likely.
-   */
-  const answered = state.swipeOrder.length;
-  if (answered > 0 && Math.floor(answered / SENTINEL_EVERY) >
-      Math.floor((answered - titles.length) / SENTINEL_EVERY)) {
-    const rng = mulberry(state.seed + answered);
-    const draw = drawSentinel(new Set(exclude), rng);
-    if (draw && !titles.some((t) => t.id === draw.title.id)) {
-      /* second position, not first: a measurement card at the very top of a
-         rebuild is the one most likely to be seen mid-animation and skipped */
-      titles.splice(Math.min(1, titles.length), 0, draw.title);
-      recordSentinel(draw.title.id, draw);
-    }
-  }
+  // Measurement/sentinel cards are deliberately not injected into the live
+  // product. The previous implementation trained and synced their answers as
+  // ordinary recommendation evidence, invalidating the independent sample it
+  // claimed to collect. Research sampling belongs on a separate immutable
+  // event path, not inside the user library/taste model.
 
   return titles;
-}
-
-/** small seeded generator, so a sentinel draw is reproducible per session */
-function mulberry(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
 }
 
 /**
@@ -248,10 +166,11 @@ function mulberry(seed: number): () => number {
  * Free, present before the first card, and the only signal available at zero
  * evidence about which of the catalog's 34 languages is worth opening.
  */
-function homeLanguages(): string[] {
-  if (typeof navigator === "undefined") return [];
-  const raw = navigator.languages?.length ? navigator.languages : [navigator.language];
+function homeLanguages(preference: "auto" | "ar" | "en"): string[] {
   const out: string[] = [];
+  if (preference === "ar" || preference === "en") out.push(preference);
+  if (typeof navigator === "undefined") return out;
+  const raw = navigator.languages?.length ? navigator.languages : [navigator.language];
   for (const tag of raw ?? []) {
     const base = String(tag).toLowerCase().split("-")[0];
     if (base && !out.includes(base)) out.push(base);
@@ -291,7 +210,7 @@ export function useDeck() {
 
   const [queue, setQueue] = useState<Title[]>([]);
   const [hydrated, setHydrated] = useState(false);
-  /** true once a ranking against the REAL catalog has come back — see `install` */
+  /** true once an authoritative full-catalog ranking has come back */
   const [filled, setFilled] = useState(false);
   const hydratedRef = useRef(false);
   const queueRef = useRef<Title[]>([]);
@@ -339,23 +258,9 @@ export function useDeck() {
       setQueue(next);
       queueRef.current = next;
       /**
-       * A ranking has come back — but only count it if it ranked the REAL
-       * catalog.
-       *
-       * Two separate windows could make the deck look finished when it was
-       * only loading, and the second is why a screenshot still showed "Reset
-       * all cards" three seconds into a returning visit:
-       *
-       *   1. the catalog file has not arrived. `hydrated` covers this.
-       *   2. it has not arrived, a rebuild ran anyway against the 50-title
-       *      fallback set, the viewer had already answered those in
-       *      onboarding, and so the rank came back EMPTY and marked the deck
-       *      filled. Nothing covered this.
-       *
-       * Gating on `hydratedRef` closes the second: an install that happened
-       * before the real catalog landed does not get to say the deck is empty.
-       * A ref rather than the state value because `install` is called from
-       * callbacks that captured an older render.
+       * A completed rank request may mark the deck filled. The server ranks
+       * the full catalog; the worker fallback loads the same catalog before it
+       * answers, so either successful path is authoritative.
        */
       if (hydratedRef.current) setFilled(true);
     };
@@ -412,11 +317,6 @@ export function useDeck() {
     }
 
     void computeLocalBatch().then(install);
-    if (isSupabaseConfigured()) {
-      void fetchRemoteBatch(BATCH).then((remote) => {
-        if (remote && remote.length > 0) install(remote);
-      });
-    }
   }, []);
 
   /** coalescing wrapper: many swipes in a row cost one rebuild */
@@ -428,21 +328,15 @@ export function useDeck() {
     });
   }, [rebuild]);
 
-  // wait for the catalog fetch and the persisted store before the first fill
+  // The deck no longer waits for or preloads the 48k browser catalog.
+  // Starter cards are available immediately; ranking prefers the server's full
+  // catalog and only downloads catalog.json if that path fails/offline.
   useEffect(() => {
-    let cancelled = false;
     warmRanker();
-    void loadCatalog().then(() => {
-      if (cancelled) return;
-      // a library saved by an older build carries a copy of every title it
-      // already has in catalog.json; drop those now that we can check
-      useDhawq.getState().compactSwipes();
-      hydratedRef.current = true;
-      setHydrated(true);
-      rebuild();
-    });
+    hydratedRef.current = true;
+    setHydrated(true);
+    rebuild();
     return () => {
-      cancelled = true;
       cancelPending.current?.();
     };
   }, [rebuild]);

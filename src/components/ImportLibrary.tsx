@@ -5,7 +5,8 @@ import { motion } from "framer-motion";
 import { getLocalCatalog, loadCatalog } from "@/lib/catalog";
 import { matchAll, readExport } from "@/lib/import/watchlist";
 import { useDhawq } from "@/lib/store";
-import type { Title } from "@/lib/types";
+import type { SwipeAction, Title } from "@/lib/types";
+import { useT } from "@/lib/i18n";
 
 /**
  * THE OFFER THAT SHOULD HAVE BEEN ON THE FIRST SCREEN.
@@ -36,24 +37,49 @@ export default function ImportLibrary({
   compact?: boolean;
   onDone?: (added: number) => void;
 }) {
+  const t = useT();
   const input = useRef<HTMLInputElement>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const run = async (file: File) => {
     setBusy(true);
-    setStatus("reading…");
+    setStatus(t("importLibrary.reading"));
     try {
       const text = await file.text();
       const rows = readExport(text);
       if (rows.length === 0) {
-        setStatus("No film titles in that file. Export it as CSV and try again.");
+        setStatus(t("importLibrary.empty"));
         return;
       }
-      setStatus("matching against the catalog…");
-      await loadCatalog();
-      const catalog = getLocalCatalog().map((c: { title: Title }) => c.title);
-      const { matched, unmatched } = matchAll(rows, catalog);
+      setStatus(t("importLibrary.matching"));
+
+      let matched: { title: Title; action: SwipeAction }[] = [];
+      let unmatchedCount = 0;
+      try {
+        const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+        const res = await fetch(`${base}/api/import-match`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ rows }),
+        });
+        if (!res.ok) throw new Error(`import ${res.status}`);
+        const body = (await res.json()) as {
+          matched?: { title: Title; action: SwipeAction }[];
+          unmatchedCount?: number;
+        };
+        if (!Array.isArray(body.matched)) throw new Error("invalid import response");
+        matched = body.matched;
+        unmatchedCount = Number(body.unmatchedCount ?? 0);
+      } catch {
+        // Static demo/offline fallback keeps the old exact matcher.
+        await loadCatalog();
+        const catalog = getLocalCatalog().map((c: { title: Title }) => c.title);
+        const local = matchAll(rows, catalog);
+        matched = local.matched.map(({ title, action }) => ({ title, action }));
+        unmatchedCount = local.unmatched.length;
+      }
+
       const swipe = useDhawq.getState().swipe;
       const already = useDhawq.getState().swipes;
       let added = 0;
@@ -64,17 +90,18 @@ export default function ImportLibrary({
         added++;
         // hand the frame back so a 2,000-row file does not lock the page
         if (i % 200 === 0) {
-          setStatus(`${i} of ${matched.length}…`);
+          setStatus(t("importLibrary.progress", { current: i, total: matched.length }));
           await new Promise((r) => setTimeout(r, 0));
         }
       }
       setStatus(
-        `Added ${added} film${added === 1 ? "" : "s"}` +
-          (unmatched.length > 0 ? ` · ${unmatched.length} not in this catalog` : "")
+        unmatchedCount > 0
+          ? t("importLibrary.resultUnmatched", { added, unmatched: unmatchedCount })
+          : t("importLibrary.result", { added })
       );
       onDone?.(added);
     } catch {
-      setStatus("Could not read that file.");
+      setStatus(t("importLibrary.failed"));
     } finally {
       setBusy(false);
     }
@@ -101,10 +128,10 @@ export default function ImportLibrary({
         className="w-full rounded-2xl border border-line bg-surface px-4 py-3.5 text-start transition-colors hover:border-ink-faint disabled:opacity-60"
       >
         <span className="block text-sm font-bold text-ink-strong">
-          {busy ? "Working…" : "Already track your films somewhere?"}
+          {busy ? t("importLibrary.working") : t("importLibrary.prompt")}
         </span>
         <span className="mt-0.5 block text-xs text-ink-faint">
-          Import a CSV from Letterboxd, IMDb, Trakt or TV Time — your whole library at once
+          {t("importLibrary.hint")}
         </span>
       </motion.button>
       {status && (

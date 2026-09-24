@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { BRAND, BUILD } from "@/lib/brand";
+import { useT } from "@/lib/i18n";
 
 /**
  * WHAT A PERSON SEES WHEN SOMETHING BREAKS.
@@ -58,6 +59,7 @@ export default function ErrorPanel({
   standalone?: boolean;
 }) {
   const id = errorId(error);
+  const t = useT();
   const [copied, setCopied] = useState(false);
 
   /**
@@ -114,7 +116,7 @@ export default function ErrorPanel({
         }}
       >
         <p style={{ margin: 0, fontWeight: 600, fontSize: "1rem" }}>
-          Something broke — your library is safe
+          {t("error.title")}
         </p>
         <p
           style={{
@@ -124,21 +126,20 @@ export default function ErrorPanel({
             lineHeight: 1.5,
           }}
         >
-          Everything you have marked is still stored on this device. Nothing was
-          lost.
+          {t("error.body")}
         </p>
 
         <div style={{ display: "flex", gap: "8px", marginTop: "16px", flexWrap: "wrap" }}>
           {reset && (
             <button onClick={reset} style={primary}>
-              Try again
+              {t("error.retry")}
             </button>
           )}
           <a href="/" style={secondary}>
-            Home
+            {t("error.home")}
           </a>
           <a href="/settings" style={secondary}>
-            Back up my library
+            {t("error.backup")}
           </a>
         </div>
 
@@ -155,7 +156,7 @@ export default function ErrorPanel({
           }}
           title={report}
         >
-          {copied ? "copied" : `${id} · ${BUILD.slice(0, 7)} — copy details`}
+          {copied ? t("error.copied") : `${id} · ${BUILD.slice(0, 7)} — ${t("error.copyDetails")}`}
         </button>
 
         {standalone && (

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { BUILD } from "@/lib/brand";
 
 /**
  * Registers the offline worker, after the page has settled.
@@ -22,7 +23,7 @@ export default function ServiceWorker() {
     if (process.env.NODE_ENV !== "production") return;
 
     const register = () => {
-      navigator.serviceWorker.register("/sw.js").catch(() => {
+      navigator.serviceWorker.register(`/sw.js?v=${encodeURIComponent(BUILD)}`).catch(() => {
         /* a browser that refuses this — private mode, a policy, an old engine —
            still has a perfectly working site. It is an enhancement, not a
            dependency, and a failed registration must be silent. */

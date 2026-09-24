@@ -15,7 +15,7 @@ import { useDhawq } from "@/lib/store";
 import { useT } from "@/lib/i18n";
 import DataPanel from "@/components/DataPanel";
 import { useEffect, useState } from "react";
-import { getLocalCatalog } from "@/lib/catalog";
+import { CATALOG_SIZE } from "@/lib/data/catalog-meta";
 
 /**
  * SETTINGS — the place the fifth button went.
@@ -47,10 +47,6 @@ export default function SettingsPage() {
    * After mount, because the catalog is installed client-side and a server
    * render has nothing to count.
    */
-  const [catalogSize, setCatalogSize] = useState(0);
-  useEffect(() => {
-    setCatalogSize(getLocalCatalog().length);
-  }, []);
   const settings = useDhawq((s) => s.settings);
   const setSettings = useDhawq((s) => s.setSettings);
 
@@ -72,7 +68,7 @@ export default function SettingsPage() {
           className="-ms-2 inline-flex items-center gap-0.5 rounded-full py-1.5 pe-3 ps-1.5 text-sm font-semibold text-accent transition-transform active:scale-95"
         >
           <ChevronLeftIcon size={19} strokeWidth={2.4} />
-          You
+          {t("settings.back")}
         </Link>
       </motion.div>
 
@@ -80,15 +76,15 @@ export default function SettingsPage() {
         variants={FADE_UP}
         className="mt-3 text-[26px] font-bold tracking-[-0.03em]"
       >
-        Settings
+        {t("settings.title")}
       </motion.h1>
 
       {/* ── the deck ── */}
-      <Group title="The deck">
+      <Group title={t("settings.deck")}>
         <ToggleRow
           icon={<EyeIcon size={18} />}
-          label="Fourth button"
-          hint="Watched it, no strong feeling"
+          label={t("settings.fourthButton")}
+          hint={t("settings.neutral")}
           on={settings.showSeenButton}
           onChange={(v) => tap("showSeenButton", v)}
         />
@@ -109,20 +105,20 @@ export default function SettingsPage() {
         />
         <ChoiceRow
           icon={<span className="text-[color:var(--color-ink-dim)]">ع</span>}
-          label="العربية"
+          label={t("settings.arabic")}
           on={settings.locale === "ar"}
           onSelect={() => tap("locale", "ar")}
         />
         <ChoiceRow
           icon={<span className="text-[color:var(--color-ink-dim)]">A</span>}
-          label="English"
+          label={t("settings.english")}
           on={settings.locale === "en"}
           onSelect={() => tap("locale", "en")}
         />
       </Group>
 
       {/* ── how far the deck reaches ── */}
-      <Group title="How far the deck reaches">
+      <Group title={t("settings.reachTitle")}>
         <ChoiceRow
           icon={<span className="text-[color:var(--color-like)]"><EyeIcon size={18} /></span>}
           label="Only what's famous"
@@ -131,28 +127,25 @@ export default function SettingsPage() {
         />
         <ChoiceRow
           icon={<span className="text-[color:var(--color-skip)]"><ArrowUpIcon size={18} /></span>}
-          label="Go deeper"
+          label={t("settings.goDeeper")}
           on={settings.reach === "medium"}
           onSelect={() => tap("reach", "medium")}
         />
         <ChoiceRow
           icon={<span className="text-[color:var(--color-skip)]"><ArrowUpIcon size={18} /></span>}
           label={
-            catalogSize > 0 ? `Everything — ${catalogSize.toLocaleString()} titles` : "Everything"
+            t("settings.everythingCount", { count: CATALOG_SIZE.toLocaleString() })
           }
           on={settings.reach === "wide"}
           onSelect={() => tap("reach", "wide")}
         />
         <p className="px-4 pb-3 pt-1 text-[13px] leading-snug text-muted">
-          Famous titles are the safe choice and the one that measured best. The
-          deeper settings are the only way titles like The Tonight Show or Arabic
-          and Turkish films can reach the deck at all — they sit past 10,000th by
-          popularity. Expect more you have never heard of.
+          {t("settings.reachHint")}
         </p>
       </Group>
 
       {/* ── gestures ── */}
-      <Group title="Swipe up means">
+      <Group title={t("settings.swipeUpMeans")}>
         <ChoiceRow
           icon={<span className="text-[color:var(--color-skip)]"><ArrowUpIcon size={18} /></span>}
           label="Haven't seen it"
@@ -161,7 +154,7 @@ export default function SettingsPage() {
         />
         <ChoiceRow
           icon={<EyeIcon size={18} />}
-          label="Watched it, no strong feeling"
+          label={t("settings.neutral")}
           on={settings.swipeUp === "seen"}
           onSelect={() => tap("swipeUp", "seen")}
           last
@@ -190,16 +183,16 @@ export default function SettingsPage() {
       </motion.div>
 
       {/* ── feel ── */}
-      <Group title="Feel">
+      <Group title={t("settings.feel")}>
         <ToggleRow
-          label="Colour on the screen"
-          hint="The whole screen answers the drag"
+          label={t("settings.screenColour")}
+          hint={t("settings.screenColourHint")}
           on={settings.screenFeedback}
           onChange={(v) => tap("screenFeedback", v)}
         />
         <ToggleRow
-          label="Vibration"
-          hint="Where the device has a motor"
+          label={t("settings.vibration")}
+          hint={t("settings.vibrationHint")}
           on={settings.haptics}
           onChange={(v) => tap("haptics", v)}
           last

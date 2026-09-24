@@ -565,7 +565,9 @@ const STREAK_BOOST = num("STREAK_BOOST", 1.5);
  * The multipliers are the swept points: 3 is what ships and measures best on
  * MovieLens, 8 puts roughly 40% of the catalog in reach, 20 puts 87%.
  */
-const REACH_GROWTH: Record<string, number> = {
+export type ReachSetting = "narrow" | "medium" | "wide";
+
+const REACH_GROWTH: Record<ReachSetting, number> = {
   narrow: 3,
   medium: 8,
   /**
@@ -584,13 +586,23 @@ const REACH_GROWTH: Record<string, number> = {
    */
   wide: Number.POSITIVE_INFINITY,
 };
-let reachGrowth = REACH_GROWTH.narrow;
+let defaultReachGrowth = REACH_GROWTH.narrow;
 
-export function setReach(reach: "narrow" | "medium" | "wide"): void {
-  reachGrowth = REACH_GROWTH[reach] ?? REACH_GROWTH.narrow;
+/**
+ * Kept for benchmark/instrument compatibility. Production requests pass reach
+ * explicitly so one user can never mutate another user's gate on a shared
+ * server process.
+ */
+export function setReach(reach: ReachSetting): void {
+  defaultReachGrowth = REACH_GROWTH[reach] ?? REACH_GROWTH.narrow;
 }
 
-export function fameTierSize(profile: TasteProfile, mode: RankMode = "swipe"): number {
+export function fameTierSize(
+  profile: TasteProfile,
+  mode: RankMode = "swipe",
+  reach?: ReachSetting
+): number {
+  const reachGrowth = reach ? REACH_GROWTH[reach] : defaultReachGrowth;
   if (mode === "discover") return DISCOVER_POOL;
   const answered = profile.seenCount + profile.unseenCount;
 
@@ -1961,12 +1973,12 @@ export interface RecommendOptions {
   /**
    * The titles they answered 👁 — "watched it, no strong feeling".
    *
-   * These join `likedTitles` as seeds for the co-watch walk, and nothing else.
-   * The graph is TMDB's record of who *watched* two titles, with no opinion in
-   * it, so a neutral answer is exactly as good a seed as an enthusiastic one —
-   * while being useless as a statement of taste, which is why it stays out of
-   * every other term. One real 1,098-card session marked 61 titles this way
-   * and every one of them was invisible to the graph.
+   * These join `likedTitles` as seeds for the TMDB recommendation-graph walk,
+   * and nothing else. That graph is a relatedness signal, not raw viewer-level
+   * co-watch telemetry. Neutral watched answers are still useful seeds because
+   * they identify titles the viewer knows without inventing a taste verdict.
+   * One real 1,098-card session marked 61 titles this way and every one of
+   * them was previously invisible to the graph.
    */
   seenTitles?: Title[];
   /** BCP-47 primary subtags the viewer reads, e.g. ["ar"], from the browser */
@@ -1988,6 +2000,8 @@ export interface RecommendOptions {
    * quality floor, no fame bias, no probes.
    */
   mode?: RankMode;
+  /** request-scoped reach; avoids shared mutable state in server ranking */
+  reach?: ReachSetting;
 }
 
 /**
@@ -2035,11 +2049,10 @@ export function recommend(
   /**
    * SEEDS FOR THE GRAPH ARE THINGS THEY WATCHED, NOT THINGS THEY LOVED.
    *
-   * `related` is TMDB's "people who watched this also watched" — a record of
-   * co-viewing with no opinion attached. Seeding it from likes alone was a
-   * category error that cost every neutral answer: 61 of them in the one real
-   * long session on record, all invisible to the graph they were perfectly
-   * good evidence for.
+   * `related` comes from TMDB's recommendations endpoint. It is not documented
+   * as raw co-viewing telemetry, so we treat it only as a relatedness graph.
+   * Seeding it from likes alone still discarded neutral watched answers: 61 of
+   * them in the one real long session on record were invisible to this signal.
    *
    * Dislikes stay out. They are handled by the aversion walk below, which
    * pushes *away* from that neighbourhood, and feeding the same titles to both
@@ -2063,14 +2076,13 @@ export function recommend(
    * "if people who liked Batman liked Joker, then someone who dislikes Batman
    * probably dislikes Joker — use the same technique upside down."
    *
-   * It is worth taking seriously here specifically because the graph is not a
-   * keyword. Everything else the dislike touches is a property of the title —
-   * its genre, its cast, its decade — and the whole difficulty with dislikes is
-   * that those properties are shared with things the person loves. A co-watch
-   * edge is not a property; it is a statement about *audiences*. Two films
-   * joined by an edge are joined because the same people chose both, which is
-   * exactly the relation "if that one was not for you, this one is not either"
-   * needs, and it carries no genre with it.
+   * It is worth taking seriously here because the graph is not a keyword.
+   * Everything else the dislike touches is a property of the title — genre,
+   * cast, decade — and those properties are shared with things the person
+   * loves. A TMDB recommendation edge is a separate title-level relatedness
+   * signal. It may capture audience overlap among other factors, but the public
+   * API does not expose the underlying viewer telemetry, so the engine must not
+   * claim that it does.
    *
    * Scaled separately from the positive walk because there is no reason for
    * the two to be symmetric, and because a person gives far fewer dislikes
@@ -2130,7 +2142,7 @@ export function recommend(
   ];
   const gated = fameGate(
     pool,
-    fameTierSize(profile, mode),
+    fameTierSize(profile, mode, opts.reach),
     mode === "swipe" ? profile.facets : undefined,
     profile,
     opts.homeLanguages,
@@ -2826,12 +2838,18 @@ export function watchedGrid(
     seed?: number;
     /** everything the viewer has confirmed watching, in any of the three ways */
     watched?: Title[];
+    reach?: ReachSetting;
   }
 ): Title[] {
   const { excludeIds, count } = opts;
   const seed = opts.seed ?? 1;
 
-  const gated = fameGate(pool, fameTierSize(profile, "swipe"), profile.facets, profile);
+  const gated = fameGate(
+    pool,
+    fameTierSize(profile, "swipe", opts.reach),
+    profile.facets,
+    profile
+  );
   /**
    * The frontier is built once per screen, not per candidate: it is one pass
    * over the viewer's confirmed titles and then a lookup.

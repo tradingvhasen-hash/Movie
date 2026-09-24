@@ -4,11 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import PosterArt from "./PosterArt";
 import { getLocalTitle, loadCatalog } from "@/lib/catalog";
+import { resolveTitleSnapshots } from "@/lib/title-resolver";
 import { matches, searchCatalog } from "@/lib/search";
 import { useDhawq } from "@/lib/store";
 import { FADE_UP, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
 import { CheckIcon, SearchIcon, XIcon } from "./ui/Icons";
 import type { Title } from "@/lib/types";
+import { useLocale, useT } from "@/lib/i18n";
+import { genreLabel } from "@/lib/genres";
 
 /**
  * THREE WAYS TO FILL A LIST, BECAUSE ONE OF THEM IS ALWAYS THE WRONG ONE.
@@ -50,6 +53,8 @@ export default function ListBuilder({
   listId: string;
   onDone?: () => void;
 }) {
+  const tr = useT();
+  const locale = useLocale();
   const lists = useDhawq((s) => s.lists);
   const swipes = useDhawq((s) => s.swipes);
   const addToList = useDhawq((s) => s.addToList);
@@ -58,19 +63,21 @@ export default function ListBuilder({
   const list = lists.find((l) => l.id === listId);
   const inList = useMemo(() => new Set(list?.titleIds ?? []), [list?.titleIds]);
 
-  /**
-   * The catalog has to be here before anything below can name a film.
-   *
-   * Every read in this component goes through `getLocalTitle`, which answers
-   * from memory and returns nothing until the catalog has been fetched. On the
-   * deck that fetch has always already happened; arriving at this screen
-   * directly — from a link, or a reload — it has not, so the library read as
-   * empty and the genre chips as "you have watched nothing".
-   */
-  const [catalogReady, setCatalogReady] = useState(false);
+  const [resolvedTitles, setResolvedTitles] = useState<Map<string, Title>>(new Map());
+
   useEffect(() => {
-    void loadCatalog().then(() => setCatalogReady(true));
-  }, []);
+    let alive = true;
+    const wanted = new Set<string>(list?.titleIds ?? []);
+    for (const sw of Object.values(swipes)) {
+      if (!sw.title && !getLocalTitle(sw.titleId)) wanted.add(sw.titleId);
+    }
+    void resolveTitleSnapshots([...wanted]).then((map) => {
+      if (alive) setResolvedTitles(map);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [list?.titleIds, swipes]);
 
   const [mode, setMode] = useState<Mode>("pick");
   const [query, setQuery] = useState("");
@@ -79,14 +86,13 @@ export default function ListBuilder({
   /** everything this person has watched, newest first — the pick source */
   const library = useMemo(() => {
     const out: Title[] = [];
-    void catalogReady;
     for (const sw of Object.values(swipes)) {
       if (sw.action === "not_seen") continue;
-      const t = getLocalTitle(sw.titleId) ?? sw.title;
+      const t = getLocalTitle(sw.titleId) ?? sw.title ?? resolvedTitles.get(sw.titleId);
       if (t) out.push(t);
     }
     return out.reverse();
-  }, [swipes, catalogReady]);
+  }, [swipes, resolvedTitles]);
 
   const genres = useMemo(() => {
     const counts = new Map<string, number>();
@@ -107,12 +113,35 @@ export default function ListBuilder({
     );
   }, [library, chosenGenres]);
 
-  /** the whole catalog, for names that are not in the library yet */
-  const typed = useMemo(() => {
-    if (query.trim().length < 2) return [];
-    void catalogReady;
-    return searchCatalog(query, { limit: 24 });
-  }, [query, catalogReady]);
+  /** the whole catalog, searched on the server; local catalog is fallback only */
+  const [typed, setTyped] = useState<Title[]>([]);
+  useEffect(() => {
+    const q = query.trim();
+    if (mode !== "type" || q.length < 2) {
+      setTyped([]);
+      return;
+    }
+    let alive = true;
+    const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+    void fetch(`${base}/api/search`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ query: q, limit: 24 }),
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`search ${res.status}`);
+        const body = (await res.json()) as { titles?: Title[] };
+        if (!Array.isArray(body.titles)) throw new Error("invalid search response");
+        if (alive) setTyped(body.titles);
+      })
+      .catch(async () => {
+        await loadCatalog();
+        if (alive) setTyped(searchCatalog(q, { limit: 24 }));
+      });
+    return () => {
+      alive = false;
+    };
+  }, [query, mode]);
 
   const pickable = useMemo(() => {
     if (!query.trim()) return library;
@@ -145,7 +174,7 @@ export default function ListBuilder({
       : picked.size;
 
   const contents = list.titleIds
-    .map((id) => getLocalTitle(id))
+    .map((id) => getLocalTitle(id) ?? resolvedTitles.get(id))
     .filter((t): t is Title => Boolean(t));
 
   return (
@@ -165,7 +194,7 @@ export default function ListBuilder({
                   transition={SPRING_SNAPPY}
                   type="button"
                   onClick={() => removeFromList(listId, [t.id])}
-                  aria-label={`Remove ${t.title.en}`}
+                  aria-label={tr("listBuilder.remove", { title: locale === "ar" ? t.title.ar || t.title.en : t.title.en })}
                   className="relative block w-full min-w-0 overflow-hidden rounded-xl"
                 >
                   <PosterArt title={t} sizes="110px" className="aspect-[2/3] w-full" />
@@ -188,9 +217,9 @@ export default function ListBuilder({
       >
         {(
           [
-            ["pick", "Your library"],
-            ["type", "By name"],
-            ["genre", "By genre"],
+            ["pick", tr("listBuilder.library")],
+            ["type", tr("listBuilder.byName")],
+            ["genre", tr("listBuilder.byGenre")],
           ] as const
         ).map(([m, label]) => (
           <button
@@ -226,7 +255,7 @@ export default function ListBuilder({
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={mode === "pick" ? "Filter your library" : "Type a name"}
+            placeholder={mode === "pick" ? tr("listBuilder.filter") : tr("listBuilder.typeName")}
             className="w-full bg-transparent text-sm outline-none placeholder:text-ink-faint"
           />
         </motion.label>
@@ -256,7 +285,7 @@ export default function ListBuilder({
                     : "border-line bg-surface text-ink-dim"
                 }`}
               >
-                {g} <span className="tabular-nums opacity-70">{n}</span>
+                {genreLabel(g, locale)} <span className="tabular-nums opacity-70">{n}</span>
               </motion.button>
             );
           })}
@@ -290,7 +319,7 @@ export default function ListBuilder({
                 type="button"
                 disabled={mode === "genre" || already}
                 onClick={() => toggle(t.id)}
-                aria-label={t.title.en}
+                aria-label={locale === "ar" ? t.title.ar || t.title.en : t.title.en}
                 className="relative block w-full min-w-0 overflow-hidden rounded-xl"
                 style={{
                   boxShadow:
@@ -330,7 +359,7 @@ export default function ListBuilder({
               }
               className="rounded-full bg-accent px-7 py-3.5 text-sm font-bold text-[color:var(--color-on-accent)] shadow-[0_10px_34px_rgb(var(--rgb-accent)/0.45)]"
             >
-              Add {pendingCount}
+              {tr("listBuilder.add", { count: pendingCount })}
             </motion.button>
           </motion.div>
         )}

@@ -1,5 +1,5 @@
 /**
- * CUT THE CATALOG INTO NEIGHBOURHOODS, FROM WHO WATCHES WHAT TOGETHER.
+ * CUT THE CATALOG INTO NEIGHBOURHOODS FROM TMDB RECOMMENDATION EDGES.
  *
  *   npx tsx scripts/build-regions.ts
  *   RESOLUTION=12 npx tsx scripts/build-regions.ts
@@ -18,12 +18,13 @@
  * memory that the last eleven cards from one part of the catalog were all
  * misses. Regions give it that memory.
  *
- * WHY THE CO-WATCH GRAPH AND NOT GENRES. Genres describe what happens in a
- * film. A neighbourhood is a group of works *the same people watch*, which is
- * the thing actually being predicted, and it cuts across genre constantly:
- * this project already measured that 25% of co-watch edges join titles sharing
- * at most one keyword, genre, actor or director. Those edges are exactly the
- * information genres cannot supply.
+ * WHY THE RECOMMENDATION GRAPH AND NOT ONLY GENRES. Genres describe what
+ * happens in a title. TMDB recommendation edges provide a separate relatedness
+ * signal that often cuts across metadata: this project measured that 25% of
+ * these edges join titles sharing at most one keyword, genre, actor or
+ * director. That makes the graph useful, but it is important not to overstate
+ * what it is: TMDB exposes recommendation results, not raw viewer-level
+ * "people who watched A also watched B" telemetry.
  *
  * THE METHOD is label propagation — every title starts in its own region and
  * repeatedly adopts whichever region is commonest among its neighbours. It is
@@ -46,8 +47,8 @@ const catalog = loadFullCatalog();
 const n = catalog.length;
 const index = new Map(catalog.map((t, i) => [t.id, i]));
 
-/* adjacency, undirected: A recommends B implies they share an audience, and
-   the direction TMDB happens to store that in carries no extra meaning */
+/* adjacency, undirected for this experiment. A TMDB recommendation edge is
+   treated as relatedness; it is not evidence that we observed the same viewers. */
 const adj: number[][] = Array.from({ length: n }, () => []);
 let edges = 0;
 for (let i = 0; i < n; i++) {
@@ -59,7 +60,7 @@ for (let i = 0; i < n; i++) {
     edges++;
   }
 }
-console.log(`${n} titles, ${edges} co-watch edges`);
+console.log(`${n} titles, ${edges} TMDB recommendation edges`);
 
 /* deterministic tie-break and deterministic visit order */
 const hash = (x: number) => {

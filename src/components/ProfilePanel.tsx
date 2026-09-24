@@ -35,10 +35,13 @@ import { AnimatePresence, motion } from "framer-motion";
 import AccountPanel from "./AccountPanel";
 import { ChevronRightIcon, HeartIcon, ShieldIcon, SlidersIcon, StackIcon } from "./ui/Icons";
 import { useAccount } from "@/lib/supabase/useAccount";
+import { pushPublicProfile } from "@/lib/supabase/sync";
 import { useDhawq } from "@/lib/store";
 import { EASE_OUT, FADE_UP, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
+import { useT } from "@/lib/i18n";
 
 export default function ProfilePanel() {
+  const t = useT();
   const { session } = useAccount();
   const profile = useDhawq((s) => s.publicProfile);
   const setProfile = useDhawq((s) => s.setPublicProfile);
@@ -48,6 +51,8 @@ export default function ProfilePanel() {
   const [name, setName] = useState("");
   const [bio, setBio] = useState("");
   const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   /* seed the fields from the account the first time it arrives, so somebody
      who has just signed in does not face two empty boxes when Google already
@@ -74,7 +79,7 @@ export default function ProfilePanel() {
   const shownName =
     profile.name ||
     (session?.user.user_metadata?.full_name as string | undefined) ||
-    "You";
+    t("profile.fallbackName");
 
   const dirty = name !== profile.name || bio !== profile.bio;
 
@@ -115,7 +120,7 @@ export default function ProfilePanel() {
               onClick={() => setEditing((v) => !v)}
               className="mt-3 rounded-full border border-line px-4 py-1.5 text-xs font-semibold text-ink-dim transition-colors hover:text-ink active:scale-95"
             >
-              {editing ? "Close" : "Edit"}
+              {editing ? t("profile.close") : t("profile.edit")}
             </button>
           )}
         </div>
@@ -123,9 +128,9 @@ export default function ProfilePanel() {
 
       {/* ── the three numbers that are true ── */}
       <motion.div variants={FADE_UP} className="mt-3 grid grid-cols-3 gap-3">
-        <Stat value={stats.watched} label="Watched" />
-        <Stat value={stats.loved} label="Loved" icon={<HeartIcon size={12} filled />} />
-        <Stat value={stats.lists} label="Lists" icon={<StackIcon size={12} />} />
+        <Stat value={stats.watched} label={t("profile.watched")} />
+        <Stat value={stats.loved} label={t("profile.loved")} icon={<HeartIcon size={12} filled />} />
+        <Stat value={stats.lists} label={t("profile.lists")} icon={<StackIcon size={12} />} />
       </motion.div>
 
       {/* ── editing, only when asked for ── */}
@@ -141,7 +146,7 @@ export default function ProfilePanel() {
             <div className="mt-3 flex flex-col gap-3 rounded-3xl border border-line bg-surface p-4">
               <label className="flex flex-col gap-1.5">
                 <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
-                  Display name
+                  {t("profile.displayName")}
                 </span>
                 <input
                   value={name}
@@ -153,7 +158,7 @@ export default function ProfilePanel() {
 
               <label className="flex flex-col gap-1.5">
                 <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
-                  Bio
+                  {t("profile.bio")}
                 </span>
                 <textarea
                   value={bio}
@@ -166,18 +171,38 @@ export default function ProfilePanel() {
 
               <motion.button
                 type="button"
-                disabled={!dirty}
+                disabled={!dirty || saving}
                 onClick={() => {
-                  setProfile({ name: name.trim(), bio: bio.trim(), avatarUrl: avatar ?? "" });
-                  setEditing(false);
+                  if (!session || saving) return;
+                  const next = {
+                    name: name.trim(),
+                    bio: bio.trim(),
+                    avatarUrl: avatar ?? "",
+                  };
+                  setSaving(true);
+                  setSaveError(null);
+                  void pushPublicProfile(session.user.id, next)
+                    .then(() => {
+                      setProfile(next);
+                      setEditing(false);
+                    })
+                    .catch((e: unknown) => {
+                      setSaveError(e instanceof Error ? e.message : t("profile.saveError"));
+                    })
+                    .finally(() => setSaving(false));
                 }}
-                animate={{ opacity: dirty ? 1 : 0.4 }}
+                animate={{ opacity: dirty && !saving ? 1 : 0.4 }}
                 whileTap={dirty ? { scale: 0.97 } : undefined}
                 transition={SPRING_SNAPPY}
                 className="rounded-2xl bg-accent px-5 py-3 font-semibold text-[color:var(--color-on-accent)]"
               >
-                Save
+                {saving ? t("profile.saving") : t("profile.save")}
               </motion.button>
+              {saveError && (
+                <p role="alert" className="text-xs leading-snug text-danger">
+                  {saveError}
+                </p>
+              )}
             </div>
           </motion.div>
         )}
@@ -193,8 +218,8 @@ export default function ProfilePanel() {
         variants={FADE_UP}
         className="mt-3 overflow-hidden rounded-3xl border border-line bg-surface"
       >
-        <Row href="/settings" icon={<SlidersIcon size={18} />} label="Settings" />
-        <Row href="/legal" icon={<ShieldIcon size={18} />} label="Privacy &amp; Terms" last />
+        <Row href="/settings" icon={<SlidersIcon size={18} />} label={t("profile.settings")} />
+        <Row href="/legal" icon={<ShieldIcon size={18} />} label={t("profile.privacy")} last />
       </motion.div>
     </motion.div>
   );

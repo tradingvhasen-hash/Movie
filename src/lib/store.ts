@@ -49,6 +49,7 @@ function makeSeed(): number {
  * hidden or unloaded.
  */
 const WRITE_DELAY_MS = 400;
+export const PERSISTENCE_ERROR_EVENT = "dhawq:persistence-error";
 let pendingWrite: { key: string; value: StorageValue<DhawqState> } | null = null;
 let writeTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -60,8 +61,16 @@ function flushWrite() {
   if (!pendingWrite) return;
   try {
     localStorage.setItem(pendingWrite.key, JSON.stringify(pendingWrite.value));
-  } catch {
-    // quota exceeded or storage disabled — the in-memory store still works
+  } catch (error) {
+    // Continuing only in memory is dangerous: the next tab close would lose
+    // answers the UI appeared to accept. Surface the failure immediately.
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent(PERSISTENCE_ERROR_EVENT, {
+          detail: error instanceof Error ? error.message : "Browser storage is unavailable",
+        })
+      );
+    }
   }
   pendingWrite = null;
 }
@@ -207,6 +216,11 @@ interface DhawqState {
   publicProfile: { name: string; bio: string; avatarUrl: string };
   onboardingSeen: boolean;
   settings: Settings;
+  /** authenticated account that owns the persisted local library, or null for guest data */
+  accountOwner: string | null;
+  /** persisted cloud-deletion tombstones; cleared only after a successful sync */
+  deletedSwipeIds: string[];
+  deletedListIds: string[];
 
   /** ids of onboarding tiles shown and not tapped, so they can be replayed */
   passed: string[];
@@ -225,6 +239,9 @@ interface DhawqState {
   undo: () => string | null;
   removeSwipe: (titleId: string) => void;
   resetAll: () => void;
+  /** Delete every piece of local user data, used only after account deletion. */
+  eraseAllUserData: () => void;
+  setAccountOwner: (userId: string | null) => void;
   /**
    * Recompute the taste profile from the stored answers.
    *
@@ -247,7 +264,7 @@ interface DhawqState {
    * against yet — so it happens the moment there is.
    */
   compactSwipes: () => void;
-  createList: (name: string) => string;
+  createList: (name: string, sourceListId?: string) => string;
   deleteList: (id: string) => void;
   renameList: (id: string, name: string) => void;
   toggleListItem: (listId: string, titleId: string) => void;
@@ -312,6 +329,9 @@ export const useDhawq = create<DhawqState>()(
       publicProfile: { name: "", bio: "", avatarUrl: "" },
       onboardingSeen: false,
       settings: DEFAULT_SETTINGS,
+      accountOwner: null,
+      deletedSwipeIds: [],
+      deletedListIds: [],
       passed: [],
 
       setSettings: (patch) =>
@@ -338,9 +358,10 @@ export const useDhawq = create<DhawqState>()(
           const already = new Set(s.passed);
           const fresh = titles.filter((t) => !already.has(t.id) && !s.swipes[t.id]);
           if (fresh.length === 0) return {};
-          let profile = s.profile;
-          for (const t of fresh) profile = applySwipe(profile, t, vectorOf(t), "not_seen");
-          return { profile, passed: [...s.passed, ...fresh.map((t) => t.id)] };
+          // "I did not pick this as a favourite" is not "I have not seen it".
+          // Keep the exposure as weak onboarding context only; never train the
+          // seen/unseen model from an answer the person did not give.
+          return { passed: [...s.passed, ...fresh.map((t) => t.id)] };
         }),
 
       swipe: (title, action) => {
@@ -386,6 +407,7 @@ export const useDhawq = create<DhawqState>()(
               },
             },
             swipeOrder: [...s.swipeOrder.filter((id) => id !== title.id), title.id],
+            deletedSwipeIds: s.deletedSwipeIds.filter((id) => id !== title.id),
             profile,
           };
         });
@@ -403,6 +425,9 @@ export const useDhawq = create<DhawqState>()(
           return {
             swipes,
             swipeOrder: st.swipeOrder.slice(0, -1),
+            deletedSwipeIds: st.deletedSwipeIds.includes(lastId)
+              ? st.deletedSwipeIds
+              : [...st.deletedSwipeIds, lastId],
             profile:
               title && last
                 ? revertSwipe(st.profile, title, vectorOf(title), last.action)
@@ -423,6 +448,9 @@ export const useDhawq = create<DhawqState>()(
           return {
             swipes,
             swipeOrder: st.swipeOrder.filter((id) => id !== titleId),
+            deletedSwipeIds: st.deletedSwipeIds.includes(titleId)
+              ? st.deletedSwipeIds
+              : [...st.deletedSwipeIds, titleId],
             profile: title
               ? revertSwipe(st.profile, title, vectorOf(title), sw.action)
               : st.profile,
@@ -438,10 +466,6 @@ export const useDhawq = create<DhawqState>()(
             const title = sw?.title ?? getLocalTitle(id);
             if (sw && title) profile = applySwipe(profile, title, vectorOf(title), sw.action);
           }
-          for (const id of s.passed) {
-            const title = getLocalTitle(id);
-            if (title) profile = applySwipe(profile, title, vectorOf(title), "not_seen");
-          }
           return { profile };
         }),
 
@@ -454,39 +478,77 @@ export const useDhawq = create<DhawqState>()(
           seed: makeSeed(),
         }),
 
+      eraseAllUserData: () => {
+        try {
+          localStorage.removeItem("dhawq-sentinels");
+          sessionStorage.removeItem("dhawq:add-shared-list");
+        } catch {
+          // State reset below is still authoritative when storage APIs are blocked.
+        }
+        set({
+          swipes: {},
+          swipeOrder: [],
+          passed: [],
+          profile: emptyProfile(),
+          seed: makeSeed(),
+          lists: [],
+          publicProfile: { name: "", bio: "", avatarUrl: "" },
+          onboardingSeen: false,
+          settings: DEFAULT_SETTINGS,
+          accountOwner: null,
+          deletedSwipeIds: [],
+          deletedListIds: [],
+        });
+      },
+
+      setAccountOwner: (userId) => set({ accountOwner: userId }),
+
       setOnboardingSeen: () => set({ onboardingSeen: true }),
 
       setPublicProfile: (p) => set({ publicProfile: p }),
 
-      createList: (name) => {
+      createList: (name, sourceListId) => {
         const id = `list-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
         set((s) => ({
           lists: [
             ...s.lists,
-            { id, name, isPublic: false, titleIds: [], createdAt: Date.now() },
+            {
+              id,
+              name,
+              isPublic: false,
+              titleIds: [],
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+              ...(sourceListId ? { sourceListId } : null),
+            },
           ],
         }));
         return id;
       },
 
       deleteList: (id) =>
-        set((s) => ({ lists: s.lists.filter((l) => l.id !== id) })),
+        set((s) => ({
+          lists: s.lists.filter((l) => l.id !== id),
+          deletedListIds: s.deletedListIds.includes(id)
+            ? s.deletedListIds
+            : [...s.deletedListIds, id],
+        })),
 
       renameList: (id, name) =>
         set((s) => ({
-          lists: s.lists.map((l) => (l.id === id ? { ...l, name } : l)),
+          lists: s.lists.map((l) => (l.id === id ? { ...l, name, updatedAt: Date.now() } : l)),
         })),
 
       setListHideOwner: (listId, hide) =>
         set((s) => ({
-          lists: s.lists.map((l) => (l.id === listId ? { ...l, hideOwner: hide } : l)),
+          lists: s.lists.map((l) => (l.id === listId ? { ...l, hideOwner: hide, updatedAt: Date.now() } : l)),
         })),
 
       addToList: (listId, titleIds) =>
         set((s) => ({
           lists: s.lists.map((l) =>
             l.id === listId
-              ? { ...l, titleIds: [...new Set([...l.titleIds, ...titleIds])] }
+              ? { ...l, titleIds: [...new Set([...l.titleIds, ...titleIds])], updatedAt: Date.now() }
               : l
           ),
         })),
@@ -496,7 +558,7 @@ export const useDhawq = create<DhawqState>()(
         set((s) => ({
           lists: s.lists.map((l) =>
             l.id === listId
-              ? { ...l, titleIds: l.titleIds.filter((id) => !drop.has(id)) }
+              ? { ...l, titleIds: l.titleIds.filter((id) => !drop.has(id)), updatedAt: Date.now() }
               : l
           ),
         }));
@@ -511,6 +573,7 @@ export const useDhawq = create<DhawqState>()(
                   titleIds: l.titleIds.includes(titleId)
                     ? l.titleIds.filter((t) => t !== titleId)
                     : [...l.titleIds, titleId],
+                  updatedAt: Date.now(),
                 }
               : l
           ),
@@ -518,12 +581,12 @@ export const useDhawq = create<DhawqState>()(
 
       setListPublic: (listId, isPublic) =>
         set((s) => ({
-          lists: s.lists.map((l) => (l.id === listId ? { ...l, isPublic } : l)),
+          lists: s.lists.map((l) => (l.id === listId ? { ...l, isPublic, updatedAt: Date.now() } : l)),
         })),
     }),
     {
       name: "dhawq-store",
-      version: 5,
+      version: 7,
       storage: deferredStorage,
       /**
        * v4 replaced the hashed taste vector with named facet counters. v5
@@ -558,12 +621,14 @@ export const useDhawq = create<DhawqState>()(
           const title = sw?.title ?? getLocalTitle(id);
           if (sw && title) profile = applySwipe(profile, title, vectorOf(title), sw.action);
         }
-        // onboarding passes are evidence too, and are replayed the same way
-        for (const id of state.passed ?? []) {
-          const title = getLocalTitle(id);
-          if (title) profile = applySwipe(profile, title, vectorOf(title), "not_seen");
-        }
-        return { ...state, profile, seed: state.seed ?? makeSeed() } as DhawqState;
+        return {
+          ...state,
+          profile,
+          seed: state.seed ?? makeSeed(),
+          accountOwner: state.accountOwner ?? null,
+          deletedSwipeIds: Array.isArray(state.deletedSwipeIds) ? state.deletedSwipeIds : [],
+          deletedListIds: Array.isArray(state.deletedListIds) ? state.deletedListIds : [],
+        } as DhawqState;
       },
       /** guard against partially-shaped profiles from any older build */
       merge: (persisted, current) => {
@@ -577,6 +642,9 @@ export const useDhawq = create<DhawqState>()(
              was added since; defaults fill the gaps rather than the screen
              rendering an undefined toggle */
           settings: { ...DEFAULT_SETTINGS, ...(state.settings ?? {}) },
+          accountOwner: state.accountOwner ?? null,
+          deletedSwipeIds: Array.isArray(state.deletedSwipeIds) ? state.deletedSwipeIds : [],
+          deletedListIds: Array.isArray(state.deletedListIds) ? state.deletedListIds : [],
           profile: normalizeProfile(state.profile),
         };
       },

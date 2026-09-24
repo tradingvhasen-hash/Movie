@@ -1,0 +1,48 @@
+name: Quality gates
+
+on:
+  push:
+    branches:
+      - fix/full-audit-2026-09-24
+      - main
+      - claude/movie-swipe-app-0bvkc8
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Generate Next.js route types
+        run: npx next typegen
+      - name: TypeScript
+        run: npx tsc --noEmit
+      - name: Production build
+        run: npm run build
+      - name: Generated current facts are fresh
+        run: |
+          npm run current
+          git diff --exit-code -- CURRENT.md
+      - name: Source data-safety invariants
+        run: npm run guard:source
+      - name: Cross-device reconstruction guard
+        run: npm run sync
+      - name: Reach canaries
+        run: npm run canaries
+      - name: Home-language guard
+        run: npm run lang
+      - name: Recommendation benchmark
+        run: npm run benchmark

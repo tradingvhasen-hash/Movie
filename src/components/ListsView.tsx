@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import ListBuilder from "./ListBuilder";
 import PosterArt from "./PosterArt";
 import { getLocalTitle } from "@/lib/catalog";
+import { resolveTitleSnapshots } from "@/lib/title-resolver";
+import type { Title } from "@/lib/types";
 import { useDhawq } from "@/lib/store";
 import { useAccount } from "@/lib/supabase/useAccount";
 import { publishList } from "@/lib/supabase/lists";
@@ -65,6 +67,27 @@ export default function ListsView() {
   const [sharing, setSharing] = useState<string | null>(null);
   const [shared, setShared] = useState<Record<string, string>>({});
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [resolvedTitles, setResolvedTitles] = useState<Map<string, Title>>(new Map());
+
+  useEffect(() => {
+    let alive = true;
+    const ids = [...new Set(lists.flatMap((list) => list.titleIds))].filter(
+      (id) => !getLocalTitle(id)
+    );
+    if (ids.length === 0) return () => { alive = false; };
+
+    void resolveTitleSnapshots(ids).then((map) => {
+      if (!alive) return;
+      setResolvedTitles((prev) => {
+        const next = new Map(prev);
+        for (const [id, title] of map) next.set(id, title);
+        return next;
+      });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [lists]);
 
   const create = () => {
     const trimmed = name.trim();
@@ -114,7 +137,7 @@ export default function ListsView() {
             className="-ms-2 flex shrink-0 items-center gap-0.5 rounded-full py-1.5 pe-2.5 ps-1.5 text-sm font-semibold text-accent"
           >
             <ChevronLeftIcon size={19} strokeWidth={2.4} />
-            Lists
+            {t("lists.back")}
           </motion.button>
 
           <span className="min-w-0 flex-1 truncate text-center text-sm font-bold">
@@ -128,7 +151,7 @@ export default function ListsView() {
             transition={SPRING_SNAPPY}
             className="shrink-0 rounded-full bg-accent px-4 py-2 text-sm font-bold text-[color:var(--color-on-accent)]"
           >
-            Done
+            {t("lists.done")}
           </motion.button>
         </motion.div>
 
@@ -161,7 +184,7 @@ export default function ListsView() {
                   if (e.key === "Enter") create();
                   if (e.key === "Escape") setNaming(false);
                 }}
-                placeholder="Name it"
+                placeholder={t("lists.namePlaceholder")}
                 className="flex-1 rounded-2xl border border-line bg-surface px-4 py-3 text-sm outline-none transition-colors placeholder:text-ink-faint focus:border-accent"
               />
               <motion.button
@@ -170,7 +193,7 @@ export default function ListsView() {
                 whileTap={{ scale: 0.93 }}
                 transition={SPRING_SNAPPY}
                 className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-accent text-[color:var(--color-on-accent)]"
-                aria-label="Create"
+                aria-label={t("lists.createAria")}
               >
                 <CheckIcon size={18} strokeWidth={2.6} />
               </motion.button>
@@ -183,7 +206,7 @@ export default function ListsView() {
               whileTap={{ scale: 0.97 }}
               transition={SPRING_SNAPPY}
               className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-line py-4 text-ink-faint transition-colors hover:text-ink-dim"
-              aria-label="New list"
+              aria-label={t("lists.newAria")}
             >
               <PlusIcon size={18} strokeWidth={2.4} />
               {/* the icon alone was the only unlabelled primary action left in
@@ -218,7 +241,7 @@ export default function ListsView() {
         <AnimatePresence initial={false}>
           {lists.map((list) => {
             const covers = list.titleIds
-              .map((id) => getLocalTitle(id))
+              .map((id) => getLocalTitle(id) ?? resolvedTitles.get(id))
               .filter(Boolean)
               .slice(0, 5);
             const armed = confirmDelete === list.id;
@@ -278,7 +301,7 @@ export default function ListsView() {
                     className="flex items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-xs font-semibold text-ink-dim disabled:opacity-40"
                   >
                     <ShareIcon size={14} />
-                    {shared[list.id] ? "Copied" : session ? "Share" : "Sign in to share"}
+                    {shared[list.id] ? t("lists.copied") : session ? t("lists.share") : t("lists.signInShare")}
                   </motion.button>
 
                   <motion.button
@@ -292,7 +315,7 @@ export default function ListsView() {
                         : "border-line text-ink-faint"
                     }`}
                   >
-                    Anonymous
+                    {t("lists.anonymous")}
                   </motion.button>
 
                   {/* delete asks once, in place, rather than through a dialog
@@ -311,7 +334,7 @@ export default function ListsView() {
                       color: armed ? "#fff" : "var(--color-ink-faint)",
                     }}
                     className="ms-auto grid h-8 w-8 place-items-center rounded-full"
-                    aria-label={armed ? "Tap again to delete" : "Delete list"}
+                    aria-label={armed ? t("lists.deleteConfirm") : t("lists.delete")}
                   >
                     <TrashIcon size={15} />
                   </motion.button>

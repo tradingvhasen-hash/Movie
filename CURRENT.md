@@ -4,7 +4,9 @@
 > Rebuild with `npm run current`. Anything a computer can check lives here so
 > that it cannot quietly go stale; anything it cannot check lives in `docs/`.
 >
-> Generated 2026-09-19 from commit `a1c46dc`.
+> Generated from repository data. The file deliberately contains no commit id,
+> branch name, commit count, or current date: those values change when this file
+> is committed and made the previous "freshness" check self-invalidating.
 
 ## The product
 
@@ -14,8 +16,6 @@
 | Package | `dhawq` |
 | Live site | https://dhawq.onrender.com |
 | Repository | https://github.com/tradingvhasen-hash/Movie |
-| Branch | `claude/movie-swipe-app-0bvkc8` |
-| Commits | 177 |
 
 ## The catalog
 
@@ -24,7 +24,7 @@
 | Titles | **48,553** |
 | Films / series | 34,661 / 13,892 |
 | Languages | 39 |
-| Co-watch links | 768,917 |
+| TMDB recommendation graph edges | 768,917 |
 | Titles with an original-script name | 23,105 |
 | Co-watch regions | 127 |
 | `public/catalog.json` | 24.43 MB |
@@ -50,8 +50,11 @@
 
 - `/`
 - `/add`
-- `/api/account`
-- `/api/recommend`
+- `/api/import-match`
+- `/api/onboarding`
+- `/api/rank`
+- `/api/search`
+- `/api/titles`
 - `/calibrate`
 - `/discover`
 - `/l/[slug]`

@@ -1,42 +1,16 @@
 /// <reference lib="webworker" />
 
 /**
- * THE RANKER, ON ITS OWN THREAD.
+ * Full-catalog browser fallback ranker.
  *
- * The user's report was that the site froze on every swipe and ran "like one
- * frame per second". Measured on a phone-speed CPU, the single worst offender
- * was this:
- *
- *     opening Discover        1,261 ms of frozen main thread
- *     one deck rebuild          428 ms
- *
- * During those the page is not slow — it is *dead*. No swipe lands, no tap
- * registers, no animation advances, and the browser may show the "page is not
- * responding" prompt. Everything I could do to the rendering (and I did a lot
- * of it) is beside the point while a single function owns the only thread for
- * more than a second.
- *
- * The user's own instinct was right: "maybe instead of loading everything in
- * the browser, we load it in a page or a database." A worker is the browser's
- * version of that answer, and it is the correct one here — the work is pure
- * computation over a static catalog, with no DOM and no shared state, which is
- * exactly what a worker is for.
- *
- * WHAT LIVES HERE. Its own copy of the catalog, fetched from the same cached
- * static file (so it costs bandwidth once, not twice) and its own memo caches
- * — which is a bonus rather than a cost, since the ranker's per-candidate
- * caches now warm on a thread nobody is waiting on. Measured heap: about 20 MB
- * for the catalog, on a budget of hundreds.
- *
- * WHAT CROSSES THE WIRE. Ids and numbers, never titles. The main thread
- * already holds every title and can resolve an id in constant time, so a
- * request is a profile plus a few hundred ids and a reply is a few dozen ids —
- * kilobytes, structured-cloned in well under a millisecond.
- *
- * IT IS NEVER REQUIRED. `rank-client.ts` falls back to running the identical
- * function on the main thread if a worker cannot be created. A browser without
- * workers gets the old behaviour rather than no behaviour.
+ * Production normally ranks on the Next server so phones do not download and
+ * decode the ~48.5k-title catalog. If that path fails or the app is running as
+ * the manual static/offline demo, `rank-client.ts` loads the same encoded
+ * catalog and hands it to this worker. The worker then executes the identical
+ * recommendation engine off the UI thread, preserving correctness without
+ * reintroducing the main-thread freezes that originally motivated it.
  */
+
 import {
   getLocalItem,
   installEncodedCatalog,
@@ -45,7 +19,7 @@ import {
   vectorOf,
 } from "@/lib/catalog";
 import type { EncodedCatalog } from "@/lib/data/catalog-codec";
-import { recommend, setReach } from "./recommend";
+import { recommend } from "./recommend";
 import type { TasteProfile } from "./taste";
 import type { Title } from "@/lib/types";
 
@@ -91,7 +65,7 @@ function titlesFor(ids: string[]): Title[] {
   return out;
 }
 
-/** the main thread's copy of catalog.json, so this thread need not fetch one */
+/** the fallback main-thread catalog copy, so this worker need not fetch a second one */
 export interface CatalogMessage {
   kind: "catalog";
   data: EncodedCatalog;
@@ -99,10 +73,9 @@ export interface CatalogMessage {
 
 self.onmessage = async (event: MessageEvent<RankRequest | CatalogMessage>) => {
   /**
-   * The catalog arrives as a message before any ranking is asked for, which
-   * saves this thread a second 2.7 MB download of a file the main thread has
-   * already fetched. It is not required: `loadCatalog()` below still fetches
-   * if this never comes.
+   * On the fallback path the main thread sends its encoded catalog first,
+   * avoiding a second browser fetch. `loadCatalog()` below remains the last
+   * safety net if the handoff never arrives.
    */
   if ((event.data as CatalogMessage).kind === "catalog") {
     installEncodedCatalog((event.data as CatalogMessage).data);
@@ -110,8 +83,6 @@ self.onmessage = async (event: MessageEvent<RankRequest | CatalogMessage>) => {
   }
   const req = event.data as RankRequest;
   try {
-    /* the store lives on the main thread; the dial arrives with the request */
-    if (req.reach) setReach(req.reach);
     ready ??= loadCatalog();
     const pool = await ready;
 
@@ -125,6 +96,7 @@ self.onmessage = async (event: MessageEvent<RankRequest | CatalogMessage>) => {
       seenTitles: titlesFor(req.seenIds ?? []),
       homeLanguages: req.homeLanguages,
       mode: req.mode,
+      reach: req.reach,
     });
 
     const reply: RankReply = { id: req.id, ids: recs.map((r) => r.title.id) };

@@ -155,10 +155,13 @@ Three deliberate pieces:
 
 ---
 
-## FIVE — What people who watched *this* also watched (the co-watch graph)
+## FIVE — The TMDB recommendation graph
 
-TMDB's "people who watched this also watched" lists became a graph of
-**768,917 links across 48,543 titles**. Two uses:
+TMDB's `/recommendations` results became a graph of **768,917 links across
+48,543 titles**. TMDB documents these as recommendation results; it does **not**
+document this endpoint as raw viewer-level "people who watched this also
+watched" telemetry. The graph is therefore a useful relatedness source, not an
+independent behavioral/co-watch dataset. Two uses:
 
 - **The taste walk.** From what you have confirmed, walk the graph outward.
   2 hops, decay 0.55 per hop, gamma 0.6, frontier capped at 600.
@@ -388,16 +391,21 @@ Narrow-then-open was tested too (`LEARN_CARDS = 250`) and reads the same 96.8: i
 grid mode the answered count climbs 40 at a time, so the pool is wide long before
 the profile is.
 
-### It is partly a property of the problem
-A **completely different algorithm** — a dumb walk over the co-watch graph,
-sharing no code with the ranker — produces nearly the same decay curve
-(`scripts/frontier-sim.ts`). Two structurally unrelated methods decaying
-identically is evidence about the problem, not about the implementation.
+### The tail is difficult, but it is not information-free
+An earlier diagnosis called the late-session decay partly inherent because a
+separate graph walk also decayed. The newer September 19 measurement supersedes
+that conclusion: at about card 900, fame alone still had AUC ~0.757 and
+degree+fame ~0.788 against a ~4.9% base rate. That does **not** justify shipping
+degree weighting—the frontier/degree ranking experiments hurt harvest—but it
+does show that useful predictive signal remains in the tail.
 
 ### What is still unexplained
-**In the shipped configuration, ~54% of a person's library sits inside the
-candidate pool and is never dealt.** Not filtered out — *considered, and never
-chosen*. That is the number to attack. Nobody has explained it yet.
+**In the shipped configuration, roughly 54% of a person's library can sit
+inside the candidate pool and never be dealt.** Not filtered out—considered,
+then repeatedly outranked. The current evidence says this is not simply an
+information-free tail. The unresolved question is how to convert remaining
+signal into session coverage without repeating the ranking experiments that
+already reduced harvest.
 
 ### What actually helped, and it was not a weighting change
 - **The grid** (`/add`): 40 at a time. **2,490 titles/hour vs the deck's 1,121.**
@@ -451,15 +459,13 @@ were identical to "narrow". It bypasses the tier outright now.
 jammed the deck for a week: **nine eye-presses produced three stored answers.**
 Deleted. `scripts/deck-guard.mjs` exists so it cannot return.
 
-**8. `TARGET_SEEN` — the active-learning idea, built but OFF.** Two reviewers
-argued the deck asks the wrong question: it maximises the probability a card is
-one you *have* watched, when the information-optimal card is the one it is
-*least sure* about. A question whose answer you can predict teaches nothing, and
-the opening blocks run at 74–78% against a 4.5% base rate — a lot of cards spent
-confirming. Setting `TARGET_SEEN=0.5` ranks by *nearness to* that probability
-instead of by height. **Off by default until a ruler says otherwise. The whole
-point of having it is that the argument becomes testable rather than
-persuasive.** This is the most promising untried idea in the engine.
+**8. `TARGET_SEEN` active learning — tested and refuted at the proposed
+settings.** The uncertainty argument was testable and was tested. The September
+19 sweep was monotonically worse as the target moved toward 0.5 (198.1 → 133.4
+at 0.5). Do not describe 0.5 as an untried promising fix. A smaller amount of
+uncertainty may still be useful—the current engine's separately measured target
+is documented in source—but the original "rank nearest 0.5" proposal did not
+survive the harvest ruler.
 
 ---
 

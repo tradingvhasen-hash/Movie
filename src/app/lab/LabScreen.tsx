@@ -47,6 +47,7 @@ export default function LabScreen() {
 
   const tally = (list: SwipeAction[]) => ({
     liked: list.filter((a) => a === "liked").length,
+    seen: list.filter((a) => a === "seen").length,
     disliked: list.filter((a) => a === "disliked").length,
     skipped: list.filter((a) => a === "not_seen").length,
     total: list.length,
@@ -77,10 +78,10 @@ export default function LabScreen() {
     ? blocks
         .map(
           (b) =>
-            `${b.from}-${b.to}${b.done ? "" : " (in progress)"}: liked ${b.liked}, skipped ${b.skipped}, disliked ${b.disliked}`
+            `${b.from}-${b.to}${b.done ? "" : " (in progress)"}: liked ${b.liked}, seen ${b.seen}, skipped ${b.skipped}, disliked ${b.disliked}`
         )
         .join("\n")
-    : `liked ${overall.liked}, skipped ${overall.skipped}, disliked ${overall.disliked}, total ${overall.total}`;
+    : `liked ${overall.liked}, seen ${overall.seen}, skipped ${overall.skipped}, disliked ${overall.disliked}, total ${overall.total}`;
 
   const copy = () => {
     void navigator.clipboard?.writeText(report);
@@ -268,9 +269,10 @@ export default function LabScreen() {
       </motion.p>
 
       {/* ── totals ── */}
-      <motion.div variants={FADE_UP} className="mt-6 grid grid-cols-3 gap-3">
+      <motion.div variants={FADE_UP} className="mt-6 grid grid-cols-4 gap-2">
         {[
           ["Liked", overall.liked, "text-emerald-400"],
+          ["Seen", overall.seen, "text-ink-dim"],
           ["Skipped", overall.skipped, "text-sky-400"],
           ["Disliked", overall.disliked, "text-rose-400"],
         ].map(([label, value, tone]) => (
@@ -343,6 +345,7 @@ export default function LabScreen() {
               <tr>
                 <th className="px-3 py-2 text-left font-medium">Swipes</th>
                 <th className="px-2 py-2 text-right font-medium">Liked</th>
+                <th className="px-2 py-2 text-right font-medium">Seen</th>
                 <th className="px-2 py-2 text-right font-medium">Skipped</th>
                 <th className="px-3 py-2 text-right font-medium">Disliked</th>
               </tr>
@@ -358,6 +361,7 @@ export default function LabScreen() {
                     {!b.done && <span className="ml-1 text-xs">·</span>}
                   </td>
                   <td className="px-2 py-2 text-right text-emerald-400">{b.liked}</td>
+                  <td className="px-2 py-2 text-right text-ink-dim">{b.seen}</td>
                   <td className="px-2 py-2 text-right text-sky-400">{b.skipped}</td>
                   <td className="px-3 py-2 text-right text-rose-400">{b.disliked}</td>
                 </tr>

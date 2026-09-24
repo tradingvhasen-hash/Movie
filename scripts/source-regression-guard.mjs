@@ -70,6 +70,23 @@ check("reconciliation applies offline deletion tombstones",
   account.includes("before.deletedListIds.includes(list.id)")
 );
 
+const recommend = read("src/lib/engine/recommend.ts");
+const rankRoute = read("src/app/api/rank/route.ts");
+const rankClientSource = read("src/lib/engine/rank-client.ts");
+check("server ranking uses request-scoped reach",
+  recommend.includes("reach?: ReachSetting") &&
+  recommend.includes("fameTierSize(profile, mode, opts.reach)") &&
+  rankRoute.includes("reach,") &&
+  rankClientSource.includes("reach: q.reach")
+);
+check("failed exposure-debt experiment remains disabled for shared server ranking",
+  recommend.includes('const DEBT_EVERY = num("DEBT_EVERY", 0)')
+);
+check("normal ranking is server-first with retryable local fallback",
+  rankClientSource.includes("/api/rank") &&
+  rankClientSource.includes("remoteBackoffUntil") &&
+  rankClientSource.includes("await sendCatalog(w)")
+);
 const layout = read("src/app/layout.tsx");
 const requestLocale = read("src/i18n/request.ts");
 check("first document resolves locale before hydration",
@@ -95,5 +112,5 @@ check("custom recommendation dialogs have modal semantics and focus handling",
   together.includes("useDialogKeyboard")
 );
 
-console.log(`\n${failures ? "FAIL" : "PASS"} — ${19 - failures}/19 source invariants`);
+console.log(`\n${failures ? "FAIL" : "PASS"} — ${22 - failures}/22 source invariants`);
 process.exit(failures ? 1 : 0);

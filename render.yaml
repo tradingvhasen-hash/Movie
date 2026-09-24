@@ -1,15 +1,21 @@
 # Render blueprint for the single production web app.
 #
-# Ranking is browser/worker-side today; Supabase owns auth, sync, public sharing
-# data, RLS and the authenticated delete-account Edge Function. Render therefore
-# needs only the public Supabase client configuration. No service-role/secret
-# key belongs on this service.
+# Production ranking/search is server-first over the versioned full catalog.
+# The browser receives only the result batches it needs; the full static
+# catalog remains the offline/failure fallback. Supabase owns auth, sync,
+# sharing/RLS, and authenticated account deletion.
 #
-# The free plan can spin down during inactivity. The starter pack keeps the
-# swipe screen useful while static catalog assets load, but server-rendered
-# public/profile routes still inherit Render cold starts. Move this service to
-# an always-on plan before a public launch that requires consistent first-hit
-# latency.
+# Render needs only public Supabase client configuration. No service-role or
+# Supabase secret key belongs on this web service.
+#
+# IMPORTANT RELEASE NOTE:
+# The current service is still on Render's free plan. Free services can sleep,
+# so the first request after inactivity can still be delayed. The starter pack
+# makes the swipe screen useful once the page is delivered, but it cannot make
+# a sleeping web service answer instantly. Move the existing service to an
+# always-on paid plan before a public launch that requires predictable first-hit
+# latency. Do not let a blueprint sync change billing without an explicit
+# owner decision.
 services:
   - type: web
     name: dhawq

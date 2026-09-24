@@ -285,5 +285,14 @@
     "title": "Page not found",
     "body": "This page doesn't exist — let's get you back to swiping.",
     "back": "Back to swiping"
+  },
+  "error": {
+    "title": "Something broke",
+    "body": "This error does not intentionally erase your library. If browser storage is available, your saved answers should still be on this device.",
+    "retry": "Try again",
+    "home": "Home",
+    "backup": "Back up my library",
+    "copied": "copied",
+    "copyDetails": "copy details"
   }
 }

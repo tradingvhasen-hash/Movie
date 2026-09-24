@@ -26,7 +26,8 @@
  * on every push. Everything else is cache-first, because build assets are
  * content-hashed and a hit is always correct.
  */
-const VERSION = "dhawq-v1";
+const BUILD = new URL(self.location.href).searchParams.get("v") || "dev";
+const VERSION = `dhawq-${BUILD}`;
 const SHELL = `${VERSION}-shell`;
 const DATA = `${VERSION}-data`;
 
@@ -78,15 +79,31 @@ self.addEventListener("fetch", (event) => {
   }
 
   const isData = url.pathname.endsWith(".json");
+  if (isData) {
+    // Mutable catalog/data files use stale-while-revalidate. A repeat visit can
+    // open offline from cache, while every online visit refreshes the copy.
+    event.respondWith(
+      caches.open(DATA).then(async (cache) => {
+        const hit = await cache.match(req);
+        const fresh = fetch(req)
+          .then((res) => {
+            if (res.ok && res.status === 200) void cache.put(req, res.clone());
+            return res;
+          })
+          .catch(() => null);
+        return hit ?? (await fresh) ?? new Response("", { status: 503 });
+      })
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(req).then((hit) => {
       if (hit) return hit;
       return fetch(req).then((res) => {
-        /* opaque and error responses are not worth keeping, and caching a 404
-           for a content-hashed asset would survive the deploy that fixes it */
         if (res.ok && res.status === 200) {
           const copy = res.clone();
-          void caches.open(isData ? DATA : SHELL).then((c) => c.put(req, copy));
+          void caches.open(SHELL).then((c) => c.put(req, copy));
         }
         return res;
       });

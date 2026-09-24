@@ -19,17 +19,25 @@ passes, not hard "not watched" answers.
 
 - Next.js 16 / React 19 / TypeScript.
 - Zustand local-first state.
-- Browser ranking worker over the shipped catalog.
+- The same ranking engine runs **server-first** over the full 48.5k catalog; the browser receives only ranked/search result batches.
+- The browser worker + static full catalog remain the offline/failure fallback, not the normal download path.
 - Optional Supabase account/sync using **Google sign-in**.
 - Render is the production deployment.
 - Public list/profile links are backed by Supabase RLS.
 - PWA/service-worker caching is build-versioned.
 - Arabic and English UI with RTL/LTR resolved before the first render.
 
-The browser ranking engine is authoritative today. The old pgvector
-`/api/recommend` endpoint was removed because the Supabase title catalog was not
-the product's complete catalog and the endpoint added a cold network dependency
-without contributing live recommendations.
+The ranking algorithm is shared between server and browser. Production normally
+uses `/api/rank` against the repository's complete catalog loaded once per
+server process. This preserves the exact candidate universe while avoiding a
+mandatory ~24 MB raw catalog download on each phone. If the server route is
+unavailable, the existing worker loads `public/catalog.json` and runs the same
+engine locally.
+
+The old Supabase/pgvector `/api/recommend` experiment was removed. The live
+Supabase `titles` table is intentionally not the product catalog; auth/sync and
+public sharing stay in Supabase while catalog ranking/search live with the
+versioned application catalog.
 
 ## Local development
 
@@ -68,8 +76,12 @@ new migration.
 
 ## Catalog
 
-The shipped catalog is generated from TMDB-derived data and currently contains
+The versioned catalog is generated from TMDB-derived data and currently contains
 about 48.5k movie/TV titles. Rebuild tooling lives in `scripts/build-catalog.ts`.
+The server keeps the decoded ranking catalog in process memory; ordinary swipe,
+Discover, Library, list-building, Together, onboarding and import flows request
+only the title/result slices they need. `public/catalog.json` is retained for
+offline/static-demo/research fallback correctness.
 
 TMDB's recommendation endpoint is used as a **TMDB recommendation graph**. It
 must not be described as raw viewer-level "people who watched A also watched B"

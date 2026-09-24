@@ -44,10 +44,9 @@ export interface Title {
   /** Part of the cold-start calibration deck */
   onboarding?: boolean;
   /**
-   * Ids of titles TMDB's audience data links to this one ("people who watched
-   * this also watched…"), strongest first. This is the only signal in the
-   * catalog not derived from the title's own metadata, so it can connect two
-   * films that share no keyword, genre or crew.
+   * Ids returned by TMDB's recommendations endpoint, strongest first. This is
+   * a relatedness signal distinct from the title's own metadata; it must not
+   * be described as raw viewer-level co-watch telemetry.
    */
   related?: string[];
 }
@@ -84,6 +83,8 @@ export interface UserList {
   isPublic: boolean;
   titleIds: string[];
   createdAt: number;
+  /** Last local/cloud edit time, used for deterministic cross-device merging. */
+  updatedAt?: number;
   /**
    * Share anonymously. A per-list choice rather than an account setting,
    * because a person may want their name on a carefully built list and not on

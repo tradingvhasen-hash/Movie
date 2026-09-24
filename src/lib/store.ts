@@ -49,6 +49,7 @@ function makeSeed(): number {
  * hidden or unloaded.
  */
 const WRITE_DELAY_MS = 400;
+export const PERSISTENCE_ERROR_EVENT = "dhawq:persistence-error";
 let pendingWrite: { key: string; value: StorageValue<DhawqState> } | null = null;
 let writeTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -60,8 +61,16 @@ function flushWrite() {
   if (!pendingWrite) return;
   try {
     localStorage.setItem(pendingWrite.key, JSON.stringify(pendingWrite.value));
-  } catch {
-    // quota exceeded or storage disabled — the in-memory store still works
+  } catch (error) {
+    // Continuing only in memory is dangerous: the next tab close would lose
+    // answers the UI appeared to accept. Surface the failure immediately.
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent(PERSISTENCE_ERROR_EVENT, {
+          detail: error instanceof Error ? error.message : "Browser storage is unavailable",
+        })
+      );
+    }
   }
   pendingWrite = null;
 }
@@ -207,6 +216,8 @@ interface DhawqState {
   publicProfile: { name: string; bio: string; avatarUrl: string };
   onboardingSeen: boolean;
   settings: Settings;
+  /** authenticated account that owns the persisted local library, or null for guest data */
+  accountOwner: string | null;
 
   /** ids of onboarding tiles shown and not tapped, so they can be replayed */
   passed: string[];
@@ -225,6 +236,9 @@ interface DhawqState {
   undo: () => string | null;
   removeSwipe: (titleId: string) => void;
   resetAll: () => void;
+  /** Delete every piece of local user data, used only after account deletion. */
+  eraseAllUserData: () => void;
+  setAccountOwner: (userId: string | null) => void;
   /**
    * Recompute the taste profile from the stored answers.
    *
@@ -312,6 +326,7 @@ export const useDhawq = create<DhawqState>()(
       publicProfile: { name: "", bio: "", avatarUrl: "" },
       onboardingSeen: false,
       settings: DEFAULT_SETTINGS,
+      accountOwner: null,
       passed: [],
 
       setSettings: (patch) =>
@@ -338,9 +353,10 @@ export const useDhawq = create<DhawqState>()(
           const already = new Set(s.passed);
           const fresh = titles.filter((t) => !already.has(t.id) && !s.swipes[t.id]);
           if (fresh.length === 0) return {};
-          let profile = s.profile;
-          for (const t of fresh) profile = applySwipe(profile, t, vectorOf(t), "not_seen");
-          return { profile, passed: [...s.passed, ...fresh.map((t) => t.id)] };
+          // "I did not pick this as a favourite" is not "I have not seen it".
+          // Keep the exposure as weak onboarding context only; never train the
+          // seen/unseen model from an answer the person did not give.
+          return { passed: [...s.passed, ...fresh.map((t) => t.id)] };
         }),
 
       swipe: (title, action) => {
@@ -438,10 +454,6 @@ export const useDhawq = create<DhawqState>()(
             const title = sw?.title ?? getLocalTitle(id);
             if (sw && title) profile = applySwipe(profile, title, vectorOf(title), sw.action);
           }
-          for (const id of s.passed) {
-            const title = getLocalTitle(id);
-            if (title) profile = applySwipe(profile, title, vectorOf(title), "not_seen");
-          }
           return { profile };
         }),
 
@@ -453,6 +465,29 @@ export const useDhawq = create<DhawqState>()(
           profile: emptyProfile(),
           seed: makeSeed(),
         }),
+
+      eraseAllUserData: () => {
+        try {
+          localStorage.removeItem("dhawq-sentinels");
+          sessionStorage.removeItem("dhawq:add-shared-list");
+        } catch {
+          // State reset below is still authoritative when storage APIs are blocked.
+        }
+        set({
+          swipes: {},
+          swipeOrder: [],
+          passed: [],
+          profile: emptyProfile(),
+          seed: makeSeed(),
+          lists: [],
+          publicProfile: { name: "", bio: "", avatarUrl: "" },
+          onboardingSeen: false,
+          settings: DEFAULT_SETTINGS,
+          accountOwner: null,
+        });
+      },
+
+      setAccountOwner: (userId) => set({ accountOwner: userId }),
 
       setOnboardingSeen: () => set({ onboardingSeen: true }),
 
@@ -523,7 +558,7 @@ export const useDhawq = create<DhawqState>()(
     }),
     {
       name: "dhawq-store",
-      version: 5,
+      version: 6,
       storage: deferredStorage,
       /**
        * v4 replaced the hashed taste vector with named facet counters. v5
@@ -558,12 +593,7 @@ export const useDhawq = create<DhawqState>()(
           const title = sw?.title ?? getLocalTitle(id);
           if (sw && title) profile = applySwipe(profile, title, vectorOf(title), sw.action);
         }
-        // onboarding passes are evidence too, and are replayed the same way
-        for (const id of state.passed ?? []) {
-          const title = getLocalTitle(id);
-          if (title) profile = applySwipe(profile, title, vectorOf(title), "not_seen");
-        }
-        return { ...state, profile, seed: state.seed ?? makeSeed() } as DhawqState;
+        return { ...state, profile, seed: state.seed ?? makeSeed(), accountOwner: state.accountOwner ?? null } as DhawqState;
       },
       /** guard against partially-shaped profiles from any older build */
       merge: (persisted, current) => {
@@ -577,6 +607,7 @@ export const useDhawq = create<DhawqState>()(
              was added since; defaults fill the gaps rather than the screen
              rendering an undefined toggle */
           settings: { ...DEFAULT_SETTINGS, ...(state.settings ?? {}) },
+          accountOwner: state.accountOwner ?? null,
           profile: normalizeProfile(state.profile),
         };
       },

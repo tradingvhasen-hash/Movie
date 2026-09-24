@@ -58,20 +58,20 @@ export default function DataPanel() {
         error?: string;
       };
       if (!res.ok || !body.ok) {
-        setNote(body.error ?? "Could not delete the account. Nothing was changed.");
+        setNote(
+          body.error === "account_deletion_not_configured"
+            ? "Account deletion is not configured on the server yet."
+            : (body.error ?? "Could not delete the account.")
+        );
         return;
       }
       await supabase?.auth.signOut();
       /* the local copy goes too — deleting the cloud and leaving the device
          full of the same data is not what anybody means by "delete my data" */
-      useDhawq.getState().resetAll();
-      setNote(
-        body.authDeleted
-          ? "Your account and all of its data are gone."
-          : "Your data is deleted. The login itself could not be removed — tell the site owner the service key is not set."
-      );
+      useDhawq.getState().eraseAllUserData();
+      setNote("Your account and its local data were deleted.");
     } catch (e) {
-      setNote(e instanceof Error ? e.message : "Something went wrong. Nothing was changed.");
+      setNote(e instanceof Error ? e.message : "Something went wrong while deleting the account.");
     } finally {
       setBusy(false);
       setConfirming(false);

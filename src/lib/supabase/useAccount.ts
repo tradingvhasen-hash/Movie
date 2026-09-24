@@ -256,10 +256,21 @@ function useAccountController(): AccountState {
     if (!supabase) return;
     setBusy(true);
     setError(null);
-    const { error: authError } = await supabase.auth.signOut();
-    if (authError) setError(authError.message);
-    setBusy(false);
-  }, []);
+    try {
+      // Do not abandon the tail of a debounced sync and then let another
+      // account replace the browser copy. A deliberate sign-out first flushes
+      // the current account's complete local truth.
+      if (userId && reconciledUser === userId) {
+        await syncLocalToCloud(userId);
+      }
+      const { error: authError } = await supabase.auth.signOut();
+      if (authError) throw authError;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not finish syncing before sign-out.");
+    } finally {
+      setBusy(false);
+    }
+  }, [userId, reconciledUser]);
 
   return {
     session,

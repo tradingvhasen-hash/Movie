@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import PosterArt from "./PosterArt";
-import { getLocalCatalog, getLocalTitle, loadCatalog } from "@/lib/catalog";
-import { watchedGrid } from "@/lib/engine/recommend";
+import { rankWatchedGrid } from "@/lib/engine/rank-client";
 import { useDhawq } from "@/lib/store";
 import type { Title } from "@/lib/types";
 import { useT, useLocale } from "@/lib/i18n";
@@ -48,41 +47,40 @@ export default function QuickAdd() {
   const swipes = useDhawq((s) => s.swipes);
   const learnPasses = useDhawq((s) => s.learnPasses);
 
-  useEffect(() => {
-    void loadCatalog().then(() => setReady(true));
-  }, []);
+  const [titles, setTitles] = useState<Title[]>([]);
 
   /**
    * The screen is rebuilt only when the screen number changes, never on every
-   * tap. `watchedGrid` runs the whole gate, and re-running it inside a render
-   * that fires on each poster would rebuild forty tiles under the finger.
+   * tap. The server runs the exact same watchedGrid algorithm over the full
+   * catalog; if that path is unavailable, rankWatchedGrid loads the local
+   * catalog and runs the identical function in-browser.
    */
-  const titles = useMemo<Title[]>(() => {
-    if (!ready) return [];
+  useEffect(() => {
+    let alive = true;
+    setReady(false);
     const state = useDhawq.getState();
     const exclude = new Set([...Object.keys(state.swipes), ...state.passed]);
-    /**
-     * Everything they have confirmed watching, whatever they felt about it.
-     * This is what opens the frontier — a co-watch neighbour of a confirmed
-     * title is watched 48.7% of the time against a 3.5% base rate.
-     */
-    const watched: Title[] = [];
-    for (const sw of Object.values(state.swipes)) {
-      if (sw.action === "not_seen") continue;
-      const t = getLocalTitle(sw.titleId) ?? sw.title;
-      if (t) watched.push(t);
-    }
-    return watchedGrid(getLocalCatalog(), state.profile, {
+    const watchedIds = Object.values(state.swipes)
+      .filter((sw) => sw.action !== "not_seen")
+      .map((sw) => sw.titleId);
+
+    void rankWatchedGrid({
+      profile: state.profile,
       excludeIds: exclude,
       count: PER_SCREEN,
       seed: 1 + screen * 7919,
-      watched,
+      watchedIds,
       reach: state.settings.reach,
+    }).then((next) => {
+      if (!alive) return;
+      setTitles(next);
+      setReady(true);
     });
-    // profile and swipes are deliberately not dependencies: a fresh grid is
-    // wanted per screen, not per answer
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, screen]);
+
+    return () => {
+      alive = false;
+    };
+  }, [screen]);
 
   const toggle = useCallback((id: string) => {
     setPicked((p) => {

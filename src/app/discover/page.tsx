@@ -10,7 +10,7 @@ import {
   SparklesIcon,
   ThumbsDownIcon,
 } from "@/components/ui/Icons";
-import { getLocalTitle, loadCatalog } from "@/lib/catalog";
+import { getLocalTitle } from "@/lib/catalog";
 import { rank } from "@/lib/engine/rank-client";
 import { genreLabel } from "@/lib/genres";
 import { EASE_OUT, FADE_UP, SECTION, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
@@ -56,18 +56,7 @@ export default function DiscoverPage() {
   const doSwipe = useDhawq((s) => s.swipe);
   const haptics = useDhawq((s) => s.settings.haptics);
 
-  const [hydrated, setHydrated] = useState(false);
   const [open, setOpen] = useState<Recommendation | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void loadCatalog().then(() => {
-      if (!cancelled) setHydrated(true);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   /**
    * The answers, ranked on a worker thread.
@@ -87,7 +76,6 @@ export default function DiscoverPage() {
   const [recs, setRecs] = useState<Recommendation[]>([]);
 
   useEffect(() => {
-    if (!hydrated) return;
     let stale = false;
     // discover shows unwatched titles: rated ones are excluded, "not seen" stays
     const exclude = Object.values(swipes)
@@ -95,6 +83,12 @@ export default function DiscoverPage() {
       .map((s) => s.titleId);
     const likedIds = Object.values(swipes)
       .filter((s) => s.action === "liked")
+      .map((s) => s.titleId);
+    const dislikedIds = Object.values(swipes)
+      .filter((s) => s.action === "disliked")
+      .map((s) => s.titleId);
+    const seenIds = Object.values(swipes)
+      .filter((s) => s.action === "seen")
       .map((s) => s.titleId);
 
     void rank({
@@ -104,7 +98,8 @@ export default function DiscoverPage() {
       count: 25,
       seed,
       likedIds,
-      dislikedIds: [],
+      dislikedIds,
+      seenIds,
       withReasons: true,
     }).then((r) => {
       if (stale) return;
@@ -121,7 +116,7 @@ export default function DiscoverPage() {
     return () => {
       stale = true;
     };
-  }, [hydrated, swipes, profile, seed]);
+  }, [swipes, profile, seed]);
 
   const ratedCount = profile.ratedSwipes;
 
@@ -420,7 +415,12 @@ export default function DiscoverPage() {
 function WhyLine({ rec }: { rec: Recommendation }) {
   const locale = useLocale();
   const t = useT();
-  const because = rec.becauseOf ? getLocalTitle(rec.becauseOf) : null;
+  const savedBecause = useDhawq((state) =>
+    rec.becauseOf ? state.swipes[rec.becauseOf] : undefined
+  );
+  const because = rec.becauseOf
+    ? getLocalTitle(rec.becauseOf) ?? savedBecause?.title ?? null
+    : null;
   const why = rec.reasons.map((r) => r.label).join(" · ");
   if (!why && !because) return null;
   return (

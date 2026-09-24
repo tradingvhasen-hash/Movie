@@ -126,6 +126,19 @@ export async function syncListIds(userId: string, clientIds: string[]): Promise<
         .eq("user_id", userId)
         .eq("client_id", clientId);
       if (error) throw new Error(error.message);
+
+      // A list first downloaded from a pre-client_id schema is represented
+      // locally by its database UUID. If it is deleted before its first edit,
+      // there is no client_id to match yet; remove that one unadopted row too.
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(clientId)) {
+        const { error: legacyDeleteError } = await supabase
+          .from("lists")
+          .delete()
+          .eq("user_id", userId)
+          .eq("id", clientId)
+          .is("client_id", null);
+        if (legacyDeleteError) throw new Error(legacyDeleteError.message);
+      }
       continue;
     }
 
@@ -169,6 +182,7 @@ export async function syncListIds(userId: string, clientIds: string[]): Promise<
           is_public: local.isPublic,
           hide_owner: local.hideOwner ?? false,
           source_list_id: local.sourceListId ?? null,
+          updated_at: new Date(local.updatedAt ?? local.createdAt).toISOString(),
         })
         .eq("id", listId)
         .eq("user_id", userId);
@@ -183,6 +197,7 @@ export async function syncListIds(userId: string, clientIds: string[]): Promise<
           is_public: local.isPublic,
           hide_owner: local.hideOwner ?? false,
           source_list_id: local.sourceListId ?? null,
+          updated_at: new Date(local.updatedAt ?? local.createdAt).toISOString(),
         })
         .select("id")
         .single();
@@ -285,7 +300,7 @@ export async function loadCloudLibrary(userId: string): Promise<CloudLibrary | n
 
   const { data: listRows, error: listError } = await supabase
     .from("lists")
-    .select("id, client_id, name, is_public, hide_owner, share_slug, source_list_id, created_at, list_items(title_id)")
+    .select("id, client_id, name, is_public, hide_owner, share_slug, source_list_id, created_at, updated_at, list_items(title_id)")
     .eq("user_id", userId);
   if (listError) throw new Error(listError.message);
 
@@ -307,6 +322,7 @@ export interface CloudListRow {
   share_slug?: string | null;
   source_list_id?: string | null;
   created_at: string | null;
+  updated_at?: string | null;
   list_items: { title_id: string }[] | null;
 }
 
@@ -342,6 +358,11 @@ export function reconstructLibrary(
     sourceListId: r.source_list_id ?? undefined,
     titleIds: (r.list_items ?? []).map((i) => i.title_id),
     createdAt: r.created_at ? Date.parse(r.created_at) || Date.now() : Date.now(),
+    updatedAt: r.updated_at
+      ? Date.parse(r.updated_at) || Date.parse(r.created_at ?? "") || Date.now()
+      : r.created_at
+        ? Date.parse(r.created_at) || Date.now()
+        : Date.now(),
   }));
 
   if (swipeOrder.length === 0 && lists.length === 0) return null;
@@ -366,9 +387,22 @@ export function mergeLibraries(local: CloudLibrary, cloud: CloudLibrary | null):
 
   const listMap = new Map<string, UserList>();
   for (const list of cloud.lists) listMap.set(list.id, list);
-  for (const list of local.lists) {
-    const prior = listMap.get(list.id);
-    listMap.set(list.id, prior ? { ...prior, ...list, slug: list.slug ?? prior.slug } : list);
+  for (const localList of local.lists) {
+    const remote = listMap.get(localList.id);
+    if (!remote) {
+      listMap.set(localList.id, localList);
+      continue;
+    }
+    const localAt = localList.updatedAt ?? localList.createdAt;
+    const remoteAt = remote.updatedAt ?? remote.createdAt;
+    const newer = localAt >= remoteAt ? localList : remote;
+    const older = newer === localList ? remote : localList;
+    listMap.set(localList.id, {
+      ...older,
+      ...newer,
+      // A public slug is server identity, not editable presentation state.
+      slug: newer.slug ?? older.slug,
+    });
   }
   return { swipes, swipeOrder, lists: [...listMap.values()] };
 }

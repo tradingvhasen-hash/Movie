@@ -114,7 +114,7 @@ export default function ErrorPanel({
         }}
       >
         <p style={{ margin: 0, fontWeight: 600, fontSize: "1rem" }}>
-          Something broke — your library is safe
+          Something broke
         </p>
         <p
           style={{
@@ -124,8 +124,8 @@ export default function ErrorPanel({
             lineHeight: 1.5,
           }}
         >
-          Everything you have marked is still stored on this device. Nothing was
-          lost.
+          This error does not intentionally erase your library. If browser storage
+          is available, your saved answers should still be on this device.
         </p>
 
         <div style={{ display: "flex", gap: "8px", marginTop: "16px", flexWrap: "wrap" }}>

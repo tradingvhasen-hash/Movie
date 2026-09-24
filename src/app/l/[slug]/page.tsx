@@ -1,5 +1,6 @@
 import SharedList from "@/components/SharedList";
 import { getServerSupabase } from "@/lib/supabase/server";
+import { serverTitlesFor } from "@/lib/server-catalog";
 
 export const dynamic = "force-dynamic";
 
@@ -33,13 +34,16 @@ export default async function SharedListPage({ params }: PageProps<"/l/[slug]">)
     list.hide_owner || ownerResult.error
       ? null
       : ((ownerResult.data as { display_name?: string } | null)?.display_name ?? null);
+  const titleIds = (items ?? []).map((r) => String(r.title_id));
+  const titles = await serverTitlesFor(titleIds);
 
   return (
     <SharedList
       listId={String(list.id)}
       name={String(list.name)}
       owner={owner}
-      titleIds={(items ?? []).map((r) => String(r.title_id))}
+      titleIds={titleIds}
+      titles={titles}
     />
   );
 }

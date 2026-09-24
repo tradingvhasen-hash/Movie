@@ -7,7 +7,7 @@ deliberately terse; design/experiment history belongs in `docs/experiments/`.
 
 ## Data safety / privacy
 
-1. ✅ Public swipe RLS exposes only explicit likes; live anon-role rollback test passed (like visible, non-like hidden).
+1. ✅ Public sharing uses narrow security-definer RPCs. Anonymous direct table reads are closed; the public-profile RPC returns only explicit likes. Live rollback test passed: 0 direct rows, like included, non-like excluded.
 2. ✅ Account deletion moved to authenticated Supabase Edge Function; one admin Auth-user delete + FK cascades.
 3. ✅ Local account deletion uses `eraseAllUserData`, including lists/profile/settings/research state.
 4. ✅ Persisted `accountOwner` prevents cross-account browser-library adoption.
@@ -67,7 +67,7 @@ deliberately terse; design/experiment history belongs in `docs/experiments/`.
 - `delete-account` Edge Function ACTIVE with JWT verification.
 - Obsolete `swipes.title_id -> titles.id` FK absent.
 - Stable list identity + update timestamp present.
-- Anonymous rollback RLS test: public like visible; public non-like hidden; test rows rolled back to zero.
+- Anonymous rollback public-sharing test: direct profiles/swipes/lists/list_items all hidden; profile RPC returned like only; list RPC returned intended titles; transaction rolled back.
 - Supabase security advisor cleaned of the database/RPC/RLS warnings addressed by this remediation.
 
 ## Release gate

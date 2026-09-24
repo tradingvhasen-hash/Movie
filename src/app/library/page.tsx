@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/Icons";
 import { matches, searchCatalog } from "@/lib/search";
 import { getLocalTitle, loadCatalog } from "@/lib/catalog";
+import { resolveTitleSnapshots } from "@/lib/title-resolver";
 import { EASE_OUT, FADE_UP, QUICK, SECTION, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
 import { haptic } from "@/lib/haptics";
 import { useDhawq } from "@/lib/store";
@@ -95,11 +96,27 @@ export default function LibraryPage() {
   /** bulk-delete mode, and what is ticked in it — see the Select control */
   const [picking, setPicking] = useState(false);
   const [chosen, setChosen] = useState<Set<string>>(new Set());
-  const [catalogReady, setCatalogReady] = useState(false);
+  const [resolvedTitles, setResolvedTitles] = useState<Map<string, Title>>(new Map());
 
   useEffect(() => {
-    void loadCatalog().then(() => setCatalogReady(true));
-  }, []);
+    let alive = true;
+    const missing = Object.values(swipes)
+      .filter((sw) => !sw.title && !getLocalTitle(sw.titleId))
+      .map((sw) => sw.titleId);
+    if (missing.length === 0) return () => { alive = false; };
+
+    void resolveTitleSnapshots(missing).then((map) => {
+      if (!alive) return;
+      setResolvedTitles((prev) => {
+        const next = new Map(prev);
+        for (const [id, title] of map) next.set(id, title);
+        return next;
+      });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [swipes]);
 
   const watched = useMemo(
     () =>
@@ -114,12 +131,12 @@ export default function LibraryPage() {
     if (filter !== "all") rows = rows.filter((sw) => sw.action === filter);
     if (settled.trim()) {
       rows = rows.filter((sw) => {
-        const title = getLocalTitle(sw.titleId) ?? sw.title;
+        const title = getLocalTitle(sw.titleId) ?? sw.title ?? resolvedTitles.get(sw.titleId);
         return Boolean(title && matches(title, settled));
       });
     }
     return rows;
-  }, [watched, filter, settled]);
+  }, [watched, filter, settled, resolvedTitles]);
 
   /**
    * The rest of the catalog, for a title that is not in the library yet.
@@ -128,11 +145,43 @@ export default function LibraryPage() {
    * `matches()` — which normalised three strings per title per keystroke and
    * cost 457ms of frozen main thread for every character. See lib/search.ts.
    */
-  const elsewhere = useMemo(() => {
-    void catalogReady;
-    if (settled.trim().length < 2) return [] as Title[];
-    return searchCatalog(settled, { limit: 24, skip: (id) => Boolean(swipes[id]) });
-  }, [settled, swipes, catalogReady]);
+  const [elsewhere, setElsewhere] = useState<Title[]>([]);
+  useEffect(() => {
+    const query = settled.trim();
+    if (query.length < 2) {
+      setElsewhere([]);
+      return;
+    }
+
+    let alive = true;
+    const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+    void fetch(`${base}/api/search`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        query,
+        skipIds: Object.keys(swipes),
+        limit: 24,
+      }),
+    })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`search ${res.status}`);
+        const body = (await res.json()) as { titles?: Title[] };
+        if (!Array.isArray(body.titles)) throw new Error("invalid search response");
+        if (alive) setElsewhere(body.titles);
+      })
+      .catch(async () => {
+        await loadCatalog();
+        if (!alive) return;
+        setElsewhere(
+          searchCatalog(query, { limit: 24, skip: (id) => Boolean(swipes[id]) })
+        );
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [settled, swipes]);
 
   const searching = settled.trim().length >= 2;
 
@@ -398,6 +447,7 @@ export default function LibraryPage() {
                       <LibraryTile
                         key={sw.titleId}
                         swipe={sw}
+                        resolvedTitle={getLocalTitle(sw.titleId) ?? sw.title ?? resolvedTitles.get(sw.titleId)}
                         picking={picking}
                         ticked={chosen.has(sw.titleId)}
                         selected={selectedId === sw.titleId}
@@ -476,7 +526,7 @@ export default function LibraryPage() {
                   <div className="flex items-center gap-3">
                     <span className="h-px flex-1 bg-line" />
                     <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
-                      Not in your library
+                      {t("library.notInLibrary")}
                     </span>
                     <span className="h-px flex-1 bg-line" />
                   </div>
@@ -499,7 +549,7 @@ export default function LibraryPage() {
 
             {searching && filtered.length === 0 && elsewhere.length === 0 && (
               <p className="mt-14 text-center text-sm text-ink-faint">
-                Nothing by that name in the catalog.
+                {t("library.nothingFound")}
               </p>
             )}
           </motion.div>
@@ -583,7 +633,7 @@ function LogRow({
         <PosterArt title={title} sizes="60px" className="h-full w-full" />
       </div>
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-semibold">{title.title.en}</div>
+        <div className="truncate text-sm font-semibold">{title.title[locale]}</div>
         <div className="text-[11px] text-ink-faint">
           {title.year} · {title.type === "movie" ? t("card.movie") : t("card.tv")}
         </div>
@@ -661,6 +711,7 @@ function LogButton({
  */
 function LibraryTile({
   swipe,
+  resolvedTitle,
   picking,
   ticked,
   selected,
@@ -668,6 +719,7 @@ function LibraryTile({
   onRemove,
 }: {
   swipe: Swipe;
+  resolvedTitle?: Title;
   picking: boolean;
   ticked: boolean;
   selected: boolean;
@@ -676,7 +728,7 @@ function LibraryTile({
 }) {
   const locale = useLocale();
   const t = useT();
-  const title = getLocalTitle(swipe.titleId) ?? swipe.title;
+  const title = resolvedTitle ?? getLocalTitle(swipe.titleId) ?? swipe.title;
   if (!title) return null;
 
   const flipped = selected && !picking;

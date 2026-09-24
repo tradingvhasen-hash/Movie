@@ -7,7 +7,6 @@ import { SENTINEL_EVERY, drawSentinel, recordSentinel } from "@/lib/sentinel";
 import { STARTER_PACK } from "@/lib/data/starter-pack";
 import { COLD_START_TARGET, isCalibrating } from "@/lib/engine/taste";
 import { useDhawq } from "@/lib/store";
-import { isSupabaseConfigured } from "@/lib/supabase/configured";
 import type { SwipeAction, Title } from "@/lib/types";
 
 /** cards rendered as a stack; more than three are never visible */
@@ -58,59 +57,9 @@ const RESERVE = 24;
  */
 const REFILL_AT = 8;
 
-/**
- * Set once the cloud endpoint has failed, and never retried.
- *
- * It answers 503 whenever the Supabase catalog is not seeded, and the client
- * cannot tell that from a network blip — so it asked again on every rebuild,
- * paying a full round trip to learn the same thing. One failure is enough:
- * the bundled catalog is larger than the seeded one anyway.
- */
-let remoteOffline = false;
-
-/** cloud mode: fetch the next batch from the seeded TMDB catalog */
-async function fetchRemoteBatch(count: number): Promise<Title[] | null> {
-  if (remoteOffline) return null;
-  const state = useDhawq.getState();
-  const exclude = Object.keys(state.swipes);
-  const likedIds = Object.values(state.swipes)
-    .filter((s) => s.action === "liked")
-    .map((s) => s.titleId);
-  try {
-    const res = await fetch("/api/recommend", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        profile: state.profile,
-        exclude,
-        likedIds,
-        count,
-      }),
-    });
-    if (!res.ok) {
-      remoteOffline = true;
-      return null;
-    }
-    const data = (await res.json()) as { items: { title: Title }[] };
-    /**
-     * An empty 200 is a dead endpoint, not a quiet one.
-     *
-     * The guard above only caught a failure status. The live endpoint answers
-     * **200 with `items: []`** — the Supabase catalog is not seeded, so the
-     * vector search matches nothing — which meant the app paid a full round
-     * trip on every rebuild, forever, and threw the answer away every time.
-     * Verified against the deployed site.
-     */
-    if (data.items.length === 0) {
-      remoteOffline = true;
-      return null;
-    }
-    return data.items.map((i) => i.title);
-  } catch {
-    remoteOffline = true;
-    return null;
-  }
-}
+/** Local ranking is authoritative. The old /api/recommend path is intentionally
+ * not called: its Supabase catalog is not seeded and it added a cold network
+ * dependency without producing recommendations. */
 
 /** local mode: run the engine over the bundled catalog */
 /**
@@ -191,7 +140,7 @@ async function computeLocalBatch(): Promise<Title[]> {
     likedIds,
     dislikedIds,
     seenIds,
-    homeLanguages: homeLanguages(),
+    homeLanguages: homeLanguages(state.settings.locale),
     /**
      * The reach dial, read fresh on every batch.
      *
@@ -248,10 +197,11 @@ function mulberry(seed: number): () => number {
  * Free, present before the first card, and the only signal available at zero
  * evidence about which of the catalog's 34 languages is worth opening.
  */
-function homeLanguages(): string[] {
-  if (typeof navigator === "undefined") return [];
-  const raw = navigator.languages?.length ? navigator.languages : [navigator.language];
+function homeLanguages(preference: "auto" | "ar" | "en"): string[] {
   const out: string[] = [];
+  if (preference === "ar" || preference === "en") out.push(preference);
+  if (typeof navigator === "undefined") return out;
+  const raw = navigator.languages?.length ? navigator.languages : [navigator.language];
   for (const tag of raw ?? []) {
     const base = String(tag).toLowerCase().split("-")[0];
     if (base && !out.includes(base)) out.push(base);
@@ -412,11 +362,6 @@ export function useDeck() {
     }
 
     void computeLocalBatch().then(install);
-    if (isSupabaseConfigured()) {
-      void fetchRemoteBatch(BATCH).then((remote) => {
-        if (remote && remote.length > 0) install(remote);
-      });
-    }
   }, []);
 
   /** coalescing wrapper: many swipes in a row cost one rebuild */

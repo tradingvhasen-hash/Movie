@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { exportCsv, exportJson, restoreBackup } from "@/lib/backup";
 import { useDhawq } from "@/lib/store";
-import { getSupabase, isSupabaseConfigured } from "@/lib/supabase/client";
+import { getSupabase } from "@/lib/supabase/client";
 import { useT } from "@/lib/i18n";
 
 /**
@@ -40,7 +40,7 @@ export default function DataPanel() {
     );
   };
 
-  const deleteAccount = async () => {
+  const deleteData = async () => {
     setBusy(true);
     setNote(null);
     try {
@@ -146,7 +146,7 @@ export default function DataPanel() {
                   <button
                     type="button"
                     disabled={busy}
-                    onClick={() => void deleteAccount()}
+                    onClick={() => void deleteData()}
                     className="rounded-full bg-danger px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
                   >
                     {busy ? t("data.deleting") : t("data.deletePermanent")}

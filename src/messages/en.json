@@ -8,7 +8,9 @@
     "swipe": "Swipe",
     "discover": "Discover",
     "library": "Library",
-    "lists": "Lists"
+    "lists": "Lists",
+    "together": "Together",
+    "you": "You"
   },
   "swipe": {
     "liked": "Loved it",
@@ -16,7 +18,7 @@
     "notSeen": "Haven't seen",
     "undo": "Undo",
     "details": "Details",
-    "reset": "Reset all cards",
+    "reset": "Try again",
     "seen": "Seen it, no strong feeling"
   },
   "onboarding": {
@@ -103,5 +105,8 @@
   "settings": {
     "language": "Language",
     "languageAuto": "Match my device"
+  },
+  "storage": {
+    "warning": "Dhawq cannot save to this browser right now. Keep this tab open or sign in before leaving; recent answers may be lost."
   }
 }

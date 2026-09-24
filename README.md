@@ -47,14 +47,9 @@ NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 ```
 
-For production account deletion, the server also requires:
-
-```bash
-SUPABASE_SERVICE_ROLE_KEY=...
-```
-
-The service-role key is **server-only**. Never place it in source control or in
-any `NEXT_PUBLIC_*` variable.
+Account deletion runs in the authenticated Supabase Edge Function
+`delete-account`. Its privileged key is supplied by Supabase's hosted function
+environment and is never stored on Render or sent to the browser.
 
 ## Database
 
@@ -117,7 +112,9 @@ actual swipe rows, lists and taste profile rather than only a summary counter.
 
 Local data has an explicit account owner. When a different account signs in on
 the same browser, the previous account's library is not silently adopted by the
-new account.
+new account. Account deletion is a single Auth-user deletion inside Supabase;
+verified foreign-key cascades remove the dependent cloud rows, then the browser
+clears its local copy.
 
 Browser persistence failures are surfaced in the UI instead of being silently
 ignored. JSON backups are self-contained enough to restore titles even when the

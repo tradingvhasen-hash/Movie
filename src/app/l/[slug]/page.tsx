@@ -3,53 +3,47 @@ import { getServerSupabase } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-/**
- * The server's whole job here is four fields: a name, an owner, and the ids.
- *
- * It used to join `list_items` to `public.titles` so it could render posters
- * server-side. That table holds whatever the seed script last uploaded and the
- * catalog the browser ranks against is 15,083 rows, so the join was quietly
- * dropping most of any list it was given — the same fault migration 0006
- * removed from swipes. The browser already has the catalog; let it resolve.
- */
 export default async function SharedListPage({ params }: PageProps<"/l/[slug]">) {
   const { slug } = await params;
   const supabase = getServerSupabase();
   if (!supabase) return <NotFound />;
 
-  const { data: list } = await supabase
+  // lists.user_id and profiles.id both point at auth.users; there is no direct
+  // foreign key between lists and profiles, so do not rely on an inferred
+  // PostgREST embedded relation.
+  const { data: list, error: listError } = await supabase
     .from("lists")
-    .select("id, name, hide_owner, profiles(display_name)")
+    .select("id, user_id, name, hide_owner")
     .eq("share_slug", slug)
     .eq("is_public", true)
     .maybeSingle();
 
-  if (!list) return <NotFound />;
+  if (listError || !list) return <NotFound />;
 
-  const { data: items } = await supabase
-    .from("list_items")
-    .select("title_id")
-    .eq("list_id", list.id);
+  const [{ data: items, error: itemsError }, ownerResult] = await Promise.all([
+    supabase.from("list_items").select("title_id").eq("list_id", list.id),
+    list.hide_owner
+      ? Promise.resolve({ data: null, error: null })
+      : supabase.from("profiles").select("display_name").eq("id", list.user_id).maybeSingle(),
+  ]);
 
-  const profile = Array.isArray(list.profiles) ? list.profiles[0] : list.profiles;
-  const owner = list.hide_owner
-    ? null
-    : ((profile as { display_name?: string } | null)?.display_name ?? null);
+  if (itemsError) return <NotFound />;
+
+  const owner =
+    list.hide_owner || ownerResult.error
+      ? null
+      : ((ownerResult.data as { display_name?: string } | null)?.display_name ?? null);
 
   return (
     <SharedList
-      slug={slug}
-      name={list.name as string}
+      listId={String(list.id)}
+      name={String(list.name)}
       owner={owner}
       titleIds={(items ?? []).map((r) => String(r.title_id))}
     />
   );
 }
 
-/**
- * A dead link says so by looking like a dead link — an empty frame — rather
- * than by a paragraph apologising for itself.
- */
 function NotFound() {
   return (
     <div className="flex min-h-[70vh] flex-col items-center justify-center gap-3">

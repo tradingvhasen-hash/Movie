@@ -68,7 +68,7 @@ deliberately terse; design/experiment history belongs in `docs/experiments/`.
 - Obsolete `swipes.title_id -> titles.id` FK absent.
 - Stable list identity + update timestamp present.
 - Anonymous rollback public-sharing test: direct profiles/swipes/lists/list_items all hidden; profile RPC returned like only; list RPC returned intended titles; transaction rolled back.
-- Supabase security advisor cleaned of the database/RPC/RLS warnings addressed by this remediation.
+- Supabase advisor is clean of the old database/RLS/maintenance-RPC warnings. It now reports the two intentionally anonymous shaped public-sharing SECURITY DEFINER RPCs (fixed SQL + fixed search_path, verified by rollback tests) and leaked-password protection, which is not used by Google-only auth.
 
 ## Release gate
 

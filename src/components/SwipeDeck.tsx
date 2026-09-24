@@ -325,6 +325,17 @@ export default function SwipeDeck() {
     );
   }
 
+  if (picking) {
+    return (
+      <TastePicker
+        onDone={() => {
+          setOnboardingSeen();
+          setPicking(false);
+        }}
+      />
+    );
+  }
+
   if ((!hydrated && queue.length === 0) || showDemo === null) {
     return (
       <div
@@ -385,7 +396,7 @@ export default function SwipeDeck() {
    * `picking` is only ever set while onboarding, and `onDone` clears it, so
    * this keeps the screen alive exactly as long as it has something to say.
    */
-  if (picking) {
+  if (!onboardingSeen) {
     return (
       <TastePicker
         onDone={() => {
@@ -394,11 +405,6 @@ export default function SwipeDeck() {
         }}
       />
     );
-  }
-
-  if (!onboardingSeen) {
-    setTimeout(() => setPicking(true), 0);
-    return null;
   }
 
   /* ── deck: fits the viewport, never scrolls ── */

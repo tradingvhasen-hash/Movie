@@ -1,9 +1,12 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
 import { BooksIcon, CardsIcon, SparklesIcon, UserIcon, UsersIcon } from "./ui/Icons";
+import { PERSISTENCE_ERROR_EVENT } from "@/lib/store";
+import { useT } from "@/lib/i18n";
 
 /**
  * FIVE DESTINATIONS, AND WHY EACH ONE IS HERE.
@@ -32,21 +35,50 @@ import { BooksIcon, CardsIcon, SparklesIcon, UserIcon, UsersIcon } from "./ui/Ic
  * it, and tapped nothing across 219 posters. A faster chore is still a chore.
  */
 const TABS = [
-  { href: "/", label: "Swipe", Icon: CardsIcon },
-  { href: "/discover", label: "Discover", Icon: SparklesIcon },
-  { href: "/together", label: "Together", Icon: UsersIcon },
-  { href: "/library", label: "Library", Icon: BooksIcon },
-  { href: "/profile", label: "You", Icon: UserIcon },
+  { href: "/", key: "nav.swipe", Icon: CardsIcon },
+  { href: "/discover", key: "nav.discover", Icon: SparklesIcon },
+  { href: "/together", key: "nav.together", Icon: UsersIcon },
+  { href: "/library", key: "nav.library", Icon: BooksIcon },
+  { href: "/profile", key: "nav.you", Icon: UserIcon },
 ] as const;
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const t = useT();
+  const [storageWarning, setStorageWarning] = useState(false);
+
+  useEffect(() => {
+    const onError = () => setStorageWarning(true);
+    window.addEventListener(PERSISTENCE_ERROR_EVENT, onError);
+    return () => window.removeEventListener(PERSISTENCE_ERROR_EVENT, onError);
+  }, []);
 
   const isSharePage = pathname.startsWith("/l/") || pathname.startsWith("/u/");
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col">
       <main className="flex-1">{children}</main>
+
+      {storageWarning && (
+        <div
+          role="alert"
+          className="fixed inset-x-3 top-[calc(12px+env(safe-area-inset-top))] z-[70] mx-auto max-w-md rounded-2xl border border-danger/30 bg-surface px-4 py-3 shadow-lg"
+        >
+          <div className="flex items-start gap-3">
+            <p className="flex-1 text-xs font-semibold leading-relaxed text-danger">
+              {t("storage.warning")}
+            </p>
+            <button
+              type="button"
+              aria-label={t("common.close")}
+              onClick={() => setStorageWarning(false)}
+              className="shrink-0 text-sm font-bold text-ink-faint"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
 
       {/*
         NO `backdrop-filter` ON THE BAR, AND IT IS NOT A STYLE PREFERENCE.
@@ -62,7 +94,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {!isSharePage && (
         <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface">
           <div className="mx-auto flex max-w-5xl items-stretch justify-around">
-            {TABS.map(({ href, label, Icon }) => {
+            {TABS.map(({ href, key, Icon }) => {
               const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
               /**
                * THE "TEN SECONDS" WAS NOT SLOWNESS. IT WAS SAFARI'S LINK MENU.
@@ -121,7 +153,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   >
                     <Icon size={20} strokeWidth={active ? 2.4 : 2} />
                   </motion.span>
-                  {label}
+                  {t(key)}
                 </Link>
               );
             })}

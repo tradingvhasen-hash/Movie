@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { matchAll, readExport } from "@/lib/import/watchlist";
 import { useDhawq } from "@/lib/store";
+import { useAccount } from "@/lib/supabase/useAccount";
 import { getLocalCatalog, getLocalTitle, loadCatalog } from "@/lib/catalog";
 import { FADE_UP, staggerContainer } from "@/lib/motion";
 import type { SwipeAction, Title } from "@/lib/types";
@@ -27,7 +28,8 @@ import type { SwipeAction, Title } from "@/lib/types";
 export default function LabScreen() {
   const swipes = useDhawq((s) => s.swipes);
   const swipeOrder = useDhawq((s) => s.swipeOrder);
-  const resetAll = useDhawq((s) => s.resetAll);
+  const eraseAllUserData = useDhawq((s) => s.eraseAllUserData);
+  const { session, ready: accountReady } = useAccount();
 
   const [blocked, setBlocked] = useState(true);
   const [size, setSize] = useState(50);
@@ -67,11 +69,7 @@ export default function LabScreen() {
   }, [actions, size]);
 
   const reset = () => {
-    resetAll();
-    // resetAll leaves the onboarding flag alone, so the picker would not
-    // return — and "start over" that skips the first three choices is not a
-    // start over
-    useDhawq.setState({ onboardingSeen: false });
+    eraseAllUserData();
     setConfirming(false);
   };
 
@@ -117,7 +115,8 @@ export default function LabScreen() {
     a.href = url;
     a.download = `seenit-swipes-${rows.length}.json`;
     a.click();
-    URL.revokeObjectURL(url);
+    // Safari may not have consumed the blob when click() returns.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   /**
@@ -233,6 +232,26 @@ export default function LabScreen() {
       setImporting("could not read that file");
     }
   };
+
+  if (!accountReady) {
+    return (
+      <div className="px-5 pt-10 text-sm text-ink-dim">
+        Checking test mode…
+      </div>
+    );
+  }
+
+  if (session) {
+    return (
+      <div className="mx-auto max-w-md px-5 pt-10">
+        <h1 className="text-2xl font-bold tracking-tight">Test bench</h1>
+        <p className="mt-3 text-sm leading-relaxed text-ink-dim">
+          Sign out before using the production test bench. Its reset tools are
+          intentionally guest-only so a test cannot touch synced account data.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <motion.div
@@ -428,7 +447,8 @@ export default function LabScreen() {
         Import replays an exported file swipe by swipe, so the taste it rebuilds
         is identical to having done the work by hand. It skips anything already
         answered, so importing the same file twice changes nothing. Reset clears
-        every swipe and the learned taste, and brings back the opening picker.
+        all local Dhawq test data — swipes, lists, taste, settings and onboarding —
+        and returns this guest browser to a fresh start.
       </motion.p>
     </motion.div>
   );

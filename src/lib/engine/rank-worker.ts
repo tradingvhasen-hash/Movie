@@ -45,7 +45,7 @@ import {
   vectorOf,
 } from "@/lib/catalog";
 import type { EncodedCatalog } from "@/lib/data/catalog-codec";
-import { recommend, setReach } from "./recommend";
+import { recommend } from "./recommend";
 import type { TasteProfile } from "./taste";
 import type { Title } from "@/lib/types";
 
@@ -110,8 +110,6 @@ self.onmessage = async (event: MessageEvent<RankRequest | CatalogMessage>) => {
   }
   const req = event.data as RankRequest;
   try {
-    /* the store lives on the main thread; the dial arrives with the request */
-    if (req.reach) setReach(req.reach);
     ready ??= loadCatalog();
     const pool = await ready;
 
@@ -125,6 +123,7 @@ self.onmessage = async (event: MessageEvent<RankRequest | CatalogMessage>) => {
       seenTitles: titlesFor(req.seenIds ?? []),
       homeLanguages: req.homeLanguages,
       mode: req.mode,
+      reach: req.reach,
     });
 
     const reply: RankReply = { id: req.id, ids: recs.map((r) => r.title.id) };

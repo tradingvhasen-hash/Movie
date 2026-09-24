@@ -504,6 +504,7 @@ export const useDhawq = create<DhawqState>()(
               isPublic: false,
               titleIds: [],
               createdAt: Date.now(),
+              updatedAt: Date.now(),
               ...(sourceListId ? { sourceListId } : null),
             },
           ],
@@ -516,19 +517,19 @@ export const useDhawq = create<DhawqState>()(
 
       renameList: (id, name) =>
         set((s) => ({
-          lists: s.lists.map((l) => (l.id === id ? { ...l, name } : l)),
+          lists: s.lists.map((l) => (l.id === id ? { ...l, name, updatedAt: Date.now() } : l)),
         })),
 
       setListHideOwner: (listId, hide) =>
         set((s) => ({
-          lists: s.lists.map((l) => (l.id === listId ? { ...l, hideOwner: hide } : l)),
+          lists: s.lists.map((l) => (l.id === listId ? { ...l, hideOwner: hide, updatedAt: Date.now() } : l)),
         })),
 
       addToList: (listId, titleIds) =>
         set((s) => ({
           lists: s.lists.map((l) =>
             l.id === listId
-              ? { ...l, titleIds: [...new Set([...l.titleIds, ...titleIds])] }
+              ? { ...l, titleIds: [...new Set([...l.titleIds, ...titleIds])], updatedAt: Date.now() }
               : l
           ),
         })),
@@ -538,7 +539,7 @@ export const useDhawq = create<DhawqState>()(
         set((s) => ({
           lists: s.lists.map((l) =>
             l.id === listId
-              ? { ...l, titleIds: l.titleIds.filter((id) => !drop.has(id)) }
+              ? { ...l, titleIds: l.titleIds.filter((id) => !drop.has(id)), updatedAt: Date.now() }
               : l
           ),
         }));
@@ -553,6 +554,7 @@ export const useDhawq = create<DhawqState>()(
                   titleIds: l.titleIds.includes(titleId)
                     ? l.titleIds.filter((t) => t !== titleId)
                     : [...l.titleIds, titleId],
+                  updatedAt: Date.now(),
                 }
               : l
           ),
@@ -560,7 +562,7 @@ export const useDhawq = create<DhawqState>()(
 
       setListPublic: (listId, isPublic) =>
         set((s) => ({
-          lists: s.lists.map((l) => (l.id === listId ? { ...l, isPublic } : l)),
+          lists: s.lists.map((l) => (l.id === listId ? { ...l, isPublic, updatedAt: Date.now() } : l)),
         })),
     }),
     {

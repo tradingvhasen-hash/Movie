@@ -30,7 +30,7 @@ export default function DataPanel() {
 
   const onRestore = async (file: File) => {
     const text = await file.text();
-    const result = restoreBackup(text);
+    const result = await restoreBackup(text);
     setNote(
       result.ok
         ? `Restored ${result.swipes} titles and ${result.lists} lists.`

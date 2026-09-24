@@ -202,5 +202,28 @@
     "shared": "Shared",
     "added": "Added",
     "add": "Add to my lists"
+  },
+  "legal": {
+    "title": "Privacy & Terms",
+    "updated": "Last updated 24 September 2026",
+    "storageTitle": "What is stored, and where",
+    "storage1": "Every answer is stored in this browser first. If you sign in, Dhawq also synchronizes your swipe rows, lists and taste profile to Supabase so your library can follow you to another device.",
+    "storage2": "Dhawq stores title identifiers, your answer and its time. It does not have access to your Netflix, Disney+, cinema, or other viewing accounts. If you stay signed out, your library remains local to this browser unless you export a backup.",
+    "signinTitle": "Signing in",
+    "signin1": "Sign-in uses Google. Dhawq receives the account identity information Google makes available for authentication, such as your name, email address and profile picture. Dhawq never receives your Google password.",
+    "publicTitle": "What other people can see",
+    "public1": "Your private library, dislikes, neutral watched answers, not-watched answers and taste profile are not public.",
+    "public2": "If you make your profile public, its public page may show your display name and titles you explicitly liked. Public list links show that list's titles and, unless you hide the owner, your display name. Anyone with a public link can open it.",
+    "tmdbTitle": "Film & TV data / Credits",
+    "tmdb1": "Movie, TV, people, poster and related catalog data are sourced from TMDB.",
+    "tmdbNotice": "This product uses the TMDB API but is not endorsed or certified by TMDB.",
+    "tmdbTerms": "TMDB requires attribution and an approved TMDB logo. Commercial use and some other uses may require separate permission or an agreement from TMDB.",
+    "deleteTitle": "Deleting your account",
+    "delete1": "Using Delete my account removes the authenticated account and its server-side profile, swipes, taste data and lists through the database's cascading relationships, signs you out, and clears the local Dhawq data on this device.",
+    "rulesTitle": "The rules",
+    "rules1": "Use Dhawq lawfully and do not attempt to damage, overload or misuse the service or public sharing features. The service may change or become unavailable.",
+    "contactTitle": "Contact",
+    "contact1": "For questions about privacy, data or these terms, use the contact method provided by the site owner. For a request about your own account data, identify the account involved.",
+    "disclaimer": "This page describes the application's current behavior. It is not legal advice."
   }
 }

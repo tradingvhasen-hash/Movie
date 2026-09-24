@@ -32,6 +32,10 @@ jobs:
         run: npx tsc --noEmit
       - name: Production build
         run: npm run build
+      - name: Generated current facts are fresh
+        run: |
+          npm run current
+          git diff --exit-code -- CURRENT.md
       - name: Source data-safety invariants
         run: npm run guard:source
       - name: Cross-device reconstruction guard

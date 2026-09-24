@@ -178,7 +178,7 @@ const NON_CALIBRATION_GENRES = new Set(["documentary"]);
 const MAX_OVERVIEW = Number(process.env.MAX_OVERVIEW ?? 200);
 const MAX_KEYWORDS = 10;
 const MAX_CAST = 4;
-/** co-watch neighbours kept per title (TMDB returns 20 on page 1) */
+/** TMDB recommendation neighbours kept per title (20 on page 1) */
 const MAX_RELATED = 20;
 const ONBOARDING_COUNT = 80;
 
@@ -393,8 +393,8 @@ function clip(text: string, max: number): string {
 
 async function fetchTitle(type: TitleType, id: number): Promise<Title | null> {
   try {
-    // "recommendations" rides along on the same request — TMDB's co-watch
-    // lists cost us no extra calls and no extra build time this way
+    // "recommendations" rides along on the same request. TMDB exposes these
+    // as recommendation results; they are not raw viewer-level co-watch logs.
     const d = await tmdb(`/${type}/${id}`, {
       append_to_response: "keywords,credits,translations,recommendations",
     });
@@ -442,11 +442,11 @@ async function fetchTitle(type: TitleType, id: number): Promise<Title | null> {
       .map((c: any) => c.name);
 
     /**
-     * What people who watched this actually went on to watch, in TMDB's own
-     * relevance order. This is the one signal our metadata cannot produce:
-     * it connects titles that share no keyword, genre or crew but land with
-     * the same audience. Kept in order — position carries meaning — and
-     * filtered down to our own catalog once every title is known.
+     * TMDB's recommendation results in TMDB's own relevance order. This is a
+     * useful graph signal distinct from our metadata, but the API does not
+     * document it as raw viewer-level "people who watched this also watched"
+     * telemetry. Keep source semantics explicit so experiments do not mistake
+     * recommendation edges for independently observed audience behaviour.
      */
     const related: string[] = (d.recommendations?.results ?? [])
       .slice(0, MAX_RELATED)
@@ -602,7 +602,7 @@ async function main() {
   markOnboarding(titles);
 
   // TMDB happily recommends titles that never cleared our fame floor, so the
-  // co-watch lists are trimmed to what we actually ship
+  // recommendation lists are trimmed to what we actually ship
   const known = new Set(titles.map((t) => t.id));
   let kept = 0;
   let total = 0;
@@ -613,7 +613,7 @@ async function main() {
   }
   const orphans = titles.filter((t) => (t.related?.length ?? 0) === 0).length;
   console.log(
-    `\nCo-watch links: kept ${kept}/${total} (${Math.round((100 * kept) / Math.max(total, 1))}% ` +
+    `\nTMDB recommendation links: kept ${kept}/${total} (${Math.round((100 * kept) / Math.max(total, 1))}% ` +
       `are in our catalog), ${orphans} titles with none`
   );
 
@@ -627,7 +627,7 @@ async function main() {
    * searched for is a title the app will never suggest to you.
    *
    * So the split is gone. Everything ships with its keywords, cast, director
-   * and co-watch links, because those are what the ranking reads.
+   * and TMDB recommendation links, because those are what the ranking reads.
    */
   mkdirSync(dirname(OUT), { recursive: true });
   const json = JSON.stringify(encodeCatalog(titles));

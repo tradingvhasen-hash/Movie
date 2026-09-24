@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { exportCsv, exportJson, restoreBackup } from "@/lib/backup";
 import { useDhawq } from "@/lib/store";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase/client";
+import { useT } from "@/lib/i18n";
 
 /**
  * YOUR LIBRARY IS YOURS — the screen that makes that sentence true.
@@ -21,6 +22,7 @@ import { getSupabase, isSupabaseConfigured } from "@/lib/supabase/client";
  * in, and clearing browsing data takes it with no confirmation from anyone.
  */
 export default function DataPanel() {
+  const t = useT();
   const count = useDhawq((s) => s.swipeOrder.length);
   const lists = useDhawq((s) => s.lists.length);
   const [note, setNote] = useState<string | null>(null);
@@ -33,8 +35,8 @@ export default function DataPanel() {
     const result = await restoreBackup(text);
     setNote(
       result.ok
-        ? `Restored ${result.swipes} titles and ${result.lists} lists.`
-        : (result.error ?? "That file could not be read.")
+        ? t("data.restored", { swipes: result.swipes, lists: result.lists })
+        : (result.error ?? t("data.badBackup"))
     );
   };
 
@@ -45,7 +47,7 @@ export default function DataPanel() {
       const supabase = getSupabase();
       const token = (await supabase?.auth.getSession())?.data.session?.access_token;
       if (!token) {
-        setNote("You are not signed in, so there is no account to delete.");
+        setNote(t("data.notSignedIn"));
         return;
       }
       const res = await fetch("/api/account", {
@@ -60,8 +62,8 @@ export default function DataPanel() {
       if (!res.ok || !body.ok) {
         setNote(
           body.error === "account_deletion_not_configured"
-            ? "Account deletion is not configured on the server yet."
-            : (body.error ?? "Could not delete the account.")
+            ? t("data.deleteNotConfigured")
+            : (body.error ?? t("data.deleteFailed"))
         );
         return;
       }
@@ -69,9 +71,9 @@ export default function DataPanel() {
       /* the local copy goes too — deleting the cloud and leaving the device
          full of the same data is not what anybody means by "delete my data" */
       useDhawq.getState().eraseAllUserData();
-      setNote("Your account and its local data were deleted.");
+      setNote(t("data.deleted"));
     } catch (e) {
-      setNote(e instanceof Error ? e.message : "Something went wrong while deleting the account.");
+      setNote(e instanceof Error ? e.message : t("data.deleteUnexpected"));
     } finally {
       setBusy(false);
       setConfirming(false);
@@ -81,33 +83,33 @@ export default function DataPanel() {
   return (
     <section className="mt-7">
       <h2 className="mb-2 px-1 text-[11px] font-bold uppercase tracking-wider text-ink-faint">
-        Your data
+        {t("data.title")}
       </h2>
       <div className="overflow-hidden rounded-3xl border border-line bg-surface">
         <div className="border-b border-line px-4 py-3.5">
           <p className="text-sm font-semibold">
-            {count.toLocaleString()} titles
-            {lists > 0 ? ` · ${lists} list${lists === 1 ? "" : "s"}` : ""}
+            {lists > 0
+              ? t("data.summaryLists", { count: count.toLocaleString(), lists })
+              : t("data.summary", { count: count.toLocaleString() })}
           </p>
           <p className="mt-0.5 text-[11.5px] leading-snug text-ink-faint">
-            Stored in this browser. Clearing your browsing data erases it, and
-            there is no other copy unless you sign in.
+            {t("data.localNote")}
           </p>
         </div>
 
         <Row
-          label="Back up my library"
-          hint="A file that restores everything, exactly"
-          onClick={() => setNote(`Saved a backup of ${exportJson()} titles.`)}
+          label={t("data.backup")}
+          hint={t("data.backupHint")}
+          onClick={() => setNote(t("data.savedBackup", { count: exportJson() }))}
         />
         <Row
-          label="Export as a spreadsheet"
-          hint="CSV — opens in Excel, moves to another app"
-          onClick={() => setNote(`Exported ${exportCsv()} titles.`)}
+          label={t("data.csv")}
+          hint={t("data.csvHint")}
+          onClick={() => setNote(t("data.exported", { count: exportCsv() }))}
         />
         <Row
-          label="Restore from a backup"
-          hint="Replaces what is on this device"
+          label={t("data.restore")}
+          hint={t("data.restoreHint")}
           onClick={() => fileRef.current?.click()}
           last={!isSupabaseConfigured()}
         />
@@ -131,14 +133,13 @@ export default function DataPanel() {
                 onClick={() => setConfirming(true)}
                 className="text-sm font-semibold text-danger transition-transform active:scale-95"
               >
-                Delete my account and all my data
+                {t("data.delete")}
               </button>
             ) : (
               <div>
                 <p className="text-[13px] leading-snug text-ink-dim">
-                  This deletes your swipes, lists and profile from the cloud and
-                  signs you out. It cannot be undone.{" "}
-                  <strong className="text-ink">Take a backup first.</strong>
+                  {t("data.deleteWarning")}{" "}
+                  <strong className="text-ink">{t("data.backupFirst")}</strong>
                 </p>
                 <div className="mt-3 flex gap-2">
                   <button
@@ -147,14 +148,14 @@ export default function DataPanel() {
                     onClick={() => void deleteAccount()}
                     className="rounded-full bg-danger px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
                   >
-                    {busy ? "Deleting…" : "Delete permanently"}
+                    {busy ? t("data.deleting") : t("data.deletePermanent")}
                   </button>
                   <button
                     type="button"
                     onClick={() => setConfirming(false)}
                     className="rounded-full border border-line px-4 py-2 text-sm font-semibold"
                   >
-                    Keep my account
+                    {t("data.keep")}
                   </button>
                 </div>
               </div>

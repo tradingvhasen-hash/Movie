@@ -136,7 +136,9 @@ export default function DiscoverPage() {
    * and nothing else. The sheet stays where it is, the buttons show which
    * answer was given, and the person leaves when they have decided to leave.
    */
-  const [answered, setAnswered] = useState<SwipeAction | null>(null);
+  const answered: SwipeAction | null = open
+    ? (swipes[open.title.id]?.action ?? null)
+    : null;
 
   /**
    * WHY A CARD USED TO VANISH INSTEAD OF LEAVING.
@@ -166,7 +168,6 @@ export default function DiscoverPage() {
   const log = (rec: Recommendation, action: SwipeAction) => {
     haptic("commit", haptics);
     doSwipe(rec.title, action);
-    setAnswered(action);
     setDismissed((prev) => new Set(prev).add(rec.title.id));
   };
 
@@ -211,7 +212,6 @@ export default function DiscoverPage() {
                 variants={FADE_UP}
                 type="button"
                 onClick={() => {
-                  setAnswered(null);
                   setOpen(hero);
                 }}
                 whileTap={{ scale: 0.985 }}
@@ -269,7 +269,6 @@ export default function DiscoverPage() {
                     transition={SPRING_SNAPPY}
                     type="button"
                     onClick={() => {
-                      setAnswered(null);
                       setOpen(rec);
                     }}
                     aria-label={rec.title.title.en}
@@ -287,64 +286,56 @@ export default function DiscoverPage() {
         )}
       </AnimatePresence>
 
-      {/* ── one of them, up close ── */}
+      {/* Fast detail: a floating card, not a second page sliding over this one. */}
       <AnimatePresence>
         {open && (
-          <motion.div className="fixed inset-0 z-50 flex flex-col justify-end">
-            {/*
-              THE BLUR ARRIVES INSTEAD OF SNAPPING ON.
-
-              The user: "the blur that covers the rest of the page just appears.
-              Now the page is clear, now the page is blurred. It does not get
-              smoothly blurry — you blink your eyes and here it is, you blink
-              your eyes and it disappears. Nothing is smooth about this effect."
-
-              Two causes. The scrim and the sheet shared one 180ms opacity fade
-              on the wrapper, which is far too quick to read as anything but a
-              cut — and on the way out that fade erased the whole thing before
-              the sheet had begun to slide, so the "close" animation was never
-              seen at all.
-
-              They are separate now and neither is rushed: the scrim takes 380ms
-              to arrive and 300ms to go, and because `opacity` composites the
-              element's *result*, a blurred layer fading up reads as the blur
-              coming in gradually — without animating `backdrop-filter`, which
-              is the construct that froze his phone on the deck.
-            */}
-            <motion.div
-              className="absolute inset-0 bg-[rgb(var(--rgb-scrim)/0.55)] backdrop-blur-md"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0, transition: { duration: 0.3, ease: EASE_OUT } }}
-              transition={{ duration: 0.38, ease: EASE_OUT }}
+          <motion.div
+            className="fixed inset-0 z-50 grid place-items-center px-4 pb-[calc(88px+env(safe-area-inset-bottom))] pt-[calc(20px+env(safe-area-inset-top))]"
+            initial="hidden"
+            animate="show"
+            exit="hidden"
+          >
+            <motion.button
+              type="button"
+              aria-label={t("common.close")}
+              className="absolute inset-0 bg-[rgb(var(--rgb-scrim)/0.42)]"
+              variants={{
+                hidden: { opacity: 0 },
+                show: { opacity: 1 },
+              }}
+              transition={{ duration: 0.16, ease: EASE_OUT }}
               onClick={() => setOpen(null)}
             />
-            {/*
-              And the sheet itself: a softer spring in, and a real slide out
-              rather than being deleted underneath a fade.
-            */}
+
             <motion.div
               ref={detailDialogRef}
               role="dialog"
               aria-modal="true"
               aria-labelledby="discover-detail-title"
               tabIndex={-1}
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "100%", transition: { duration: 0.34, ease: [0.4, 0, 0.7, 1] } }}
-              transition={{ type: "spring", stiffness: 210, damping: 30, mass: 1 }}
-              className="relative z-10 max-h-[86dvh] overflow-y-auto rounded-t-[28px] border-t border-line bg-bg px-5 pb-[calc(24px+env(safe-area-inset-bottom))] pt-3"
+              variants={{
+                hidden: { opacity: 0, y: 10, scale: 0.975 },
+                show: { opacity: 1, y: 0, scale: 1 },
+              }}
+              transition={{ duration: 0.18, ease: EASE_OUT }}
+              className="relative z-10 max-h-[78dvh] w-full max-w-md overflow-y-auto rounded-[28px] border border-line bg-surface p-5 shadow-[0_24px_70px_rgb(var(--rgb-shadow)/0.3)]"
             >
-              <span className="mx-auto mb-4 block h-1 w-10 rounded-full bg-line" aria-hidden />
-
               <div className="flex gap-4">
                 <div className="h-[132px] w-[88px] shrink-0 overflow-hidden rounded-2xl">
                   <PosterArt title={open.title} sizes="180px" className="h-full w-full" />
                 </div>
-                <div className="min-w-0 flex-1">
-                  <h2 id="discover-detail-title" className="text-xl font-bold leading-tight tracking-tight">
-                    {open.title.title[locale]}
-                  </h2>
+                <div className="min-w-0 flex-1 pt-1">
+                  <div className="flex items-start justify-between gap-3">
+                    <h2
+                      id="discover-detail-title"
+                      className="text-xl font-bold leading-tight tracking-tight"
+                    >
+                      {open.title.title[locale]}
+                    </h2>
+                    <span className="shrink-0 rounded-full bg-surface-2 px-2.5 py-1 text-[10.5px] font-bold text-accent">
+                      {open.match}%
+                    </span>
+                  </div>
                   <p className="mt-1 text-xs font-medium text-ink-faint">
                     {open.title.year} ·{" "}
                     {open.title.type === "movie" ? t("card.movie") : t("card.tv")}
@@ -368,16 +359,9 @@ export default function DiscoverPage() {
                 </p>
               )}
 
-              {/*
-                WHY THIS ONE — the only sentence on the screen, and it earns its
-                place because it is the one thing the design cannot draw. A
-                percentage says how confident; only this says what the
-                confidence is *made of*, and without it the number is a claim
-                the product refuses to support.
-              */}
               <WhyLine rec={open} />
 
-              <div className="mt-6 flex items-center gap-2.5" dir="ltr">
+              <div className="mt-5 flex items-center gap-2.5" dir="ltr">
                 <SheetAction
                   label={t("swipe.disliked")}
                   tint="var(--color-danger)"
@@ -402,15 +386,6 @@ export default function DiscoverPage() {
                 >
                   <HeartIcon size={20} filled />
                 </SheetAction>
-                {/*
-                  The close button is gone. "You don't need the X button,
-                  because you already just press at any place on the page and
-                  this square disappears. We're trying to minimize the website."
-                  Correct: the scrim above already closes on tap, and the drag
-                  handle at the top says the sheet is dismissible. A control
-                  that duplicates a gesture the screen already teaches is one
-                  more thing to look at for nothing.
-                */}
               </div>
             </motion.div>
           </motion.div>
@@ -492,7 +467,7 @@ function SheetAction({
         color: chosen ? "var(--color-on-accent)" : "var(--color-ink-dim)",
         borderColor: chosen ? tint : "var(--color-line)",
       }}
-      transition={SPRING_SNAPPY}
+      transition={{ duration: 0.14, ease: EASE_OUT }}
       style={{ height: 52 }}
       className="flex flex-1 items-center justify-center rounded-full border"
     >

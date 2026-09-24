@@ -11,11 +11,16 @@ const read = (p) => readFileSync(p, "utf8");
 const rankClient = read("src/lib/engine/rank-client.ts");
 check("worker receives neutral-seen ids", rankClient.includes("seenIds: q.seenIds"));
 
-const accountRoute = read("src/app/api/account/route.ts");
-check("deletion requires service role before mutation",
-  accountRoute.includes("account_deletion_not_configured") &&
-  accountRoute.includes("auth.admin.deleteUser") &&
-  !accountRoute.includes('["swipes","list_items","lists","user_taste","profiles"]')
+const deleteFn = read("supabase/functions/delete-account/index.ts");
+const dataPanel = read("src/components/DataPanel.tsx");
+check("deletion derives identity from JWT and performs one admin user delete",
+  deleteFn.includes("auth.getUser(token)") &&
+  deleteFn.includes("auth.admin.deleteUser(who.user.id)") &&
+  !deleteFn.includes("req.json()")
+);
+check("browser deletion uses authenticated edge and clears local state",
+  dataPanel.includes('functions.invoke("delete-account"') &&
+  dataPanel.includes("eraseAllUserData()")
 );
 
 const migration = read("supabase/migrations/0008_security_sync_hardening.sql");
@@ -80,5 +85,5 @@ check("custom recommendation dialogs have modal semantics and focus handling",
   together.includes("useDialogKeyboard")
 );
 
-console.log(`\n${failures ? "FAIL" : "PASS"} — ${16 - failures}/16 source invariants`);
+console.log(`\n${failures ? "FAIL" : "PASS"} — ${17 - failures}/17 source invariants`);
 process.exit(failures ? 1 : 0);

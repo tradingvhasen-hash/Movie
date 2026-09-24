@@ -50,6 +50,58 @@ export interface RankResult {
   becauseOf: (string | null)[];
 }
 
+let remoteFailures = 0;
+let remoteBackoffUntil = 0;
+
+async function rankRemote(q: RankQuery): Promise<RankResult | null> {
+  if (typeof window === "undefined" || Date.now() < remoteBackoffUntil) return null;
+
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 4500);
+  try {
+    const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+    const res = await fetch(`${base}/api/rank`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        mode: q.mode,
+        profile: q.profile,
+        excludeIds: [...q.excludeIds],
+        count: q.count,
+        seed: q.seed,
+        likedIds: q.likedIds,
+        dislikedIds: q.dislikedIds,
+        seenIds: q.seenIds ?? [],
+        homeLanguages: q.homeLanguages ?? [],
+        reach: q.reach,
+        withReasons: q.withReasons ?? false,
+      }),
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`rank ${res.status}`);
+
+    const body = (await res.json()) as Partial<RankResult>;
+    if (!Array.isArray(body.titles)) throw new Error("invalid rank response");
+
+    remoteFailures = 0;
+    remoteBackoffUntil = 0;
+    return {
+      titles: body.titles as Title[],
+      match: Array.isArray(body.match) ? body.match : [],
+      reasons: Array.isArray(body.reasons) ? body.reasons : [],
+      becauseOf: Array.isArray(body.becauseOf) ? body.becauseOf : [],
+    };
+  } catch {
+    remoteFailures++;
+    // Retry later; never permanently disable the authoritative server path.
+    remoteBackoffUntil =
+      Date.now() + Math.min(60_000, 1000 * 2 ** Math.min(remoteFailures, 6));
+    return null;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
 let worker: Worker | null = null;
 let workerBroken = false;
 let nextId = 1;
@@ -158,20 +210,20 @@ function sendCatalog(w: Worker): Promise<void> {
   return handoff;
 }
 
-export function rank(q: RankQuery): Promise<RankResult> {
+export async function rank(q: RankQuery): Promise<RankResult> {
+  const remote = await rankRemote(q);
+  if (remote) return remote;
+
   const w = getWorker();
-  if (!w) return runHere(q);
-  /**
-   * The catalog must reach the worker BEFORE the first rank request does.
-   *
-   * This was `void sendCatalog(w)` — fire and forget — which loses the race
-   * it was written to win. A rank request posted first makes the worker call
-   * `loadCatalog()` and fetch its own copy, and the handoff then arrives to
-   * find `loadPromise` already set and quietly does nothing. The second
-   * download it exists to prevent happened anyway, now 24 MB, while the deck
-   * waited on it.
-   */
-  return sendCatalog(w).then(() => rankViaWorker(w, q));
+  if (!w) {
+    await loadCatalog();
+    return runHere(q);
+  }
+
+  // Offline/static-demo fallback: install the exact same full catalog in the
+  // worker only after the server path is unavailable.
+  await sendCatalog(w);
+  return rankViaWorker(w, q);
 }
 
 function rankViaWorker(w: Worker, q: RankQuery): Promise<RankResult> {

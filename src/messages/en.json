@@ -50,7 +50,9 @@
     "startSwiping": "Start swiping",
     "addFilms": "Add films",
     "watchedTab": "Watched",
-    "listsTab": "Lists"
+    "listsTab": "Lists",
+    "notInLibrary": "Not in your library",
+    "nothingFound": "Nothing by that name in the catalog."
   },
   "discover": {
     "title": "Discover",

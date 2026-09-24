@@ -23,10 +23,17 @@ check("browser deletion uses authenticated edge and clears local state",
   dataPanel.includes("eraseAllUserData()")
 );
 
-const migration = read("supabase/migrations/0008_security_sync_hardening.sql");
-check("public swipe policy is likes-only",
-  /action\s*=\s*'liked'/.test(migration) &&
-  migration.includes('drop policy if exists "public library readable"')
+const publicSharing = read("supabase/migrations/0011_public_sharing_rpc.sql");
+const publicProfilePage = read("src/app/u/[slug]/page.tsx");
+const publicListPage = read("src/app/l/[slug]/page.tsx");
+check("public sharing is exposed only through shaped RPC contracts",
+  publicSharing.includes("get_public_profile") &&
+  publicSharing.includes("get_public_list") &&
+  publicSharing.includes("s.action = 'liked'") &&
+  publicSharing.includes('create policy "swipes read own"') &&
+  publicSharing.includes('create policy "lists read own"') &&
+  publicProfilePage.includes('rpc("get_public_profile"') &&
+  publicListPage.includes('rpc("get_public_list"')
 );
 
 const sw = read("public/sw.js");

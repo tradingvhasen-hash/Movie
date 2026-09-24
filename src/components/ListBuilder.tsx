@@ -9,6 +9,8 @@ import { useDhawq } from "@/lib/store";
 import { FADE_UP, SPRING_SNAPPY, staggerContainer } from "@/lib/motion";
 import { CheckIcon, SearchIcon, XIcon } from "./ui/Icons";
 import type { Title } from "@/lib/types";
+import { useLocale, useT } from "@/lib/i18n";
+import { genreLabel } from "@/lib/genres";
 
 /**
  * THREE WAYS TO FILL A LIST, BECAUSE ONE OF THEM IS ALWAYS THE WRONG ONE.
@@ -50,6 +52,8 @@ export default function ListBuilder({
   listId: string;
   onDone?: () => void;
 }) {
+  const tr = useT();
+  const locale = useLocale();
   const lists = useDhawq((s) => s.lists);
   const swipes = useDhawq((s) => s.swipes);
   const addToList = useDhawq((s) => s.addToList);
@@ -165,7 +169,7 @@ export default function ListBuilder({
                   transition={SPRING_SNAPPY}
                   type="button"
                   onClick={() => removeFromList(listId, [t.id])}
-                  aria-label={`Remove ${t.title.en}`}
+                  aria-label={tr("listBuilder.remove", { title: locale === "ar" ? t.title.ar || t.title.en : t.title.en })}
                   className="relative block w-full min-w-0 overflow-hidden rounded-xl"
                 >
                   <PosterArt title={t} sizes="110px" className="aspect-[2/3] w-full" />
@@ -188,9 +192,9 @@ export default function ListBuilder({
       >
         {(
           [
-            ["pick", "Your library"],
-            ["type", "By name"],
-            ["genre", "By genre"],
+            ["pick", tr("listBuilder.library")],
+            ["type", tr("listBuilder.byName")],
+            ["genre", tr("listBuilder.byGenre")],
           ] as const
         ).map(([m, label]) => (
           <button
@@ -226,7 +230,7 @@ export default function ListBuilder({
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={mode === "pick" ? "Filter your library" : "Type a name"}
+            placeholder={mode === "pick" ? tr("listBuilder.filter") : tr("listBuilder.typeName")}
             className="w-full bg-transparent text-sm outline-none placeholder:text-ink-faint"
           />
         </motion.label>
@@ -256,7 +260,7 @@ export default function ListBuilder({
                     : "border-line bg-surface text-ink-dim"
                 }`}
               >
-                {g} <span className="tabular-nums opacity-70">{n}</span>
+                {genreLabel(g, locale)} <span className="tabular-nums opacity-70">{n}</span>
               </motion.button>
             );
           })}
@@ -290,7 +294,7 @@ export default function ListBuilder({
                 type="button"
                 disabled={mode === "genre" || already}
                 onClick={() => toggle(t.id)}
-                aria-label={t.title.en}
+                aria-label={locale === "ar" ? t.title.ar || t.title.en : t.title.en}
                 className="relative block w-full min-w-0 overflow-hidden rounded-xl"
                 style={{
                   boxShadow:
@@ -330,7 +334,7 @@ export default function ListBuilder({
               }
               className="rounded-full bg-accent px-7 py-3.5 text-sm font-bold text-[color:var(--color-on-accent)] shadow-[0_10px_34px_rgb(var(--rgb-accent)/0.45)]"
             >
-              Add {pendingCount}
+              {tr("listBuilder.add", { count: pendingCount })}
             </motion.button>
           </motion.div>
         )}

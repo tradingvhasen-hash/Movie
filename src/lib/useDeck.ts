@@ -121,10 +121,10 @@ async function computeLocalBatch(): Promise<Title[]> {
   /**
    * The 👁 answers.
    *
-   * The co-watch graph records who *watched* two titles, not who enjoyed them,
-   * so a neutral answer seeds it exactly as well as a heart does. Before this
-   * they seeded nothing: one real session marked 61 titles that way and every
-   * one was invisible to the graph.
+   * The TMDB recommendation graph is used as a title-relatedness signal, not
+   * as raw co-watch telemetry. A neutral answer can still seed it without
+   * inventing a taste preference. Before this, one real session marked 61
+   * neutral titles and every one was invisible to that signal.
    */
   const seenIds = Object.values(state.swipes)
     .filter((s) => s.action === "seen")

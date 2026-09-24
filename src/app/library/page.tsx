@@ -195,7 +195,7 @@ export default function LibraryPage() {
         {/* the fast way to grow this list, next to the list it grows */}
         <Link
           href="/add"
-          aria-label="Add films"
+          aria-label={t("library.addFilms")}
           className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-line bg-surface-2 text-lg font-semibold text-ink-dim transition-colors hover:text-ink-strong"
         >
           +
@@ -203,8 +203,8 @@ export default function LibraryPage() {
         <div className="flex shrink-0 rounded-full border border-line bg-surface-2 p-1" dir="ltr">
         {(
           [
-            ["watched", "Watched"],
-            ["lists", "Lists"],
+            ["watched", t("library.watchedTab")],
+            ["lists", t("library.listsTab")],
           ] as const
         ).map(([m, label]) => (
           <button

@@ -23,7 +23,7 @@ passes, not hard "not watched" answers.
 - The browser worker + static full catalog remain the offline/failure fallback, not the normal download path.
 - Optional Supabase account/sync using **Google sign-in**.
 - Render is the production deployment.
-- Public list/profile links are backed by Supabase RLS.
+- Public list/profile links use narrow Supabase RPC contracts; underlying user tables remain owner-only behind RLS.
 - PWA/service-worker caching is build-versioned.
 - Arabic and English UI with RTL/LTR resolved before the first render.
 
@@ -66,7 +66,7 @@ Current hardening migrations also:
 
 - decouple swipe/list title identifiers from the incomplete Supabase
   `titles` seed table;
-- restrict public profile libraries to explicit likes;
+- expose public profile/list sharing through shaped RPCs while keeping direct user-table reads private;
 - keep list identity stable across devices;
 - restrict maintenance RPCs to privileged roles;
 - split RLS reads/writes by explicit roles.

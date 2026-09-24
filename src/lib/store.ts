@@ -218,6 +218,9 @@ interface DhawqState {
   settings: Settings;
   /** authenticated account that owns the persisted local library, or null for guest data */
   accountOwner: string | null;
+  /** persisted cloud-deletion tombstones; cleared only after a successful sync */
+  deletedSwipeIds: string[];
+  deletedListIds: string[];
 
   /** ids of onboarding tiles shown and not tapped, so they can be replayed */
   passed: string[];
@@ -327,6 +330,8 @@ export const useDhawq = create<DhawqState>()(
       onboardingSeen: false,
       settings: DEFAULT_SETTINGS,
       accountOwner: null,
+      deletedSwipeIds: [],
+      deletedListIds: [],
       passed: [],
 
       setSettings: (patch) =>
@@ -402,6 +407,7 @@ export const useDhawq = create<DhawqState>()(
               },
             },
             swipeOrder: [...s.swipeOrder.filter((id) => id !== title.id), title.id],
+            deletedSwipeIds: s.deletedSwipeIds.filter((id) => id !== title.id),
             profile,
           };
         });
@@ -419,6 +425,9 @@ export const useDhawq = create<DhawqState>()(
           return {
             swipes,
             swipeOrder: st.swipeOrder.slice(0, -1),
+            deletedSwipeIds: st.deletedSwipeIds.includes(lastId)
+              ? st.deletedSwipeIds
+              : [...st.deletedSwipeIds, lastId],
             profile:
               title && last
                 ? revertSwipe(st.profile, title, vectorOf(title), last.action)
@@ -439,6 +448,9 @@ export const useDhawq = create<DhawqState>()(
           return {
             swipes,
             swipeOrder: st.swipeOrder.filter((id) => id !== titleId),
+            deletedSwipeIds: st.deletedSwipeIds.includes(titleId)
+              ? st.deletedSwipeIds
+              : [...st.deletedSwipeIds, titleId],
             profile: title
               ? revertSwipe(st.profile, title, vectorOf(title), sw.action)
               : st.profile,
@@ -484,6 +496,8 @@ export const useDhawq = create<DhawqState>()(
           onboardingSeen: false,
           settings: DEFAULT_SETTINGS,
           accountOwner: null,
+          deletedSwipeIds: [],
+          deletedListIds: [],
         });
       },
 
@@ -513,7 +527,12 @@ export const useDhawq = create<DhawqState>()(
       },
 
       deleteList: (id) =>
-        set((s) => ({ lists: s.lists.filter((l) => l.id !== id) })),
+        set((s) => ({
+          lists: s.lists.filter((l) => l.id !== id),
+          deletedListIds: s.deletedListIds.includes(id)
+            ? s.deletedListIds
+            : [...s.deletedListIds, id],
+        })),
 
       renameList: (id, name) =>
         set((s) => ({
@@ -567,7 +586,7 @@ export const useDhawq = create<DhawqState>()(
     }),
     {
       name: "dhawq-store",
-      version: 6,
+      version: 7,
       storage: deferredStorage,
       /**
        * v4 replaced the hashed taste vector with named facet counters. v5
@@ -602,7 +621,14 @@ export const useDhawq = create<DhawqState>()(
           const title = sw?.title ?? getLocalTitle(id);
           if (sw && title) profile = applySwipe(profile, title, vectorOf(title), sw.action);
         }
-        return { ...state, profile, seed: state.seed ?? makeSeed(), accountOwner: state.accountOwner ?? null } as DhawqState;
+        return {
+          ...state,
+          profile,
+          seed: state.seed ?? makeSeed(),
+          accountOwner: state.accountOwner ?? null,
+          deletedSwipeIds: Array.isArray(state.deletedSwipeIds) ? state.deletedSwipeIds : [],
+          deletedListIds: Array.isArray(state.deletedListIds) ? state.deletedListIds : [],
+        } as DhawqState;
       },
       /** guard against partially-shaped profiles from any older build */
       merge: (persisted, current) => {
@@ -617,6 +643,8 @@ export const useDhawq = create<DhawqState>()(
              rendering an undefined toggle */
           settings: { ...DEFAULT_SETTINGS, ...(state.settings ?? {}) },
           accountOwner: state.accountOwner ?? null,
+          deletedSwipeIds: Array.isArray(state.deletedSwipeIds) ? state.deletedSwipeIds : [],
+          deletedListIds: Array.isArray(state.deletedListIds) ? state.deletedListIds : [],
           profile: normalizeProfile(state.profile),
         };
       },
